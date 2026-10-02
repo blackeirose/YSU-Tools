@@ -106,6 +106,10 @@ export function makeOperation(
       const before = records.find((r) => r.id === update.id) ?? null;
       if (update.ownerId !== owner || (before && before.ownerId !== owner))
         throw new Error("帳號不符");
+      if ((before?.revision ?? 0) !== update.revision)
+        throw new Error(
+          "此項目已更新，草稿仍保留。請先複製草稿內容，再重新開啟最新版本編輯。",
+        );
       const after = recordSchema.parse({
         ...update,
         revision: (before?.revision ?? 0) + 1,
@@ -140,13 +144,16 @@ export class PlannerStore {
   private timer?: number;
   private running = false;
   private flight?: Promise<void>;
+  private cacheKey: string;
   constructor(
     public owner: string,
     public remote: Remote | null,
+    storageScope = "",
   ) {
+    this.cacheKey = storageScope ? `${storageScope}:${owner}` : owner;
     this.channel = new BroadcastChannel(DB);
     this.channel.onmessage = (e) => {
-      if (e.data?.owner === owner) this.reload();
+      if (e.data?.owner === this.cacheKey) this.reload();
     };
   }
   subscribe = (fn: () => void) => {
@@ -172,7 +179,7 @@ export class PlannerStore {
         : "本機已儲存 · 不跨裝置";
   }
   async init() {
-    this.snapshot = await readSnapshot(this.owner);
+    this.snapshot = await readSnapshot(this.cacheKey);
     if (this.closed) return;
     this.state();
     this.emit();
@@ -198,22 +205,22 @@ export class PlannerStore {
   };
   private async reload() {
     if (this.closed) return;
-    this.snapshot = await readSnapshot(this.owner);
+    this.snapshot = await readSnapshot(this.cacheKey);
     this.state();
     this.emit();
   }
   private async save(s: Snapshot) {
     if (this.closed) return;
-    await persist(this.owner, s);
+    await persist(this.cacheKey, s);
     this.snapshot = s;
     this.state();
-    this.channel.postMessage({ owner: this.owner });
+    this.channel.postMessage({ owner: this.cacheKey });
     this.emit();
   }
   async edit(label: string, updates: RecordData[], undoable = true) {
     const shown = this.snapshot.records;
-    await lock(this.owner, async () => {
-      const s = await readSnapshot(this.owner);
+    await lock(this.cacheKey, async () => {
+      const s = await readSnapshot(this.cacheKey);
       if (this.closed) throw new Error("帳號已切換");
       const op = makeOperation(label, shown, updates, this.owner);
       if (!checkBase(s.records, op)) {
@@ -239,8 +246,8 @@ export class PlannerStore {
     void this.flush();
   }
   async undo() {
-    await lock(this.owner, async () => {
-      const s = await readSnapshot(this.owner);
+    await lock(this.cacheKey, async () => {
+      const s = await readSnapshot(this.cacheKey);
       const op = s.undo;
       if (!op) return;
       if (
@@ -259,7 +266,10 @@ export class PlannerStore {
       const inverse = makeOperation(
         `復原：${op.label}`,
         s.records,
-        op.changes.map((c) => c.before ?? { ...c.after, deleted: true }),
+        op.changes.map((c) => ({
+          ...(c.before ?? { ...c.after, deleted: true }),
+          revision: c.after.revision,
+        })),
         this.owner,
       );
       await this.save({
@@ -274,8 +284,8 @@ export class PlannerStore {
   private async receive(records: RecordData[]) {
     if (this.closed) return;
     try {
-      await lock(this.owner, async () => {
-        const s = await readSnapshot(this.owner);
+      await lock(this.cacheKey, async () => {
+        const s = await readSnapshot(this.cacheKey);
         const blocked = new Set(
           [...s.pending, ...s.conflicts.map((c) => c.operation)].flatMap((op) =>
             op.changes.map((c) => c.id),
@@ -312,8 +322,8 @@ export class PlannerStore {
       return;
     this.running = true;
     try {
-      await lock(this.owner, async () => {
-        let s = await readSnapshot(this.owner);
+      await lock(this.cacheKey, async () => {
+        let s = await readSnapshot(this.cacheKey);
         while (s.pending.length && !this.closed && navigator.onLine) {
           const op = s.pending[0];
           try {
@@ -377,8 +387,8 @@ export class PlannerStore {
   }
   async resolve(conflictId: string, choice: "remote" | "local") {
     if (!this.remote) return;
-    await lock(this.owner, async () => {
-      const s = await readSnapshot(this.owner);
+    await lock(this.cacheKey, async () => {
+      const s = await readSnapshot(this.cacheKey);
       const conflict = s.conflicts.find((c) => c.operation.id === conflictId);
       if (!conflict) return;
       let records = s.records;
@@ -396,7 +406,10 @@ export class PlannerStore {
         const op = makeOperation(
           "保留本機衝突版本",
           records,
-          conflict.operation.changes.map((c) => c.after),
+          conflict.operation.changes.map((c) => ({
+            ...c.after,
+            revision: remote.get(c.id)?.revision ?? 0,
+          })),
           this.owner,
         );
         records = applyOperation(records, op);
@@ -413,12 +426,37 @@ export class PlannerStore {
     void this.flush();
   }
   async download(tripId: string) {
-    await lock(this.owner, async () => {
-      const s = await readSnapshot(this.owner);
+    await lock(this.cacheKey, async () => {
+      const s = await readSnapshot(this.cacheKey);
       await this.save({
         ...s,
         downloaded: [...new Set([...s.downloaded, tripId])],
       });
+    });
+  }
+  async restoreAfterSessionLoss(recovery: Snapshot) {
+    if (
+      recovery.records.some((r) => r.ownerId !== this.owner) ||
+      [...recovery.pending, ...recovery.conflicts.map((c) => c.operation)].some(
+        (op) =>
+          op.changes.some(
+            (c) =>
+              c.after.ownerId !== this.owner ||
+              (c.before && c.before.ownerId !== this.owner),
+          ),
+      )
+    )
+      throw new Error("復原資料與登入帳號不符");
+    await lock(this.cacheKey, async () => {
+      const existing = await readSnapshot(this.cacheKey);
+      if (
+        existing.records.length ||
+        existing.pending.length ||
+        existing.conflicts.length
+      )
+        throw new Error("本機已有資料，請先匯出復原備份，避免覆盖");
+      for (const record of recovery.records) recordSchema.parse(record);
+      await this.save(structuredClone(recovery));
     });
   }
   close() {
@@ -432,6 +470,6 @@ export class PlannerStore {
   }
   async clear() {
     this.close();
-    await lock(this.owner, () => persist(this.owner, null));
+    await lock(this.cacheKey, () => persist(this.cacheKey, null));
   }
 }

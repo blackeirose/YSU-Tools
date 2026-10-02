@@ -6,7 +6,7 @@ export default defineConfig({
   timeout: 90000,
   use: {
     baseURL: "http://127.0.0.1:4174",
-    channel: "chrome",
+    channel: process.env.CI ? undefined : "chrome",
     headless: true,
     viewport: { width: 1440, height: 1000 },
     trace: "retain-on-failure",

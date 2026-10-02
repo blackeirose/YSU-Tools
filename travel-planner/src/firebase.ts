@@ -25,15 +25,19 @@ import type { RecordData } from "./model";
 import { recordSchema } from "./model";
 import { ConflictError } from "./storage";
 import type { Operation, Remote } from "./storage";
+import { cloudScope } from "./cloud-config";
 const env = import.meta.env;
 export const emulator = env.VITE_USE_EMULATORS === "true";
+export const namespace = emulator ? "preview-v1" : env.VITE_FIREBASE_NAMESPACE;
+export const previewCloud = namespace === "preview-v1";
 export const configured =
   emulator ||
   !!(
     env.VITE_FIREBASE_API_KEY &&
     env.VITE_FIREBASE_PROJECT_ID &&
     env.VITE_FIREBASE_AUTH_DOMAIN &&
-    env.VITE_FIREBASE_APP_ID
+    env.VITE_FIREBASE_APP_ID &&
+    ["preview-v1", "v1"].includes(namespace)
   );
 const config = emulator
   ? {
@@ -48,7 +52,12 @@ const config = emulator
       projectId: env.VITE_FIREBASE_PROJECT_ID,
       appId: env.VITE_FIREBASE_APP_ID,
     };
-const app = configured ? initializeApp(config, "travel-planner") : null;
+export const storageScope = configured
+  ? cloudScope(config.projectId, namespace)
+  : "";
+const app = configured
+  ? initializeApp(config, `travel-planner-${namespace}`)
+  : null;
 export const auth = app ? getAuth(app) : null;
 const db = app
   ? initializeFirestore(app, { localCache: memoryLocalCache() })
@@ -82,7 +91,7 @@ export function cloudRemote(owner: string): Remote {
   const records = collection(
     db,
     "travelPlanner",
-    "v1",
+    namespace,
     "users",
     owner,
     "records",

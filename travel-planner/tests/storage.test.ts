@@ -30,6 +30,38 @@ beforeAll(() => {
   });
 });
 describe("recoverable editing", () => {
+  it("rejects an open stale draft after a newer version arrives", async () => {
+    const owner = crypto.randomUUID(),
+      store = new PlannerStore(owner, null);
+    await store.init();
+    await store.edit("create", [blankTrip(owner)]);
+    const draft = {
+      ...store.snapshot.records[0],
+      name: "old draft",
+    } as RecordData;
+    await store.edit("other device", [
+      { ...store.snapshot.records[0], name: "new version" } as RecordData,
+    ]);
+    await expect(store.edit("save draft", [draft])).rejects.toThrow(
+      "草稿仍保留",
+    );
+    expect((store.snapshot.records[0] as { name: string }).name).toBe(
+      "new version",
+    );
+    expect((draft as { name: string }).name).toBe("old draft");
+    await store.clear();
+  });
+  it("keeps preview and production queues separate even for the same UID", async () => {
+    const owner = crypto.randomUUID(),
+      preview = new PlannerStore(owner, null, "project:preview-v1"),
+      production = new PlannerStore(owner, null, "project:v1");
+    await preview.init();
+    await production.init();
+    await preview.edit("preview", [blankTrip(owner)]);
+    expect(production.snapshot.records).toHaveLength(0);
+    await preview.clear();
+    await production.clear();
+  });
   it("undo refuses to overwrite a later edit and retains the original operation", async () => {
     const owner = crypto.randomUUID(),
       store = new PlannerStore(owner, null);
@@ -125,7 +157,9 @@ describe("recoverable editing", () => {
       p = blankPlace(owner, t.id, "test"),
       i = blankItem(owner, t, p.id, t.start);
     await store.edit("create", [t, p, i]);
-    await store.edit("delete", [{ ...i, deleted: true }]);
+    await store.edit("delete", [
+      { ...store.snapshot.records.find((r) => r.id === i.id)!, deleted: true },
+    ]);
     expect(
       (await readSnapshot(owner)).records.find((r) => r.id === i.id)?.deleted,
     ).toBe(true);

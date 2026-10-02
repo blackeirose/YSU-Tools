@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { Temporal } from "@js-temporal/polyfill";
 import { PlannerStore } from "./storage";
+import type { Snapshot } from "./storage";
 import {
   configured,
   emulator,
   watchAuth,
+  storageScope,
+  previewCloud,
   login,
   logout,
   cloudRemote,
@@ -103,6 +106,7 @@ export default function App() {
     [aiBusy, sbusy] = useState(false);
   const file = useRef<HTMLInputElement>(null),
     activeStore = useRef<PlannerStore | null>(null),
+    recovery = useRef(new Map<string, Snapshot>()),
     ack = useRef(new Set<string>());
   const attempt = async (fn: () => Promise<unknown>, success?: string) => {
     ser("");
@@ -122,6 +126,16 @@ export default function App() {
     [],
   );
   useEffect(() => {
+    const guard = (e: BeforeUnloadEvent) => {
+      if (recovery.current.size) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", guard);
+    return () => window.removeEventListener("beforeunload", guard);
+  }, []);
+  useEffect(() => {
     let cancelled = false;
     let unsub: undefined | (() => void);
     sl(true);
@@ -136,8 +150,14 @@ export default function App() {
     void (async () => {
       try {
         if (old) {
-          if (old.owner !== "local-demo") await old.clear();
-          else old.close();
+          if (old.owner !== "local-demo") {
+            // External logout/session loss must not silently discard pending work.
+            // Private disk cache is cleared; recovery stays only in this tab's memory
+            // and can be restored/exported only after the same UID authenticates.
+            if (old.snapshot.pending.length || old.snapshot.conflicts.length)
+              recovery.current.set(old.owner, structuredClone(old.snapshot));
+            await old.clear();
+          } else old.close();
         }
         if (cancelled) return;
         if (!demo && !user) {
@@ -147,12 +167,19 @@ export default function App() {
         const current = new PlannerStore(
           demo ? "local-demo" : user!,
           demo ? null : cloudRemote(user!),
+          demo ? "" : storageScope,
         );
         activeStore.current = current;
         unsub = current.subscribe(() => {
           if (!cancelled) redraw((n) => n + 1);
         });
         try {
+          const saved = !demo && recovery.current.get(user!);
+          if (saved) {
+            await current.restoreAfterSessionLoss(saved);
+            recovery.current.delete(user!);
+            sn("已取回此分頁暫存的未同步修改，正在重新核對雲端版本。");
+          }
           await current.init();
           if (cancelled) {
             current.close();
@@ -238,13 +265,13 @@ export default function App() {
   async function signOutNow() {
     const current = activeStore.current;
     if (current) await current.clear();
+    activeStore.current = null; // explicit logout already chose how to handle pending work
     ss(null);
     await logout();
     su(null);
     slogout(false);
   }
   async function prepareLogout() {
-    await store?.flush();
     if (
       store &&
       (store.snapshot.pending.length || store.snapshot.conflicts.length)
@@ -794,6 +821,16 @@ export default function App() {
         </div>
       </header>
       <main>
+        {recovery.current.size > 0 && (
+          <div className="error banner" role="alert">
+            登入狀態已變更。有未同步修改暫存在此分頁，請先不要重新整理或關閉；重新登入原帳號即可復原。其他帳號無法存取這份暫存。
+          </div>
+        )}
+        {user && previewCloud && (
+          <p className="notice">
+            隔離試用環境 · 請使用合成測試資料；與正式旅程分開保存。
+          </p>
+        )}
         <datalist id="zones">
           {[
             "Asia/Tokyo",

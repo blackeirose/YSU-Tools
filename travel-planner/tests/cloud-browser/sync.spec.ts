@@ -50,6 +50,47 @@ test("emulator: independent same-user contexts synchronize both directions and p
     await expect(
       a.getByRole("article", { name: "B to A", exact: true }),
     ).toBeVisible();
+    // A long-lived draft must not silently overwrite B's already-delivered edit.
+    await a
+      .getByRole("article", { name: "A to B", exact: true })
+      .getByRole("button", { name: "時間／備註" })
+      .click();
+    await a
+      .getByRole("dialog")
+      .getByLabel("這次安排的備註")
+      .fill("unsaved A draft");
+    await b
+      .getByRole("article", { name: "A to B", exact: true })
+      .getByRole("button", { name: "時間／備註" })
+      .click();
+    await b
+      .getByRole("dialog")
+      .getByLabel("這次安排的備註")
+      .fill("B newer version");
+    await b
+      .getByRole("dialog")
+      .getByRole("button", { name: "儲存安排" })
+      .click();
+    await expect(b.getByText("已同步", { exact: true })).toBeVisible();
+    await expect(
+      a.getByRole("article", { name: "A to B", exact: true }),
+    ).toContainText("B newer version");
+    await expect(
+      a.getByRole("dialog").getByLabel("這次安排的備註"),
+    ).toHaveValue("unsaved A draft");
+    await a
+      .getByRole("dialog")
+      .getByRole("button", { name: "儲存安排" })
+      .click();
+    await expect(a.getByRole("dialog")).toContainText("草稿仍保留");
+    await a
+      .getByRole("dialog")
+      .getByRole("button", { name: "關閉", exact: true })
+      .click();
+    await a.reload();
+    await expect(
+      a.getByRole("article", { name: "A to B", exact: true }),
+    ).toContainText("B newer version");
     await login(other, `other-${crypto.randomUUID()}@example.test`);
     await expect(
       other.getByRole("heading", {
@@ -63,6 +104,11 @@ test("emulator: independent same-user contexts synchronize both directions and p
       .getByLabel("移動到指定日期")
       .selectOption("2030-01-02");
     await quick(a, "Offline new record");
+    // The built app shell and pending operations must survive an offline reload.
+    await a.reload();
+    await expect(
+      a.getByRole("article", { name: "Offline new record", exact: true }),
+    ).toBeVisible();
     const victim = b.getByRole("article", { name: "A to B", exact: true });
     await victim.getByRole("button", { name: "刪除安排", exact: true }).click();
     await expect(victim).toHaveCount(0);
@@ -80,10 +126,30 @@ test("emulator: independent same-user contexts synchronize both directions and p
     await expect(
       b.getByRole("article", { name: "Offline new record", exact: true }),
     ).toBeVisible({ timeout: 45000 });
+    await b
+      .getByRole("article", { name: "B to A", exact: true })
+      .getByLabel("移動到指定日期")
+      .selectOption("2030-01-02");
+    await expect(
+      a
+        .locator('[data-day="2030-01-02"]')
+        .getByRole("article", { name: "B to A", exact: true }),
+    ).toBeVisible();
+    await b.getByRole("button", { name: "復原", exact: true }).click();
+    await expect(
+      a
+        .locator('[data-day="2030-01-01"]')
+        .getByRole("article", { name: "B to A", exact: true }),
+    ).toBeVisible();
     await a.getByRole("button", { name: "登出", exact: true }).click();
     await expect(
       a.getByRole("heading", { name: "Emulator private trip", exact: true }),
     ).toHaveCount(0);
+    await login(a, email);
+    await expect(
+      a.getByRole("article", { name: "B to A", exact: true }),
+    ).toBeVisible();
+    await a.getByRole("button", { name: "登出", exact: true }).click();
     await login(a, `new-owner-${crypto.randomUUID()}@example.test`);
     await expect(
       a.getByRole("article", { name: "B to A", exact: true }),

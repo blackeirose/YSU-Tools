@@ -2,7 +2,7 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     // Standalone candidate rules: never deploy over a sibling project's rules.
-    match /travelPlanner/v1/users/{uid}/records/{recordId} {
+    match /travelPlanner/preview-v1/users/{uid}/records/{recordId} {
       function owner() { return request.auth != null && request.auth.uid == uid; }
       function valid() { return request.resource.data.ownerId == uid
         && request.resource.data.id == recordId
