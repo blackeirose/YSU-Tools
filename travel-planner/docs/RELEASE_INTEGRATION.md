@@ -1,41 +1,38 @@
-# /travel-planner/ 發布準備 — 不含發布授權
+# /travel-planner/ 隔離 Preview 整合
 
-來源 `blackeirose/YSU-Tools/travel-planner`；此 repo 的 CNAME 並不代表其擁有共享站完整 router／部署權。
+產品來源：`blackeirose/YSU-Tools/travel-planner`；正式目標 `https://tools.ycsu.cc/travel-planner/`。不得整站部署此 repo 或 dist。
 
-已查明共享 site：`ycsu-tools-router` / `b23018a8-efe1-4086-b7ea-1d9018b2cf40` / tools.ycsu.cc。唯一 supported 完整站點發布流程是 [social-capture-tool SHARED_HOST_RELEASE](https://github.com/blackeirose/social-capture-tool/blob/7f51fee20ff704ae15fb621fca4cc9c6bae064b7/docs/SHARED_HOST_RELEASE.md)，腳本 `scripts/shared_host_release.py`，contract `deploy/shared-host/contract.json`。Capture 三 functions 的 routes/modes/cleanup cron、UMS、Fire Pump、Plumbing proxy 及全部鄰近檔案 hash 必須保留。該 contract 尚未登錄本 component，需要 Owner 另授權的 authority repo 整合審查；本任務不改它。
+唯一發布 authority：`blackeirose/social-capture-tool/scripts/shared_host_release.py`，site `b23018a8-efe1-4086-b7ea-1d9018b2cf40`（ycsu-tools-router）。本輪 Owner 已授權隔離 feature branch、完整 draft 與最小 Planner 規則；production 仍未授權。
 
-## 可重建 component
+Authority [PR #21](https://github.com/blackeirose/social-capture-tool/pull/21) 基於 accepted `b551947`／live `6abf52a7be775989aeaab09d`，保留307 static files、6 functions、所有routes/modes/cleanup cron。不能使用舊 main 的22-file contract。正式 artifacts 由既有私有 release 取回並驗證，每個 function ZIP 的 hash 全數相符。
 
-```sh
-pnpm install --frozen-lockfile
-pnpm build
-pnpm stage
-```
+## 可重建及不可變 candidate
 
-產生忽略 git 的 `artifacts/component-<hash>/travel-planner/` 與 component-manifest.json 的每檔 SHA256。以 source commit、lockfile 和 build 重建；唯一成果在 git 原始碼，無臨時 ZIP 依賴。`dist`／component 不是完整站點，禁止 `netlify deploy --prod --dir dist` 或將此 repo 直接連接共享站。未建立任何新 site／替代網域。
+`pnpm install --frozen-lockfile` → 設定已授權的公開 Firebase web config、`VITE_FIREBASE_NAMESPACE=preview-v1` → 在 clean source 執行 `pnpm run build:preview`。忽略 git 的 TOWER config 在 `.private-integration/firebase-preview.env`，只供 preview build 程序載入環境，避免預設本機 demo 被切成雲端。不要輸出設定值或提交此檔。
 
-## 待 authority 審查的局部整合
+Build 寫入 source SHA、lock SHA256、namespace、base、synthetic-only、AI-disabled metadata。正式發行不可沿用 preview namespace。
 
-1. 從當前 live accepted 完整 artifact 加入 `travel-planner/`，其他 component bytes、function digests/routes/modes/cron 不變；新增 component source provenance/required files/probes 到 authority contract。
-2. 只增加以下 scoped redirect fragment，確認精確 API function route 先匹配，避免 catchall 吞掉 API；不得加 root `/*` rewrite：
+`travel_planner_component.assemble()` 先驗證完整 baseline 的每個 byte，建立不存在的新目錄，加入 Planner 並只 append 經審查的 root header/redirect fragments。既有 root source 保持原樣。已組出 source c97589fe 的322-file candidate；manifest SHA256 `4d18c3395f9a8c3c258863f09ea5c0a1bab23ecfa64763c496b04531b23c2013`，仍在本機。
 
-```text
-/travel-planner          /travel-planner/             301
-/travel-planner/trips/*  /travel-planner/index.html    200
-```
+## 路由／安全契約
 
-Browser route `/travel-planner/trips/{uuid}/day/{YYYY-MM-DD}` 恢復選定旅程／日期；assets 絕對 prefix `/travel-planner/assets/`。未知深層 trip route 提供 app shell 後回既有可用旅程。API function path 精確 `/travel-planner/api/explore`，不使用 catchall；只能在授權設定後加進完整 function contract，不影響 Capture。
+- base、assets、trip/day 路由都是 `/travel-planner/`。
+- redirect 僅無斜線 canonicalization、API disabled JSON 404、明確 trip/day route；沒有全站／Planner catchall。
+- Google 使用既有 Firebase Auth domain 的官方 popup handler；app 保留原有 trip/day route，不把 Firebase callback 改寫進共享 root。
+- manifest id/start_url/scope、registration 與 Service-Worker-Allowed 均 `/travel-planner/`。worker no-store；API private/no-store；hash assets immutable；私人 API／地圖 tiles 不快取。
+- Root `sw.js`／`service-worker.js` 不在 accepted static inventory；Preview 新 origin 與正式歷史 registration 需分别驗證。
+- 沒有 Planner AI 授權所以不新增function；已有兄弟functions保持原ZIP，不以其實作或keys供Planner使用。
 
-3. scoped header 建議：HTML/manifest/sw.js `Cache-Control: no-cache`，hashed assets `public,max-age=31536000,immutable`；API `private,no-store`（function 本身已有）；保留共享其他 headers。SW script 不設定更寬 Service-Worker-Allowed；其預設及註冊 scope 均 `/travel-planner/`。
-4. manifest `id/start_url/scope=/travel-planner/`、icons 同 prefix。SW static allowlist + content-hashed cache，只清理 `ysu-travel-planner-shell-*`，不攔截兄弟路徑、不快取私人 API/tiles。更新在舊 tabs 關閉後接管，避免編輯中強制 reload。
-5. 在 authority 的隔離完整站 preview 驗證同子路徑、深層直開與重新整理、Auth popup 回到原 route、API ownership、現有全部 neighbor probes/functions/cron。
+## 建立 draft 前尚待 gates
 
-目前無已確認安全可寫的隔離 preview；不建立替代正式網域。已完成本機同子路徑驗證。公開 web reader 無法存取 root/sw.js/service-worker.js，不能宣稱已完整排除 live 根 SW；發布前需由可讀 live artifact＋瀏覽器 registration inventory 查核。已讀 authority redirect contract，沒有通用 SPA catchall。這個 live root SW 查核是發布 gate，不阻止本機產品。
+正常 Netlify CLI 登入後，重新取得當前 live baseline、完整 function inventory與實際 traffic rules；若 API 沒有回傳 protected CA traffic policy，publisher 必須停止，不能以常數補寫。現有 retained inventory 刻意只記 function signature，沒有 traffic field，所以還不是這項 live gate 的證據。
 
-## 授權後 production gate
+Firebase 合併 rules 已套用且刷新後讀回相同 hash（fef400543055eab96ddc493a558d7e0da0b2cc54561fbd9cf66e2daf264fcb68）；精確 Preview authorized host 待 draft ID。完整規則已通過私有 Actions emulator；rollback 是未改動的原規則。Preview acceptance receipt 必須包含matching source、emulator／independent-review PASS、rulesApplied與observed hash。未符合時 publisher在API寫入前拒絕。
 
-Owner 另行明確授權正式部署後，使用該 authority：最新 baseline／完整 component hashes／所有 Capture functions／route header 契約／approved credentials、不可有待完成 acceptance 或未知 functions。先建完整 immutable candidate，再 authority validate，逐項 live acceptance，最後才 promotion；本文件不授權執行任何 publish。
+由authority建立 `draft:true` 完整candidate，驗證首頁／深層直開刷新、assets/manifest/icons、OAuth、獨立context雙向及離線衝突、API不落SPA、所有兄弟probes與functions/cron。禁止以臨時devserver URL冒充持久Preview。
 
-## 回復
+## 正式發布／回復
 
-本次未發布，現有 production LKG 未改。若未來需要回退 Travel Planner，從前一個已驗證的 source commit 重建它，合成最新其他 components 與最新 Capture functions，走同一 authority gate。不可還原歷史整站 deployment 覆蓋較新的兄弟工具。匯出 JSON 帶 schemaVersion 可保留私人資料；資料 schema 改版需另作版本遷移審查。
+Preview receipt的 `mode=preview` 無法 promotion；本輪沒有執行任何production呼叫。正式版需另建適用v1資料範圍的候選、全套適用gates，最後另外取得Owner production授權。
+
+回復只能替換Planner component並保留當下最新兄弟artifacts。不得歷史整站restore。共用Firebase rules回復前也要核對是否有其他已核准更新，不能回蓋兄弟規則。

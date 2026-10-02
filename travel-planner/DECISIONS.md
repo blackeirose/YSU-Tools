@@ -17,6 +17,13 @@
 - Leaflet + OSM ordinary interactive tiles with attribution, no public autocomplete and no offline/bulk prefetch. Unknown coordinates remain null; Maps viewport center is not treated as place location.
 - Optional AI server function uses current Responses API web search documentation, explicit model configuration and cited-source validation. Without settings the UI is disabled, no fake suggestions.
 - Background Web Push is not implemented without an authorized scheduler/subscription backend. Foreground reminders are explicitly described as app-open only.
-- Shared-host assembly must go through the existing release authority. This folder prepares static component files and scoped route/header suggestions only; it does not modify that authority or publish the shared host.
+- Shared-host assembly must go through the existing release authority. The continuation explicitly authorizes its isolated feature branch and a complete draft preview, preserving all latest accepted neighboring bytes/functions/routes/traffic/cron. Planner-only dist upload, production promotion and publishing-branch merges remain prohibited.
+
+## CONTINUATION — Cloud preview authorization, 2026-10-02
+
+- Dedicated `preview-v1` reuses the existing personal Firebase project and verified-Google Owner helper. The minimal additive rules were tested against the complete shared baseline, independently reviewed, then applied and read back with the same hash. No production `v1` or sibling access was added.
+- Manual demo-only GitHub Actions provides Java/emulators without installing a JVM on the managed workstation. It uses no production Firebase/Netlify credential.
+- Shared-host baseline is the latest accepted release, not obsolete default main. Exact retained static/function artifacts are required. Unknown CA traffic policy blocks draft creation before any upload.
+- Active Auto-review handles eligible sandbox requests; it does not remove network, filesystem, company or browser confirmation boundaries. Do not ask again for already-authorized routine work. Record technical login/tool barriers separately from authorization.
 
 Reconsider implementation details only within user scope and current canonical rules. Changing locked boundaries requires explicit Owner instruction.

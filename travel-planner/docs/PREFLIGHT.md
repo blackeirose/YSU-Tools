@@ -1,4 +1,6 @@
-# Preflight / Gate Full record — 2026-10-02
+# Initial preflight / Gate Full record — 2026-10-02
+
+Historical first-pass observations below are superseded where stated by the continuation record at the end.
 
 ## Remote canonical sources
 
@@ -23,3 +25,13 @@ Goal: usable V1 and reviewable source/build/tests/docs, with truthful per-integr
 Initial LKG is untouched main baseline above and unchanged live shared deployment. Local product validation does not establish a new production LKG. Rollback before release is discard/revert this isolated feature; after eventual authorized release, rebuild previous Travel Planner component against latest neighboring components through sole release authority. Never restore an old entire shared-site deploy.
 
 External reference PDFs were not available. Used the complete usage summary; no claim to read attachments and no private order/confirmation data in synthetic demos.
+
+## Continuation observations — 2026-10-02
+
+No restart or replacement of existing work. Owner subsequently authorized Firebase preview integration and the existing release authority's isolated branch. Latest accepted authority is b55194709a2ab1f777c4a70310a072d40b313ceb, live deploy 6abf52a7be775989aeaab09d, with 307 static files and six Functions. The old default-main contract above is historical only.
+
+Existing personal Firebase rules were read through its normal console session and matched SHA256 6a7ca7ebcf1f844996a7a9f1d8f63b72b3ead8e32d97c55f47465eef60f5359f. Additive synthetic preview rules passed full merged emulator tests and independent review; published at 15:51 PDT and read back after refresh as fef400543055eab96ddc493a558d7e0da0b2cc54561fbd9cf66e2daf264fcb68. All baseline rule bytes and sibling permissions are preserved. No production v1 data or permission was introduced.
+
+The missing local JVM is resolved for validation through the explicitly authorized manual GitHub Actions demo emulator, not a machine install. Active runtime permissions explicitly report approvals_reviewer=auto_review. Sandbox Git ownership/network errors are technical boundary requests, not missing Owner scope. GitHub connector remains authenticated; Netlify browser login/CLI authentication is separate. See APPROVALS.md.
+
+Current browser runtime connects to Edge; previous Chrome binding is unavailable. Firebase's existing Google session works in Edge. No browser profile was reset, no credential store inspected and no company policy changed.

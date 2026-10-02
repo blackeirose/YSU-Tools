@@ -1,67 +1,50 @@
-# V1 驗證記錄 — 2026-10-02
+# 驗證紀錄 — 2026-10-02 接續輪
 
-狀態：**本機產品可驗收／原始碼可審查；正式整合未完成**。沒有 production deploy、merge、DNS、Firebase rules 部署或付費服務變更。測試資料皆合成。
+已驗證程式碼：`c97589fe24ead39765530a9968d4e4fc6aac3bfb`。本文件之後的文件／證據 commit 不改變該 candidate。所有測試資料為合成。
 
-## 實際執行
+| 檢查 | 結果 |
+|---|---|
+| TypeScript strict | PASS，frontend／server |
+| Unit | **27 PASS**：12 model/time/calendar/import、10 IndexedDB/CAS/recovery、5 server trust boundary |
+| 本機 Vite build／PWA | PASS；static shell only，scope `/travel-planner/` |
+| 本機 Chrome | **16 PASS**（desktop 1440×1000 / mobile 390×844 各8） |
+| Public emulator | [37063922214](https://github.com/blackeirose/YSU-Tools/actions/runs/37063922214) PASS：兩項 rules tests、獨立 browser contexts 完整同步流程 |
+| 真正共用規則合併版 | 私有 [37064250499](https://github.com/blackeirose/social-capture-tool/actions/runs/37064250499) PASS，在 demo project 執行完整候選規則 |
+| 共享發布契約 | 67 tests：**66 PASS / 1 原有 skip**，本機及 Actions 一致 |
+| artifacts | accepted baseline 307 files byte-identical；6 exact function ZIP SHA256 相符 |
+| 完整本機 candidate | 322 files，source/lock/manifest/PWA namespace／保留檔案檢查 PASS；**未部署** |
+| 獨立 code review | **PASS**，下列四項修正複核；不是 live UI／雲端 acceptance |
 
-| 驗證                       | 結果／界線                                                                                 |
-| -------------------------- | ------------------------------------------------------------------------------------------ |
-| TypeScript strict `tsc -b` | PASS，包含 frontend 與 Netlify function                                                    |
-| Vitest                     | **23 PASS**，12 model/time/calendar/import、6 IndexedDB/CAS/recovery、5 server boundary    |
-| Vite build + SW generator  | PASS；12 static shell resources；manifest/SW scope `/travel-planner/`                      |
-| Component stage            | PASS；`component-cd917d5238bbaddb`；每檔 SHA256，可由 source/lockfile 重建                 |
-| Playwright 已安裝 Chrome   | **16 PASS**（桌機8、手機8）；另重跑2項視覺／列印測試 PASS                                  |
-| 桌機／手機                 | 實際查看 1440×1000、390×844 screenshots；無橫向 viewport 溢出                              |
-| 列印 CSS                   | Chrome print media 檢查 PASS，互動面板隱藏、簡潔行程顯示                                   |
-| 真實地圖                   | Leaflet zoom／marker 選擇 PASS；Chrome 載入 OSM 底圖，attribution 可見；另測全圖磚失敗提示 |
-| Independent reviewer       | 四項 findings 修正後唯讀複核 RESOLVED／程式碼審查通過，未發現新重大缺陷                    |
-| Emulator 測試檔            | 規則測試與獨立 browser context 同步測試已備妥；後者 CLI `--list` 成功載入，**尚未執行**    |
+Emulator 兩個獨立 contexts 實测 A→B、B→A、新增／修改、refresh、relogin、不同 user 看不到旅程、離線跨日移動＋新增後 offline reload、遠端刪除同項後衝突、下載雙份 backup、採遠端版本、採本機版本、排序、刪除與 Undo。stale drawer 草稿遇已送達的新版本不覆寫；草稿仍可複製。
 
-Build 有 Firebase chunk 541.61KB 的效能 warning，以及上游 Zod pure-comment annotation warning；不影響 build 成功。未藉調高門檻隱藏 warning。後續若實測啟動速度不符需求，再按服務載入拆分；未宣稱測過慢速實體手機。
+本機 16 流程包含：旅程→place→marker、候選替換保留原項、drag／mobile移日、Undo／reload、固定時間延後保護、DST表單、ICS、JSON預覽匯入、離線讀寫重載、深層route直接載入、map錯誤、AI disabled、manifest/SW/private-cache排除、真實底圖、印刷與合成示範。原23-test紀錄已由27-test版本取代。
 
-## 需求與證據
+## 獨立 reviewer
 
-| 範圍           | 實作／測試                                                                                                                                                      |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 旅程與每日規劃 | 新增、編輯、複製、封存；跨年、多城市、多住宿、同行人數；空白起步；新旅程主流程實測                                                                              |
-| 最少名稱／位置 | 新增名稱、後補地址/座標、marker同步；short Maps URL保留、viewport不當座標、missing/partial/unsafe位置回歸測試                                                   |
-| 時間           | sequence/period/flexible/fixed；手動交通分鐘保留；固定預約不移動、衝突不套用延後；DST 表單拒絕後可正常修正                                                      |
-| 調整           | desktop native拖曳跨日、mobile日期/上下移、候選替換保留原項、Undo刷新後仍有效；瀏覽器實測                                                                       |
-| 候選與搜尋     | 未排定/單日候選、城市/區域/分類、已存地點可再安排，Maps外部入口；AIdisabled仍有普通搜尋                                                                         |
-| 桌機／手機     | 多日並排、當日切換、map ratio/selection、drawer dialogs、Today與底部導覽；合成示範不顯示現在應前往                                                              |
-| 地圖服務故障   | abort全部tiles後可讀行程、顯示錯誤；無座標不生成marker；marker與行程雙向選取、zoom實測                                                                          |
-| AI             | server Auth/Owner/trip查核、未設定503、來源必須實際搜尋出現、API失敗回復等 mock tests；真實請求未啟用                                                           |
-| 待辦／提醒     | 狀態、deadline、overdue/soon、SF/Honolulu、foreground提醒、停用/刪除、ICS VALARM；task新增與calendar download實測                                               |
-| 時區／ICS      | Stable UID、UTC instants、SF夏冬DST、gap/ambiguous拒絕、跨年、不同出發/抵達時區、UTF8 folding；unit PASS                                                        |
-| 本機離線       | 下載後 offline reload讀寫，再online reload仍保留；Chrome桌機/手機context實測                                                                                    |
-| 雲端衝突模型   | 模拟 Remote CAS＋fake-indexeddb測跨日/排序/刪除base、離線改動、conflict alternatives、最新remote重讀、read失敗、Undo intervening edit；**不是Firebase整合PASS** |
-| JSON／列印     | schemaVersion/reference驗證、new IDs、preview不覆寫、browser export/import副本；print media可見驗證                                                             |
-| 路由／PWA      | 有效 trip/day深層直開刷新還原、manifest三scope、SW registrationscope、cache僅自己的static resources、獨立localcontext沒有同步資料                               |
-| 私人資料隔離   | code review owner rules/namespace/server ownership與logout清理；真实anonymous/不同user規則還需emulator，不能宣稱PASS                                            |
+`review_travel_risks` 為工具支援的只讀獨立 reviewer。發現並複核：
+1. stale drawer revision 被覆寫 → revision 防護及 browser regression；
+2. flush 持 state lock 等待網路 → 分開 sync/state locks、ack 重讀最新 queue、deferred network regression；
+3. recovery 從過時記憶體取資料 → 同一 state lock 讀盤、保存 recovery、清理，delayed-broadcast regression；
+4. 共享站 CA traffic policy 可能被常數覆蓋 → 精確保存觀察值、缺少／矛盾即阻擋、baseline/candidate/receipt 三方比較。
 
-## 關鍵畫面
+以上 RESOLVED，最終 code review PASS。作者沒有把自查當獨立 review。
 
-- [桌機東京並排行程＋真實底圖](evidence/desktop-tokyo.png)
-- [手機東京](evidence/mobile-tokyo.png)
-- [桌機跨年多城市](evidence/desktop-multicity.png)
-- [手機跨年多城市](evidence/mobile-multicity.png)
-- [列印版](evidence/desktop-print.png)
-- [手機新旅程與離線新增保留](evidence/mobile-trip.png)
-- [桌機圖磚故障仍可操作](evidence/desktop-map.png)
-- [手機地圖故障提示](evidence/mobile-map.png)
+## 證據
 
-畫面由自動化實際 Chrome 取得並人工查看，不是 mockup。手機 viewport/Chrome 測試不等於實體 iPhone 或 WebKit。
+- [emulator 結果 JSON](evidence/emulator-acceptance.json)
+- [emulator 桌機](evidence/emulator-desktop.png)
+- [emulator 手機 viewport](evidence/emulator-mobile.png)
+- [桌機合成東京](evidence/desktop-tokyo.png)、[手機合成東京](evidence/mobile-tokyo.png)
+- [跨年多城市](evidence/desktop-multicity.png)、[列印](evidence/desktop-print.png)
 
-## 獨立審查記錄
+畫面已實際開啟查看。Emulator screenshot 是 browser resize，不等於實體裝置；本機套件另以獨立 mobile context 執行。
 
-唯讀 reviewer `review_travel_risks` 聚焦 Auth／同步／時區／資料遺失／SW；不是作者自查。初輪 finding：Undo覆寫後續變更、採用過時remote快照、時區保護缺口、SW只hash檔名。修正後 reviewer 確認：lock內revision＋canonical payload比對；resolve先重讀；統一保存前時間驗證且提醒逐項容錯；SW內容hash。四項 **RESOLVED（code review）**。相關 IndexedDB/時區回歸與 browser DST測試通過。Reviewer明確保留 Firebase live/emulator、跨裝置與 iPhone UNVERIFIED。
+## 尚未驗證／外部條件
 
-## UNVERIFIED / BLOCKED
-
-Firebase rules實際執行、真正兩個獨立browser context同帳號雙向同步／離線衝突、OAuth production/preview回呼：**BLOCKED**（沒有授權Planner project；TOWER無既有Java emulator runtime）。Local雙分頁PASS不能替代跨裝置。
-
-真實 AI模型/key/搜尋回傳／Netlify部署runtime：**BLOCKED**（沒有獲授權設定）；只有UI、function、錯誤處理、mock boundary tests。Web Push訂閱／scheduler／取消重排／去重失效清理：**BLOCKED**（沒有已授權排程後端，未偽造背景推播）。
-
-共享 authority contract加入Planner、完整站隔離preview、live root SW inventory、production路由及刷新：**BLOCKED／UNVERIFIED**（發布整合範圍另需授權）；本機同prefix驗證已完成。公開reader與Node HTTPS probe無法存取根SW，不將不存在的查核寫PASS。
-
-WebKit、實體iPhone安裝/離線/鎖屏推播：**UNVERIFIED**。未下載額外瀏覽器或安裝系統runtime。
+- 真實 Google OAuth／Auth refresh、實際 Firebase project 的雙向／離線同步：**UNVERIFIED**，Preview host 尚未建立；合併規則已發布並刷新讀回相同 hash。不能用 emulator 取代真實 OAuth／同步。
+- Netlify draft／deep route／真實 headers／全兄弟 probes：**BLOCKED**，TOWER 無正常 Netlify CLI 登入；不是 production 授權阻擋。
+- 已核對的 retained inventory 沒有 root `sw.js`／`service-worker.js`；既有使用者歷史註冊及新 Preview runtime 仍需瀏覽器實測，不能宣稱全球無 root worker。
+- 真實 AI／來源成功流程、持久 rate limit：**未啟用**；需 Planner 特定資源與額度。沒有發送真實付費 AI 請求。
+- Web Push scheduler／取消重排／鎖屏：未實作／未啟用；前景提醒與 ICS 可用。
+- WebKit、實體 iPhone 安裝、Safari 離線、通知：**UNVERIFIED**，未在公司設備安裝 runtime。
+- Build 保留上游 Zod 註解與 Firebase chunk 約542KB warning，未隱藏門檻。

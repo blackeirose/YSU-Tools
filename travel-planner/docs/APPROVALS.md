@@ -1,0 +1,16 @@
+# TOWER approval diagnosis — 2026-10-02
+
+The current conversation's effective permission block explicitly sets `approvals_reviewer=auto_review`, `sandbox_mode=workspace-write`, and restricted network access. This is actual active configuration, not an inference from a Settings menu. No mode switch is needed. No global security configuration was modified.
+
+| Source | Observed evidence / treatment |
+|---|---|
+| Assistant confirmations | Existing Owner authorization covers routine development, tests, dedicated preview Firebase and complete-host draft integration. Do not re-ask whether to continue. An earlier blanket assumption that any Firebase rules operation needed renewed permission was too broad; the tested owner-only synthetic namespace uses existing authorization. |
+| Sandbox / network / workspace | Native Git sees a separate sandbox Windows identity and reports dubious ownership; registry/artifact network requests can be blocked; build tools may need host runtime access. Eligible exact operations are sent to Auto-review. No global safe.directory, approval_policy=never or company-policy workaround. |
+| Repeated command prompts | Changing signed artifact URLs and differently spelled command paths can prevent reuse of prior narrow approvals. Batch service reads, use consistent pinned executable paths and fixed workspace scripts. Never request blanket PowerShell/Python/API access. |
+| MCP / App approvals | GitHub and Netlify connector calls returned through normal connected tools. Available logs do not prove separate human approval on every call; do not attribute unseen prompts to them. Netlify connector lacks the complete draft-upload operation this shared host requires. |
+| Browser permissions | Current browser runtime exposes Edge; former Chrome binding is unavailable. Normal Firebase login remains valid. Do not reset profiles or inspect cookies/token stores. Tool-required action-time confirmation still applies to actual material security expansion, binding agreements or CAPTCHA; routine existing login and the scoped synthetic namespace are not blanket blockers. |
+| OAuth / login / 2FA | Netlify management page is signed out; normal CLI account config was absent. This is service authentication, not missing project authorization. Owner may need to complete normal account login, terms/2FA and CLI authorization once. Never paste tokens into chat. |
+
+Reusable exceptions, where offered by the platform, must be limited to the relevant repo/path and command: read-only Git status/diff for the two feature checkouts, the exact pinned project-local Netlify CLI install, or the specific package/build/test command. Deployment commands are not covered by generic install/test exceptions. A prefix rule permits a technical operation; it never grants production authorization.
+
+OpenAI's [sandbox documentation](https://learn.chatgpt.com/docs/sandboxing) confirms that Auto-review reviews eligible requests while retaining the sandbox boundary. Browser/OAuth/company restrictions are separate systems and cannot be removed with a prompt.
