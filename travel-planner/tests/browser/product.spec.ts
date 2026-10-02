@@ -132,6 +132,37 @@ async function demo(page: import("@playwright/test").Page) {
     page.getByRole("heading", { name: "東京 · 合成示範", exact: true }),
   ).toBeVisible();
 }
+test("new trip dates are independent of selected trip, while existing arrangements stay protected", async ({
+  page,
+}) => {
+  await demo(page);
+  await page.getByRole("button", { name: "新增旅程", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("旅程名稱").fill("Independent new trip");
+  await dialog.getByLabel("開始日期").fill("2031-02-01");
+  await dialog.getByLabel("結束日期").fill("2031-02-02");
+  await dialog.getByRole("button", { name: "儲存旅程" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "Independent new trip", exact: true }),
+  ).toBeVisible();
+  await page.reload();
+  await page
+    .getByLabel("選擇旅程", { exact: true })
+    .selectOption({ label: "東京 · 合成示範" });
+  await operations(page);
+  await page.getByRole("button", { name: "編輯旅程", exact: true }).click();
+  await dialog.getByLabel("開始日期").fill("2031-02-01");
+  await dialog.getByLabel("結束日期").fill("2031-02-02");
+  await dialog.getByRole("button", { name: "儲存旅程" }).click();
+  await expect(dialog.getByRole("alert")).toContainText(
+    "新日期範圍會排除既有安排",
+  );
+  await dialog.getByRole("button", { name: "取消", exact: true }).click();
+  await expect(page.getByLabel("旅行日期", { exact: true })).toHaveValue(
+    "2030-01-06",
+  );
+});
 test("new trip → minimal place → manual location → same marker, persistence and offline reload", async ({
   page,
   context,

@@ -394,8 +394,12 @@ export default function App() {
     chooseTrip(copies.find((r) => r.kind === "trip")!.id);
   }
   async function saveTrip(t: Trip) {
-    const outside = items.filter(
-      (i) => i.day && (i.day < t.start || i.day > t.end),
+    const outside = records.filter(
+      (i) =>
+        i.kind === "item" &&
+        i.tripId === t.id &&
+        i.day &&
+        (i.day < t.start || i.day > t.end),
     );
     if (outside.length)
       throw new Error("新日期範圍會排除既有安排；請先移動這些項目。");
