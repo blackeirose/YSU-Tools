@@ -141,6 +141,67 @@ test("emulator: independent same-user contexts synchronize both directions and p
         .locator('[data-day="2030-01-01"]')
         .getByRole("article", { name: "B to A", exact: true }),
     ).toBeVisible();
+    // Reordering and delete/Undo propagate as versioned record operations.
+    await b.getByRole("button", { name: "B to A上移", exact: true }).click();
+    await expect(
+      a.locator('[data-day="2030-01-01"] article').first(),
+    ).toHaveAttribute("aria-label", "B to A");
+    await b
+      .getByRole("article", { name: "B to A", exact: true })
+      .getByRole("button", { name: "刪除安排", exact: true })
+      .click();
+    await expect(
+      a.getByRole("article", { name: "B to A", exact: true }),
+    ).toHaveCount(0);
+    await b.getByRole("button", { name: "復原", exact: true }).click();
+    await expect(
+      a.getByRole("article", { name: "B to A", exact: true }),
+    ).toBeVisible();
+    // Choosing local after a competing offline/online edit is explicit and syncs.
+    await first.setOffline(true);
+    await a
+      .getByRole("article", { name: "B to A", exact: true })
+      .getByRole("button", { name: "時間／備註" })
+      .click();
+    await a
+      .getByRole("dialog")
+      .getByLabel("這次安排的備註")
+      .fill("Offline chosen version");
+    await a
+      .getByRole("dialog")
+      .getByRole("button", { name: "儲存安排" })
+      .click();
+    await b
+      .getByRole("article", { name: "B to A", exact: true })
+      .getByRole("button", { name: "時間／備註" })
+      .click();
+    await b
+      .getByRole("dialog")
+      .getByLabel("這次安排的備註")
+      .fill("Competing remote version");
+    await b
+      .getByRole("dialog")
+      .getByRole("button", { name: "儲存安排" })
+      .click();
+    await expect(b.getByText("已同步", { exact: true })).toBeVisible();
+    await first.setOffline(false);
+    await expect(a.locator(".conflict")).toBeVisible({ timeout: 45000 });
+    await a
+      .getByRole("button", { name: "保留本機版本並重新同步", exact: true })
+      .click();
+    await expect(
+      b.getByRole("article", { name: "B to A", exact: true }),
+    ).toContainText("Offline chosen version");
+    await a.setViewportSize({ width: 1440, height: 1000 });
+    await a.screenshot({
+      path: "test-results/emulator-desktop.png",
+      fullPage: true,
+    });
+    await a.setViewportSize({ width: 390, height: 844 });
+    await a.screenshot({
+      path: "test-results/emulator-mobile.png",
+      fullPage: true,
+    });
     await a.getByRole("button", { name: "登出", exact: true }).click();
     await expect(
       a.getByRole("heading", { name: "Emulator private trip", exact: true }),

@@ -20,8 +20,17 @@ export async function exploreHandler(
     model = env("TRAVEL_PLANNER_AI_MODEL"),
     project = env("TRAVEL_PLANNER_FIREBASE_PROJECT_ID"),
     webKey = env("TRAVEL_PLANNER_FIREBASE_WEB_KEY"),
-    allowedOwner = env("TRAVEL_PLANNER_AI_OWNER_UID");
-  if (!key || !model || !project || !webKey || !allowedOwner)
+    allowedOwner = env("TRAVEL_PLANNER_AI_OWNER_UID"),
+    namespace = env("TRAVEL_PLANNER_FIREBASE_NAMESPACE");
+  if (
+    !key ||
+    !model ||
+    !project ||
+    !webKey ||
+    !allowedOwner ||
+    !namespace ||
+    !["preview-v1", "v1"].includes(namespace)
+  )
     return response(503, {
       error: "AI 探索尚未啟用；請先完成已授權的服務設定。",
     });
@@ -64,7 +73,7 @@ export async function exploreHandler(
     if (!owner || owner !== allowedOwner)
       return response(403, { error: "這個帳號未獲授權使用探索服務" });
     const ownership = await http(
-      `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(project)}/databases/(default)/documents/travelPlanner/v1/users/${encodeURIComponent(owner)}/records/${input.tripId}`,
+      `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(project)}/databases/(default)/documents/travelPlanner/${namespace}/users/${encodeURIComponent(owner)}/records/${input.tripId}`,
       {
         headers: { Authorization: `Bearer ${token}` },
         signal: AbortSignal.timeout(8000),

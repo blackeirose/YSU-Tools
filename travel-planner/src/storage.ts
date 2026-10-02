@@ -176,7 +176,9 @@ export class PlannerStore {
           ? "有衝突待處理"
           : this.snapshot.pending.length
             ? "同步中"
-            : this.remoteReady ? "已同步" : "連線中"
+            : this.remoteReady
+              ? "已同步"
+              : "連線中"
         : "本機已儲存 · 不跨裝置";
   }
   async init() {
@@ -330,8 +332,10 @@ export class PlannerStore {
       // Editing, offline persistence and logout use a separate short state lock.
       await lock(`${this.cacheKey}:sync`, async () => {
         while (!this.closed && navigator.onLine) {
-          const op = await lock(this.cacheKey, async () =>
-            (await readSnapshot(this.cacheKey)).pending[0]);
+          const op = await lock(
+            this.cacheKey,
+            async () => (await readSnapshot(this.cacheKey)).pending[0],
+          );
           if (!op) break;
           try {
             await this.remote!.commit(op);
@@ -340,8 +344,10 @@ export class PlannerStore {
               if (this.closed) return;
               const current = await readSnapshot(this.cacheKey);
               this.error = "";
-              await this.save({ ...current,
-                pending: current.pending.filter((p) => p.id !== op.id) });
+              await this.save({
+                ...current,
+                pending: current.pending.filter((p) => p.id !== op.id),
+              });
             });
           } catch (e) {
             if (this.closed) break;
@@ -350,48 +356,57 @@ export class PlannerStore {
               // the conflict group, then atomically preserve every related edit.
               let captured = false;
               while (!captured && !this.closed) {
-                const initial = await lock(this.cacheKey, () => readSnapshot(this.cacheKey));
-                const readIds = new Set(initial.pending.flatMap((p) => p.changes.map((c) => c.id)));
+                const initial = await lock(this.cacheKey, () =>
+                  readSnapshot(this.cacheKey),
+                );
+                const readIds = new Set(
+                  initial.pending.flatMap((p) => p.changes.map((c) => c.id)),
+                );
                 const latest = await this.remote!.read([...readIds]);
                 await lock(this.cacheKey, async () => {
                   if (this.closed) return;
                   const s = await readSnapshot(this.cacheKey);
-                  if (!s.pending.some((p) => p.id === op.id)) { captured = true; return; }
-              const affected = new Set(op.changes.map((c) => c.id));
-              const related: Operation[] = [op];
-              const remaining: Operation[] = [];
-              for (const pending of s.pending.filter((p) => p.id !== op.id)) {
-                if (pending.changes.some((c) => affected.has(c.id))) {
-                  related.push(pending);
-                  pending.changes.forEach((c) => affected.add(c.id));
-                } else remaining.push(pending);
-              }
-              // Preserve the latest local intention plus earliest base for every related record.
-              const changes = new Map<string, Change>();
-              for (const group of related)
-                for (const c of group.changes) {
-                  const prev = changes.get(c.id);
-                  changes.set(c.id, {
-                    ...c,
-                    before: prev ? prev.before : c.before,
-                  });
-                }
-              if ([...affected].some((id) => !readIds.has(id))) return;
-              const resolved = {
-                ...s,
-                pending: remaining,
-                conflicts: [
-                  ...s.conflicts,
-                  {
-                    operation: { ...op, changes: [...changes.values()] },
-                    remote: latest.filter((r) => affected.has(r.id)),
-                    createdAt: new Date().toISOString(),
-                  },
-                ],
-                undo: null,
-              };
-              await this.save(resolved);
-              captured = true;
+                  if (!s.pending.some((p) => p.id === op.id)) {
+                    captured = true;
+                    return;
+                  }
+                  const affected = new Set(op.changes.map((c) => c.id));
+                  const related: Operation[] = [op];
+                  const remaining: Operation[] = [];
+                  for (const pending of s.pending.filter(
+                    (p) => p.id !== op.id,
+                  )) {
+                    if (pending.changes.some((c) => affected.has(c.id))) {
+                      related.push(pending);
+                      pending.changes.forEach((c) => affected.add(c.id));
+                    } else remaining.push(pending);
+                  }
+                  // Preserve the latest local intention plus earliest base for every related record.
+                  const changes = new Map<string, Change>();
+                  for (const group of related)
+                    for (const c of group.changes) {
+                      const prev = changes.get(c.id);
+                      changes.set(c.id, {
+                        ...c,
+                        before: prev ? prev.before : c.before,
+                      });
+                    }
+                  if ([...affected].some((id) => !readIds.has(id))) return;
+                  const resolved = {
+                    ...s,
+                    pending: remaining,
+                    conflicts: [
+                      ...s.conflicts,
+                      {
+                        operation: { ...op, changes: [...changes.values()] },
+                        remote: latest.filter((r) => affected.has(r.id)),
+                        createdAt: new Date().toISOString(),
+                      },
+                    ],
+                    undo: null,
+                  };
+                  await this.save(resolved);
+                  captured = true;
                 });
               }
               continue;
@@ -413,10 +428,16 @@ export class PlannerStore {
   }
   async resolve(conflictId: string, choice: "remote" | "local") {
     if (!this.remote) return;
-    const initial = await lock(this.cacheKey, () => readSnapshot(this.cacheKey));
-    const resolving = initial.conflicts.find((c) => c.operation.id === conflictId);
+    const initial = await lock(this.cacheKey, () =>
+      readSnapshot(this.cacheKey),
+    );
+    const resolving = initial.conflicts.find(
+      (c) => c.operation.id === conflictId,
+    );
     if (!resolving) return;
-    const latest = await this.remote.read(resolving.operation.changes.map((c) => c.id));
+    const latest = await this.remote.read(
+      resolving.operation.changes.map((c) => c.id),
+    );
     await lock(this.cacheKey, async () => {
       if (this.closed) throw new Error("帳號已切換");
       const s = await readSnapshot(this.cacheKey);
@@ -505,7 +526,9 @@ export class PlannerStore {
     return lock(this.cacheKey, async () => {
       const current = await readSnapshot(this.cacheKey);
       await persist(this.cacheKey, null);
-      return current.pending.length || current.conflicts.length ? current : null;
+      return current.pending.length || current.conflicts.length
+        ? current
+        : null;
     });
   }
 }

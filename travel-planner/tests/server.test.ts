@@ -6,6 +6,7 @@ const settings: Record<string, string> = {
   TRAVEL_PLANNER_FIREBASE_PROJECT_ID: "demo-travel-planner",
   TRAVEL_PLANNER_FIREBASE_WEB_KEY: "public-test-key",
   TRAVEL_PLANNER_AI_OWNER_UID: "owner",
+  TRAVEL_PLANNER_FIREBASE_NAMESPACE: "preview-v1",
 };
 const env = (key: string) => settings[key];
 function request() {

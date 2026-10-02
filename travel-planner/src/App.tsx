@@ -823,6 +823,26 @@ export default function App() {
         {recovery.current.size > 0 && (
           <div className="error banner" role="alert">
             登入狀態已變更。有未同步修改暫存在此分頁，請先不要重新整理或關閉；重新登入原帳號即可復原。其他帳號無法存取這份暫存。
+            {user && recovery.current.has(user) && (
+              <button
+                onClick={() =>
+                  download(
+                    "travel-planner-session-recovery.json",
+                    JSON.stringify(
+                      {
+                        schemaVersion: 1,
+                        recovery: recovery.current.get(user),
+                      },
+                      null,
+                      2,
+                    ),
+                    "application/json",
+                  )
+                }
+              >
+                下載原帳號復原備份
+              </button>
+            )}
           </div>
         )}
         {user && previewCloud && (
