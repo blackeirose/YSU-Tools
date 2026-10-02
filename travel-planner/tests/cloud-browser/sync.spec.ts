@@ -101,7 +101,7 @@ test("emulator: independent same-user contexts synchronize both directions and p
     await first.setOffline(true);
     await a
       .getByRole("article", { name: "A to B", exact: true })
-      .getByLabel("移動到指定日期")
+      .getByRole("combobox", { name: "A to B移到某日", exact: true })
       .selectOption("2030-01-02");
     await quick(a, "Offline new record");
     // The built app shell and pending operations must survive an offline reload.
@@ -128,7 +128,7 @@ test("emulator: independent same-user contexts synchronize both directions and p
     ).toBeVisible({ timeout: 45000 });
     await b
       .getByRole("article", { name: "B to A", exact: true })
-      .getByLabel("移動到指定日期")
+      .getByRole("combobox", { name: "B to A移到某日", exact: true })
       .selectOption("2030-01-02");
     await expect(
       a
@@ -155,8 +155,6 @@ test("emulator: independent same-user contexts synchronize both directions and p
       a.getByRole("article", { name: "B to A", exact: true }),
     ).toHaveCount(0);
   } finally {
-    await first.close();
-    await second.close();
-    await third.close();
+    await Promise.allSettled([first.close(), second.close(), third.close()]);
   }
 });

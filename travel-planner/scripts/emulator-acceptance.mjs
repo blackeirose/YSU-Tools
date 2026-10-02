@@ -21,7 +21,7 @@ const run = (args) =>
 const evidence = {
   scope: "isolated Firebase Auth/Firestore emulators; synthetic data only",
   project: process.env.GCLOUD_PROJECT,
-  source: process.env.GITHUB_SHA ?? "local",
+  source: process.env.TESTED_SOURCE_SHA ?? "local",
   checks: [],
   started: new Date().toISOString(),
 };

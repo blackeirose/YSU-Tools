@@ -7,15 +7,21 @@ import {
   applyOperation,
   checkBase,
   readSnapshot,
+  persist,
 } from "../src/storage";
 import type { RecordData } from "../src/model";
 import type { Remote, Operation } from "../src/storage";
 import { blankTrip, blankItem, blankPlace } from "../src/model";
 beforeAll(() => {
+  const held = new Map<string, Promise<unknown>>();
   Object.defineProperty(globalThis, "navigator", {
     value: {
       onLine: true,
-      locks: { request: async (_name: string, fn: () => unknown) => fn() },
+      locks: { request: async (name: string, fn: () => unknown) => {
+        const next = (held.get(name) ?? Promise.resolve()).catch(() => {}).then(fn);
+        held.set(name, next);
+        return next;
+      } },
     },
     configurable: true,
   });
@@ -30,6 +36,44 @@ beforeAll(() => {
   });
 });
 describe("recoverable editing", () => {
+  it("a stalled network commit does not block offline edits or overwrite their queue on ack", async () => {
+    const owner = crypto.randomUUID();
+    let release!: () => void, entered!: () => void;
+    const started = new Promise<void>((r) => { entered = r; });
+    const gate = new Promise<void>((r) => { release = r; });
+    const remote: Remote = { watch: () => () => {}, read: async () => [],
+      commit: async () => { entered(); await gate; } };
+    const store = new PlannerStore(owner, remote);
+    await store.init();
+    await store.edit("first", [blankTrip(owner)]);
+    await started;
+    navigator.onLine = false;
+    try {
+      await store.edit("offline second", [blankTrip(owner)]);
+      expect((await readSnapshot(owner)).pending).toHaveLength(2);
+      release(); await store.flush();
+      expect((await readSnapshot(owner)).records).toHaveLength(2);
+      expect((await readSnapshot(owner)).pending).toHaveLength(1);
+    } finally { release(); navigator.onLine = true; await store.clear(); }
+  });
+  it("session-loss cleanup recovers the latest disk queue even before a tab received its broadcast", async () => {
+    const owner = crypto.randomUUID(), store = new PlannerStore(owner, null);
+    await store.init();
+    const op = makeOperation("other tab", [], [blankTrip(owner)], owner);
+    const snapshot = { records: applyOperation([], op), pending: [op], conflicts: [], undo: op, downloaded: [] };
+    await persist(owner, snapshot);
+    expect(store.snapshot.records).toHaveLength(0);
+    const recovered = await store.clearWithRecovery();
+    expect(recovered?.pending).toHaveLength(1);
+    expect((await readSnapshot(owner)).records).toHaveLength(0);
+    const other = new PlannerStore("other-"+owner, null);
+    await expect(other.restoreAfterSessionLoss(recovered!)).rejects.toThrow("帳號不符");
+    const same = new PlannerStore(owner, null);
+    await same.restoreAfterSessionLoss(recovered!);
+    await same.init();
+    expect(same.snapshot.pending).toHaveLength(1);
+    await same.clear(); await other.clear();
+  });
   it("rejects an open stale draft after a newer version arrives", async () => {
     const owner = crypto.randomUUID(),
       store = new PlannerStore(owner, null);

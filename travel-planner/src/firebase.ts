@@ -113,9 +113,11 @@ export function cloudRemote(owner: string): Remote {
       assertOwner();
       return onSnapshot(
         records,
+        { includeMetadataChanges: true },
         (snap) => {
           try {
             assertOwner();
+            if (snap.metadata.fromCache) return;
             next(snap.docs.map((d) => recordSchema.parse(d.data())));
           } catch (e) {
             error(e as Error);

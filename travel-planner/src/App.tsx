@@ -154,9 +154,8 @@ export default function App() {
             // External logout/session loss must not silently discard pending work.
             // Private disk cache is cleared; recovery stays only in this tab's memory
             // and can be restored/exported only after the same UID authenticates.
-            if (old.snapshot.pending.length || old.snapshot.conflicts.length)
-              recovery.current.set(old.owner, structuredClone(old.snapshot));
-            await old.clear();
+            const saved = await old.clearWithRecovery();
+            if (saved) recovery.current.set(old.owner, saved);
           } else old.close();
         }
         if (cancelled) return;

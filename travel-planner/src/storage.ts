@@ -144,6 +144,7 @@ export class PlannerStore {
   private timer?: number;
   private running = false;
   private flight?: Promise<void>;
+  private remoteReady = false;
   private cacheKey: string;
   constructor(
     public owner: string,
@@ -175,7 +176,7 @@ export class PlannerStore {
           ? "有衝突待處理"
           : this.snapshot.pending.length
             ? "同步中"
-            : "已同步"
+            : this.remoteReady ? "已同步" : "連線中"
         : "本機已儲存 · 不跨裝置";
   }
   async init() {
@@ -285,6 +286,7 @@ export class PlannerStore {
     if (this.closed) return;
     try {
       await lock(this.cacheKey, async () => {
+        if (this.closed) return;
         const s = await readSnapshot(this.cacheKey);
         const blocked = new Set(
           [...s.pending, ...s.conflicts.map((c) => c.operation)].flatMap((op) =>
@@ -301,6 +303,8 @@ export class PlannerStore {
           )
             merged.set(record.id, recordSchema.parse(record));
         }
+        this.remoteReady = true;
+        this.error = "";
         await this.save({ ...s, records: [...merged.values()] });
       });
     } catch (e) {
@@ -322,22 +326,41 @@ export class PlannerStore {
       return;
     this.running = true;
     try {
-      await lock(this.cacheKey, async () => {
-        let s = await readSnapshot(this.cacheKey);
-        while (s.pending.length && !this.closed && navigator.onLine) {
-          const op = s.pending[0];
+      // Only synchronization holds this lock while waiting for the network.
+      // Editing, offline persistence and logout use a separate short state lock.
+      await lock(`${this.cacheKey}:sync`, async () => {
+        while (!this.closed && navigator.onLine) {
+          const op = await lock(this.cacheKey, async () =>
+            (await readSnapshot(this.cacheKey)).pending[0]);
+          if (!op) break;
           try {
             await this.remote!.commit(op);
             if (this.closed) break;
-            s = { ...s, pending: s.pending.slice(1) };
-            this.error = "";
-            await this.save(s);
+            await lock(this.cacheKey, async () => {
+              if (this.closed) return;
+              const current = await readSnapshot(this.cacheKey);
+              this.error = "";
+              await this.save({ ...current,
+                pending: current.pending.filter((p) => p.id !== op.id) });
+            });
           } catch (e) {
+            if (this.closed) break;
             if (e instanceof ConflictError) {
+              // New edits may arrive during the read. Re-read if their IDs expand
+              // the conflict group, then atomically preserve every related edit.
+              let captured = false;
+              while (!captured && !this.closed) {
+                const initial = await lock(this.cacheKey, () => readSnapshot(this.cacheKey));
+                const readIds = new Set(initial.pending.flatMap((p) => p.changes.map((c) => c.id)));
+                const latest = await this.remote!.read([...readIds]);
+                await lock(this.cacheKey, async () => {
+                  if (this.closed) return;
+                  const s = await readSnapshot(this.cacheKey);
+                  if (!s.pending.some((p) => p.id === op.id)) { captured = true; return; }
               const affected = new Set(op.changes.map((c) => c.id));
               const related: Operation[] = [op];
               const remaining: Operation[] = [];
-              for (const pending of s.pending.slice(1)) {
+              for (const pending of s.pending.filter((p) => p.id !== op.id)) {
                 if (pending.changes.some((c) => affected.has(c.id))) {
                   related.push(pending);
                   pending.changes.forEach((c) => affected.add(c.id));
@@ -353,21 +376,24 @@ export class PlannerStore {
                     before: prev ? prev.before : c.before,
                   });
                 }
-              const latest = await this.remote!.read([...affected]);
-              s = {
+              if ([...affected].some((id) => !readIds.has(id))) return;
+              const resolved = {
                 ...s,
                 pending: remaining,
                 conflicts: [
                   ...s.conflicts,
                   {
                     operation: { ...op, changes: [...changes.values()] },
-                    remote: latest,
+                    remote: latest.filter((r) => affected.has(r.id)),
                     createdAt: new Date().toISOString(),
                   },
                 ],
                 undo: null,
               };
-              await this.save(s);
+              await this.save(resolved);
+              captured = true;
+                });
+              }
               continue;
             }
             this.error = e instanceof Error ? e.message : "同步失敗";
@@ -387,14 +413,16 @@ export class PlannerStore {
   }
   async resolve(conflictId: string, choice: "remote" | "local") {
     if (!this.remote) return;
+    const initial = await lock(this.cacheKey, () => readSnapshot(this.cacheKey));
+    const resolving = initial.conflicts.find((c) => c.operation.id === conflictId);
+    if (!resolving) return;
+    const latest = await this.remote.read(resolving.operation.changes.map((c) => c.id));
     await lock(this.cacheKey, async () => {
+      if (this.closed) throw new Error("帳號已切換");
       const s = await readSnapshot(this.cacheKey);
       const conflict = s.conflicts.find((c) => c.operation.id === conflictId);
       if (!conflict) return;
       let records = s.records;
-      const latest = await this.remote!.read(
-        conflict.operation.changes.map((c) => c.id),
-      );
       const remote = new Map(latest.map((r) => [r.id, r]));
       for (const c of conflict.operation.changes) {
         const current = remote.get(c.id);
@@ -454,7 +482,7 @@ export class PlannerStore {
         existing.pending.length ||
         existing.conflicts.length
       )
-        throw new Error("本機已有資料，請先匯出復原備份，避免覆盖");
+        throw new Error("本機已有資料，請先匯出復原備份，避免覆寫");
       for (const record of recovery.records) recordSchema.parse(record);
       await this.save(structuredClone(recovery));
     });
@@ -471,5 +499,13 @@ export class PlannerStore {
   async clear() {
     this.close();
     await lock(this.cacheKey, () => persist(this.cacheKey, null));
+  }
+  async clearWithRecovery(): Promise<Snapshot | null> {
+    this.close();
+    return lock(this.cacheKey, async () => {
+      const current = await readSnapshot(this.cacheKey);
+      await persist(this.cacheKey, null);
+      return current.pending.length || current.conflicts.length ? current : null;
+    });
   }
 }

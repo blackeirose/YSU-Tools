@@ -28,6 +28,7 @@ jobs:
       FIREBASE_CLI_DISABLE_MOTD: "true"
       GCLOUD_PROJECT: demo-ysu-travel-planner
       VITE_USE_EMULATORS: "true"
+      TESTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
