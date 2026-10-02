@@ -171,6 +171,13 @@ test("emulator: independent same-user contexts synchronize both directions and p
       .getByRole("dialog")
       .getByRole("button", { name: "儲存安排" })
       .click();
+    await expect(a.getByRole("dialog")).toHaveCount(0);
+    await expect(
+      a.getByRole("article", { name: "B to A", exact: true }),
+    ).toContainText("Offline chosen version");
+    await expect(
+      a.getByText("離線 · 修改待同步", { exact: true }),
+    ).toBeVisible();
     await b
       .getByRole("article", { name: "B to A", exact: true })
       .getByRole("button", { name: "時間／備註" })
@@ -183,6 +190,12 @@ test("emulator: independent same-user contexts synchronize both directions and p
       .getByRole("dialog")
       .getByRole("button", { name: "儲存安排" })
       .click();
+    // Click resolves before the async save/flush: a pre-existing "已同步"
+    // badge alone does not prove this edit was applied or acknowledged.
+    await expect(b.getByRole("dialog")).toHaveCount(0);
+    await expect(
+      b.getByRole("article", { name: "B to A", exact: true }),
+    ).toContainText("Competing remote version");
     await expect(b.getByText("已同步", { exact: true })).toBeVisible();
     await first.setOffline(false);
     await expect(a.locator(".conflict")).toBeVisible({ timeout: 45000 });
