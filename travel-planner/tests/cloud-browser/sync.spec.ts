@@ -25,7 +25,9 @@ async function quick(page: Page, name: string) {
 }
 async function editing(page: Page) {
   const button = page.getByRole("button", { name: "編輯", exact: true });
-  if (await button.isVisible()) await button.click();
+  await expect(button).toBeVisible();
+  if (await button.getAttribute("aria-pressed") !== "true") await button.click();
+  await expect(page.locator("main")).toHaveClass(/edit-mode/);
 }
 async function operations(page: Page) {
   const drawer = page.locator("details.trip-operations");
