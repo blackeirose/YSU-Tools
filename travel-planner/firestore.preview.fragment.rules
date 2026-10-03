@@ -1,0 +1,22 @@
+    // YSU Travel Planner: synthetic preview only. Uses the existing trusted
+    // Google owner policy; grants no access to production v1 or sibling paths.
+    match /travelPlanner/preview-v1/users/{uid}/records/{recordId} {
+      function plannerOwner() {
+        return request.auth != null && request.auth.uid == uid && trustedGoogle();
+      }
+      function plannerValid() {
+        return request.resource.data.ownerId == uid
+          && request.resource.data.id == recordId
+          && request.resource.data.kind in ['trip','place','item','task','reminder']
+          && request.resource.data.revision is int
+          && request.resource.data.deleted is bool
+          && request.resource.data.updatedAt is string
+          && request.resource.data.size() <= 40;
+      }
+      allow read: if plannerOwner();
+      allow create: if plannerOwner() && plannerValid() && request.resource.data.revision == 1;
+      allow update: if plannerOwner() && resource.data.ownerId == uid && plannerValid()
+        && request.resource.data.kind == resource.data.kind
+        && request.resource.data.revision == resource.data.revision + 1;
+      allow delete: if false;
+    }
