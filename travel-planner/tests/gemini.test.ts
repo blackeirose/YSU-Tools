@@ -22,6 +22,15 @@ const trip = () => Response.json({ fields: { ownerId: { stringValue: "owner" }, 
   name: { stringValue: "合成旅程" } } });
 
 describe("Gemini paid boundary", () => {
+  it("returns 401 to anonymous callers even when the Planner gateway is disabled", async () => {
+    let calls = 0;
+    const http = (async () => { calls++; throw new Error("should not call external services"); }) as typeof fetch;
+    const disabled = () => undefined;
+    const anonymous = new Request("https://preview.test/travel-planner/api/ai", { method: "POST", body: "{}" });
+    expect((await geminiHandler(anonymous, disabled, http)).status).toBe(401);
+    expect((await geminiHandler(request(), disabled, http)).status).toBe(503);
+    expect(calls).toBe(0);
+  });
   it("uses only the explicit site gateway, ignoring sibling-owned Gemini keys", () => {
     expect(gatewayReady(env)).toBe(true);
     expect(gatewayReady((key) => key === "GEMINI_API_KEY" ? "sibling-key" : env(key))).toBe(true);
