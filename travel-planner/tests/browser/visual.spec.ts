@@ -21,7 +21,7 @@ test("synthetic Tokyo map selection/zoom and multicity year-boundary visual evid
       .filter({ has: page.getByText("上午", { exact: true }) }),
   ).toHaveClass(/selected/);
   await page.screenshot({
-    path: `docs/evidence/${info.project.name}-tokyo.png`,
+    path: `test-results/${info.project.name}-tokyo.png`,
     fullPage: true,
   });
   await page
@@ -35,7 +35,7 @@ test("synthetic Tokyo map selection/zoom and multicity year-boundary visual evid
     }),
   ).toBeVisible();
   await page.screenshot({
-    path: `docs/evidence/${info.project.name}-multicity.png`,
+    path: `test-results/${info.project.name}-multicity.png`,
     fullPage: true,
   });
   if (info.project.name === "desktop") {
@@ -43,7 +43,7 @@ test("synthetic Tokyo map selection/zoom and multicity year-boundary visual evid
     await expect(page.locator(".print-only")).toBeVisible();
     await expect(page.locator(".workspace")).toBeHidden();
     await page.screenshot({
-      path: "docs/evidence/desktop-print.png",
+      path: "test-results/desktop-print.png",
       fullPage: true,
     });
   }

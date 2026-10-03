@@ -42,3 +42,7 @@ Immutable candidate：`C:/Users/YSU/Codex_Tower/integration-transfer/planner-can
 本 draft 是 synthetic preview，publisher 禁止 promotion。正式版需另建 v1 owner rules／設定、完成真實跨裝置與離線 acceptance、fresh baseline／完整站 gates，最後另取得 production 授權。DNS、計費、正式資料、MAIN／Tracker 均未變更。
 
 回復只替換 Planner component 並搭配**當下最新**兄弟 artifacts/functions，不能歷史整站 restore。Firestore 回復先重讀最新規則，保留期間其他核准更新，只移除 Planner fragment；不得蓋回舊整份規則。Preview domain 也只移除該精確 host。
+
+## 2026-10-02 R1–R9 修復輪（以上舊 Preview 與驗證數字不代表本輪）
+
+獨立審查後的修復、重現和剩餘邊界詳見 [R1–R9 驗證紀錄](REVIEW_R1_R9_2026-10-02.md)。原 Preview `6ac045607f1d78183c46e201` 是舊產品 source `4cb7fdf`，不能用來驗收本輪。此輪的新 Preview、emulator、獨立 reviewer 和最終 SHAs 必須以新證據填入；不得沿用上面的 PASS。正式 published deploy 在本輪 preflight 重新讀得 `6abf52a7be775989aeaab09d`，尚未發送任何 production 發布。

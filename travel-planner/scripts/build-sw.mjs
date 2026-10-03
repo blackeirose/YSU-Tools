@@ -1,6 +1,7 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { deflateSync } from "node:zlib";
+import { serviceWorkerSource } from "./sw-source.mjs";
 const root = new URL("../dist/", import.meta.url);
 function crc(bytes) {
   let c = 0xffffffff;
@@ -95,7 +96,7 @@ for (const path of [...shell].sort()) {
 const version = fingerprint.digest("hex").slice(0, 16);
 await writeFile(
   new URL("sw.js", root),
-  `const CACHE='ysu-travel-planner-shell-${version}';const SHELL=${JSON.stringify(shell)};const ALLOWED=new Set(SHELL);self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL))));self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('ysu-travel-planner-shell-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));self.addEventListener('fetch',e=>{const u=new URL(e.request.url);if(e.request.method!=='GET'||u.origin!==self.location.origin||!u.pathname.startsWith('/travel-planner/'))return;if(e.request.mode==='navigate'){e.respondWith(fetch(e.request).then(r=>r.ok?r:caches.match('/travel-planner/index.html')).catch(()=>caches.match('/travel-planner/index.html')));return;}if(ALLOWED.has(u.pathname))e.respondWith(caches.open(CACHE).then(c=>c.match(u.pathname)).then(r=>r||fetch(e.request)));});`,
+  serviceWorkerSource(shell, version),
 );
 console.log(
   `PWA shell: ${shell.length} static resources; scope /travel-planner/; no private API or map tiles cached.`,

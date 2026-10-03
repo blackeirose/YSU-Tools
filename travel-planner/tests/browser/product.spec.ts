@@ -228,7 +228,7 @@ test("new trip → minimal place → manual location → same marker, persistenc
     page.getByRole("article", { name: "Offline added", exact: true }),
   ).toBeVisible();
   await page.screenshot({
-    path: `docs/evidence/${info.project.name}-trip.png`,
+    path: `test-results/${info.project.name}-trip.png`,
     fullPage: true,
   });
 });
@@ -345,7 +345,7 @@ test("subpath deep URL refresh, disabled AI, map failure and 390/1440 layout", a
   );
   expect(overflow).toBe(false);
   await page.screenshot({
-    path: `docs/evidence/${info.project.name}-map.png`,
+    path: `test-results/${info.project.name}-map.png`,
     fullPage: true,
   });
   expect(await page.getByText("現在應前往").count()).toBe(0);

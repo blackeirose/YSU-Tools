@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { ZodError } from "zod";
 import { Temporal } from "@js-temporal/polyfill";
 import { PlannerStore } from "./storage";
 import type { Snapshot } from "./storage";
@@ -31,12 +32,14 @@ import {
   validateImport,
   validateSchedule,
   remapImport,
+  extendImportedTrips,
   categories,
 } from "./model";
 import type { RecordData, Trip, Place, Item, Task } from "./model";
 import { calendar, dueReminders, itemTime, taskTime } from "./calendar";
 import { demos } from "./demo";
 import { Modal, TripForm, PlaceForm, ItemForm, TaskForm } from "./Forms";
+import type { ReminderDraft } from "./Forms";
 import { TravelMap } from "./Map";
 import "./style.css";
 type Tab = "today" | "map" | "candidates" | "tasks";
@@ -64,6 +67,10 @@ const download = (name: string, text: string, type: string) => {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 };
 function message(e: unknown) {
+  if (e instanceof ZodError) {
+    const field: Record<string, string> = { name: "名稱", title: "事項", day: "日期", beforeMinutes: "提前提醒" };
+    return e.issues.map((issue) => `${field[String(issue.path[0])] ?? "欄位"}格式或長度不正確，請修改後重試。`).join(" ");
+  }
   return e instanceof Error ? e.message : String(e);
 }
 export default function App() {
@@ -94,6 +101,9 @@ export default function App() {
     [explore, sx] = useState(false),
     [help, shelp] = useState(false),
     [loginOpen, slo] = useState(false),
+    [loginError, sle] = useState(""),
+    [recoveryDays, srecoveryDays] = useState<Record<string, string>>({}),
+    [loginBusy, slb] = useState(false),
     [logoutOpen, slogout] = useState(false),
     [email, sem] = useState(""),
     [password, spw] = useState(""),
@@ -108,13 +118,15 @@ export default function App() {
     activeStore = useRef<PlannerStore | null>(null),
     recovery = useRef(new Map<string, Snapshot>()),
     ack = useRef(new Set<string>());
-  const attempt = async (fn: () => Promise<unknown>, success?: string) => {
+  const attempt = async (fn: () => Promise<unknown>, success?: string): Promise<boolean> => {
     ser("");
     try {
       await fn();
       if (success) sn(success);
+      return true;
     } catch (e) {
       ser(message(e));
+      return false;
     }
   };
   useEffect(
@@ -218,6 +230,9 @@ export default function App() {
     (r) => r.kind === "task" && r.tripId === trip?.id,
   ) as Task[];
   const dateList = trip ? days(trip) : [];
+  const outsideItems = trip
+    ? items.filter((i) => i.day && (i.day < trip.start || i.day > trip.end))
+    : [];
   const today = trip ? localToday(trip.timezone) : "";
   const activeDay = dateList.includes(day)
     ? day
@@ -335,13 +350,19 @@ export default function App() {
     sn(d ? "已加入當日行程" : "已存成候選");
   }
   async function move(i: Item, d: string, index?: number) {
+    if (d === i.day && index === undefined && i.status !== "candidate") {
+      sn("這項安排已在所選日期。");
+      return;
+    }
     const target = ordered(items, d).filter((x) => x.id !== i.id);
-    const moved = { ...i, day: d, status: "planned" as const };
+    const moved = { ...i, day: d, status: i.status === "candidate" ? "planned" as const : i.status };
     target.splice(index ?? target.length, 0, moved);
     await edit(
       "移動／排序行程",
       target.map((x, n) => ({ ...x, order: n })),
     );
+    if (d !== i.day) sy(d);
+    sn(d !== i.day ? `已移到 ${d}；可復原。` : "排序已更新；可復原。");
   }
   async function reorder(i: Item, delta: number) {
     if (!i.day) return;
@@ -390,6 +411,8 @@ export default function App() {
         ? { ...r, name: `${r.name} · 副本`, archived: false }
         : r,
     );
+    if (copies.length > 450)
+      throw new Error(`此旅程有 ${copies.length} 筆資料，超過一次安全複製上限 450 筆；原旅程未變更。可先匯出 JSON 備份。`);
     await edit("複製旅程", copies);
     chooseTrip(copies.find((r) => r.kind === "trip")!.id);
   }
@@ -423,27 +446,38 @@ export default function App() {
     }
     await edit("儲存安排", updates);
   }
-  async function saveTask(t: Task, before: number) {
+  async function saveTask(t: Task, drafts: ReminderDraft[], baseline: Extract<RecordData, { kind: "reminder" }>[]) {
     validateSchedule(t);
-    const reminders = records.filter(
+    const existing = records.filter(
       (r) => r.kind === "reminder" && r.targetId === t.id,
-    );
-    await edit("儲存待辦", [
-      t,
-      ...reminders.map((r) => ({ ...r, deleted: true })),
-      ...(t.date && t.time
-        ? [
-            {
-              ...baseRecord(store!.owner),
-              kind: "reminder" as const,
-              tripId: t.tripId,
-              targetId: t.id,
-              beforeMinutes: before,
-              enabled: true,
-            },
-          ]
-        : []),
-    ]);
+    ) as Extract<RecordData, { kind: "reminder" }>[];
+    const changes: RecordData[] = [];
+    for (const base of baseline) {
+      const draft = drafts.find((d) => d.id === base.id);
+      const changed = !draft || draft.beforeMinutes !== base.beforeMinutes || draft.enabled !== base.enabled;
+      if (!changed) continue;
+      const current = existing.find((r) => r.id === base.id);
+      if (!current || current.revision !== base.revision)
+        throw new Error("提醒已在其他分頁或裝置變更；待辦草稿仍保留，請重新開啟後再修改提醒。");
+      changes.push(draft
+        ? { ...current, beforeMinutes: draft.beforeMinutes, enabled: draft.enabled }
+        : { ...current, deleted: true });
+    }
+    for (const draft of drafts.filter((d) => d.id === null))
+      changes.push({
+        ...baseRecord(store!.owner),
+        kind: "reminder",
+        tripId: t.tripId,
+        targetId: t.id,
+        beforeMinutes: draft.beforeMinutes,
+        enabled: draft.enabled,
+      });
+    const removed = new Set(changes.filter((r) => r.kind === "reminder" && r.deleted).map((r) => r.id));
+    if ((!t.date || !t.time) &&
+      (existing.some((r) => !r.deleted && !removed.has(r.id)) ||
+        changes.some((r) => r.kind === "reminder" && !r.deleted)))
+      throw new Error("此待辦仍有提醒；請重新開啟確認，或明確刪除所有提醒後再移除日期與時間。");
+    await edit("儲存待辦", [t, ...changes]);
   }
   const newTask = () =>
     se({
@@ -610,7 +644,13 @@ export default function App() {
         key={i.id}
         className={`item ${selected === i.id ? "selected" : ""} ${i.status}`}
         draggable={!candidate}
-        onDragStart={(e) => e.dataTransfer.setData("text/travel-item", i.id)}
+        onDragStart={(e) => {
+          if ((e.target as HTMLElement).closest("select,input,textarea,a")) {
+            e.preventDefault();
+            return;
+          }
+          e.dataTransfer.setData("text/travel-item", i.id);
+        }}
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => {
           e.preventDefault();
@@ -632,13 +672,18 @@ export default function App() {
         </div>
         <button
           className="item-title"
-          onClick={() => {
-            si(i.id);
-          }}
+          onClick={() => selectItem(i)}
         >
           {!candidate && <span className="ordinal">{index + 1}</span>}
           {p.name}
         </button>
+        {!candidate && (
+          <span
+            className="drag-handle desktop-only"
+            aria-label={`拖曳${p.name}`}
+            title="拖曳排序或移到其他日期"
+          >↕</span>
+        )}
         {p.originalName && <p className="original">{p.originalName}</p>}
         <p className="small">
           {p.address || p.city || "地址待補充"} ·{" "}
@@ -659,6 +704,7 @@ export default function App() {
             {candidate ? "加入" : "移到"}
             <select
               aria-label={`${p.name}移到某日`}
+              disabled={dateList.length < 2 && !candidate}
               value=""
               onChange={(e) => {
                 if (e.target.value)
@@ -673,6 +719,9 @@ export default function App() {
               ))}
             </select>
           </label>
+          {dateList.length < 2 && !candidate && (
+            <span className="small">目前只有一天，可先延長旅程。</span>
+          )}
           {!candidate && (
             <>
               <button
@@ -890,7 +939,11 @@ export default function App() {
           <section key={c.operation.id} className="conflict">
             <h2>同步衝突 · {c.operation.label}</h2>
             <p>
-              其他裝置修改了同一項目。本機與遠端內容均保留；以下選擇會影響這批移動／排序／刪除。
+              {c.reason === "oversize"
+                ? "舊版操作超過 450 筆雲端限制，未送出；本機資料完整保留。請先下載備份，再選遠端版本清除這批未同步資料，其他無關編輯可繼續同步。"
+                : c.reason === "legacy"
+                  ? "升級前的離線操作缺少旅程日期保護，已暫停送出。本機資料仍保留；先下載兩份備份，再確認是否重新同步。"
+                  : "其他裝置修改了同一項目。本機與遠端內容均保留；以下選擇會影響這批移動／排序／刪除。"}
             </p>
             <details>
               <summary>查看兩份內容</summary>
@@ -910,15 +963,27 @@ export default function App() {
                 void attempt(() => store.resolve(c.operation.id, "remote"))
               }
             >
-              使用遠端版本
+              使用遠端版本（捨棄此批本機修改）
             </button>
-            <button
+            {c.reason !== "oversize" && (() => {
+              const item = c.operation.changes.map((change) => change.after).find((r) => r.kind === "item");
+              if (!item || item.kind !== "item") return null;
+              const latestTrip = c.remote.find((r) => r.kind === "trip" && r.id === item.tripId) ?? records.find((r) => r.kind === "trip" && r.id === item.tripId);
+              return latestTrip?.kind === "trip" ? <label>
+                衝突復原日期（僅在原日期超出新範圍時套用）
+                <select aria-label="衝突復原日期" value={recoveryDays[c.operation.id] ?? ""} onChange={(e) => srecoveryDays({ ...recoveryDays, [c.operation.id]: e.target.value })}>
+                  <option value="">保留原日期</option>
+                  {days(latestTrip).map((d) => <option key={d} value={d}>{d}</option>)}
+                </select>
+              </label> : null;
+            })()}
+            {c.reason !== "oversize" && <button
               onClick={() =>
-                void attempt(() => store.resolve(c.operation.id, "local"))
+                void attempt(() => store.resolve(c.operation.id, "local", recoveryDays[c.operation.id]))
               }
             >
               保留本機版本並重新同步
-            </button>
+            </button>}
             <button
               onClick={() =>
                 download(
@@ -1237,6 +1302,25 @@ export default function App() {
                         </section>
                       ))}
                     </div>
+                    {outsideItems.length > 0 && (
+                      <section className="error outside-items" role="alert">
+                        <h3>有 {outsideItems.length} 項安排在旅程日期之外</h3>
+                        <p>資料仍保留且包含於 JSON 匯出。請確認旅程日期或逐項移回正確日期。</p>
+                        {outsideItems.map((item) => (
+                          <div key={item.id} className="item-actions">
+                            <strong>{pFor(item)?.name ?? "地點待恢復"} · {item.day}</strong>
+                            <label>移到旅程內
+                              <select aria-label={`${pFor(item)?.name ?? item.id}復原日期`} value="" onChange={(e) => {
+                                if (e.target.value) void attempt(() => move(item, e.target.value));
+                              }}>
+                                <option value="">選擇日期</option>
+                                {dateList.map((d) => <option key={d} value={d}>{d}</option>)}
+                              </select>
+                            </label>
+                          </div>
+                        ))}
+                      </section>
+                    )}
                   </section>
                   {(tab === "today" || tab === "map") && (
                     <section
@@ -1267,6 +1351,7 @@ export default function App() {
                       </div>
                       <TravelMap
                         places={places}
+                        showDay={mapFilter === "all"}
                         items={mapItems}
                         selected={selected}
                         onSelect={selectItem}
@@ -1655,6 +1740,7 @@ export default function App() {
           task={editor.value}
           items={items}
           places={places}
+          reminders={records.filter((r): r is Extract<RecordData, { kind: "reminder" }> => r.kind === "reminder" && r.targetId === editor.value.id)}
           onClose={() => se(null)}
           onSave={saveTask}
         />
@@ -1667,11 +1753,13 @@ export default function App() {
             {imported.filter((r) => r.kind === "item").length} 次安排。
           </p>
           <p>會建立新的 ID 與旅程副本，不覆寫現有資料。</p>
+          {imported.some((r) => r.kind === "item" && r.day && imported.some((t) => t.kind === "trip" && t.id === r.tripId && (r.day! < t.start || r.day! > t.end))) &&
+            <p className="error">來源有旅程日期之外的安排。匯入時會明確延伸新旅程的起訖日期，保留每項原日期；超過 120 天的資料會拒絕匯入，來源 JSON 不變。</p>}
           <button
             className="primary"
             onClick={() =>
               void attempt(async () => {
-                const data = remapImport(imported, store!.owner);
+                const data = extendImportedTrips(remapImport(imported, store!.owner));
                 if (data.length > 450)
                   throw new Error("一次匯入最多 450 筆，請按旅程分開匯入");
                 await edit("匯入旅程副本", data);
@@ -1680,7 +1768,7 @@ export default function App() {
               }, "已匯入新旅程")
             }
           >
-            匯入為新旅程
+            匯入為新旅程（必要時延伸日期）
           </button>
         </Modal>
       )}
@@ -1958,7 +2046,7 @@ export default function App() {
         </Modal>
       )}
       {loginOpen && (
-        <Modal title="私人登入" onClose={() => slo(false)}>
+        <Modal title="私人登入" onClose={() => { slo(false); sle(""); }}>
           <p>
             {configured
               ? "登入只存取自己的 Travel Planner namespace；不會修改兄弟工具。"
@@ -1980,22 +2068,38 @@ export default function App() {
               </label>
             </>
           )}
+          {loginError && <p role="alert" className="error">{loginError}</p>}
           <button
-            disabled={!configured}
+            disabled={!configured || loginBusy}
             className="primary"
-            onClick={() =>
-              void attempt(async () => {
+            onClick={() => {
+              sle("");
+              slb(true);
+              void (async () => {
+                try {
                 await login(email, password);
                 spw("");
                 slo(false);
                 sd(false);
-              })
-            }
+                } catch (e) {
+                  const code = (e as { code?: string })?.code;
+                  sle(code === "auth/popup-closed-by-user" || code === "auth/cancelled-popup-request"
+                    ? "登入視窗已關閉或取消。可重試，或先使用本機模式。"
+                    : code === "auth/network-request-failed"
+                      ? "登入連線失敗。請確認網路及瀏覽器的憑證警告後重試；也可先使用本機模式。"
+                      : `登入未完成：${message(e)}。可重試或使用本機模式。`);
+                } finally {
+                  slb(false);
+                }
+              })();
+            }}
           >
-            {emulator ? "測試登入" : "Google 登入"}
+            {loginBusy ? "登入中…" : emulator ? "測試登入" : "Google 登入／重試"}
           </button>
+          <button type="button" onClick={() => { slo(false); sle(""); }}>取消</button>
           <button
             onClick={() => {
+              sle("");
               sd(true);
               slo(false);
             }}
@@ -2007,7 +2111,7 @@ export default function App() {
     </>
   );
 }
-function QuickAdd({ onAdd }: { onAdd: (name: string) => Promise<unknown> }) {
+function QuickAdd({ onAdd }: { onAdd: (name: string) => Promise<boolean> }) {
   const [name, sn] = useState(""),
     [busy, sb] = useState(false);
   return (
@@ -2018,8 +2122,7 @@ function QuickAdd({ onAdd }: { onAdd: (name: string) => Promise<unknown> }) {
         if (!name.trim() || busy) return;
         sb(true);
         try {
-          await onAdd(name);
-          sn("");
+          if (await onAdd(name)) sn("");
         } finally {
           sb(false);
         }

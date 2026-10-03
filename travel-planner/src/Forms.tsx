@@ -10,7 +10,8 @@ import {
   taskSchema,
   instant,
 } from "./model";
-import type { Trip, Place, Item, Task } from "./model";
+import type { Trip, Place, Item, Task, Reminder } from "./model";
+export type ReminderDraft = { id: string | null; beforeMinutes: number; enabled: boolean };
 export function Modal({
   title,
   children,
@@ -591,17 +592,22 @@ export function TaskForm({
   task,
   items,
   places,
+  reminders,
   onSave,
   onClose,
 }: {
   task: Task;
   items: Item[];
   places: Place[];
-  onSave: (t: Task, before: number) => Promise<void>;
+  reminders: Reminder[];
+  onSave: (t: Task, drafts: ReminderDraft[], baseline: Reminder[]) => Promise<void>;
   onClose: () => void;
 }) {
   const [t, set] = useState(task),
-    [before, sb] = useState(60),
+    [baseline] = useState(reminders),
+    [drafts, sd] = useState<ReminderDraft[]>(
+      baseline.map((r) => ({ id: r.id, beforeMinutes: r.beforeMinutes, enabled: r.enabled })),
+    ),
     [error, se] = useState("");
   return (
     <Modal title="待辦／預約" onClose={onClose}>
@@ -611,7 +617,7 @@ export function TaskForm({
           try {
             const v = taskSchema.parse(t);
             if (v.date && v.time) instant(v.date, v.time, v.timezone);
-            await onSave(v, before);
+            await onSave(v, drafts, baseline);
             onClose();
           } catch (e) {
             se(String(e));
@@ -690,16 +696,33 @@ export function TaskForm({
             onChange={(e) => set({ ...t, timezone: e.target.value })}
           />
         </label>
-        <label>
-          提前提醒（分鐘）
-          <input
-            type="number"
-            min="0"
-            max="525600"
-            value={before}
-            onChange={(e) => sb(Number(e.target.value))}
-          />
-        </label>
+        <div className="reminder-editor">
+          <p>提前提醒</p>
+          {drafts.map((draft, n) => (
+            <div className="fields" key={draft.id ?? `new-${n}`}>
+              <label>
+                提前提醒（分鐘）
+                <input
+                  type="number"
+                  min="0"
+                  max="525600"
+                  value={draft.beforeMinutes}
+                  onChange={(e) => sd(drafts.map((d, index) => index === n ? { ...d, beforeMinutes: Number(e.target.value) } : d))}
+                />
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={draft.enabled}
+                  onChange={(e) => sd(drafts.map((d, index) => index === n ? { ...d, enabled: e.target.checked } : d))}
+                />
+                啟用
+              </label>
+              <button type="button" onClick={() => sd(drafts.filter((_, index) => index !== n))}>刪除此提醒</button>
+            </div>
+          ))}
+          <button type="button" onClick={() => sd([...drafts, { id: null, beforeMinutes: 60, enabled: true }])}>新增提前提醒</button>
+        </div>
         <label>
           連結行程
           <select

@@ -20,10 +20,13 @@ import {
   onSnapshot,
   runTransaction,
   getDocFromServer,
+  getDocsFromServer,
+  query,
+  where,
 } from "firebase/firestore";
 import type { RecordData } from "./model";
 import { recordSchema } from "./model";
-import { ConflictError } from "./storage";
+import { ConflictError, isTripVersionTouch, unguardedItemChange } from "./storage";
 import type { Operation, Remote } from "./storage";
 import { cloudScope } from "./cloud-config";
 const env = import.meta.env;
@@ -99,6 +102,11 @@ export function cloudRemote(owner: string): Remote {
   const assertOwner = () => {
     if (auth?.currentUser?.uid !== owner) throw new Error("請重新登入");
   };
+  const readTripRows = async (tripId: string) => {
+    assertOwner();
+    const snapshot = await getDocsFromServer(query(records, where("tripId", "==", tripId)));
+    return snapshot.docs.map((row) => recordSchema.parse(row.data()));
+  };
   return {
     async read(ids) {
       assertOwner();
@@ -109,6 +117,7 @@ export function cloudRemote(owner: string): Remote {
         .filter((r) => r.exists())
         .map((r) => recordSchema.parse(r.data()));
     },
+    readTrip: readTripRows,
     watch(next, error) {
       assertOwner();
       return onSnapshot(
@@ -129,10 +138,23 @@ export function cloudRemote(owner: string): Remote {
     async commit(op: Operation) {
       assertOwner();
       if (op.changes.length > 450) throw new Error("單次批次過大");
+      if (unguardedItemChange(op)) throw new ConflictError([], "legacy");
+      const shrinkingTrips = op.changes.filter((c) => c.before?.kind === "trip" && c.after.kind === "trip" &&
+        (c.before.start !== c.after.start || c.before.end !== c.after.end));
+      // The web Transaction API reads document refs only. Fetch candidate IDs
+      // from the server first, then re-read every candidate inside the CAS transaction.
+      // New clients also touch Trip revision on item edits, closing the add/move race.
+      const knownTripRows = (await Promise.all(shrinkingTrips.map((c) => readTripRows(c.id)))).flat();
       await runTransaction(db!, async (tx) => {
         assertOwner();
         const refs = op.changes.map((c) => doc(records, c.id));
-        const snapshots = await Promise.all(refs.map((r) => tx.get(r)));
+        const changeIds = new Set(op.changes.map((c) => c.id));
+        const extraRefs = [...new Set(knownTripRows.filter((r) => r.kind === "item" && !changeIds.has(r.id)).map((r) => r.id))]
+          .map((id) => doc(records, id));
+        const [snapshots, extraSnapshots] = await Promise.all([
+          Promise.all(refs.map((r) => tx.get(r))),
+          Promise.all(extraRefs.map((r) => tx.get(r))),
+        ]);
         const remote = snapshots
           .filter((s) => s.exists())
           .map((s) => recordSchema.parse(s.data()) as RecordData);
@@ -155,10 +177,33 @@ export function cloudRemote(owner: string): Remote {
           )
         )
           throw new ConflictError(remote);
+        for (const changedTrip of shrinkingTrips) {
+          const trip = changedTrip.after;
+          if (trip.kind !== "trip") continue;
+          const all = [...snapshots, ...extraSnapshots]
+            .filter((snapshot) => snapshot.exists())
+            .map((snapshot) => recordSchema.parse(snapshot.data()));
+          const byId = new Map(all.map((r) => [r.id, r]));
+          for (const change of op.changes) byId.set(change.id, change.after);
+          if ([...byId.values()].some((row) => row.kind === "item" && !row.deleted && row.tripId === trip.id && row.day &&
+            (row.day < trip.start || row.day > trip.end)))
+            throw new ConflictError(all, "range");
+        }
+        for (const change of op.changes) {
+          const after = change.after;
+          if (after.kind !== "item" || after.deleted || !after.day ||
+            (change.before?.kind === "item" && change.before.day === after.day)) continue;
+          const trip = op.changes.find((c) => c.id === after.tripId)?.after;
+          if (!trip || trip.kind !== "trip" || trip.deleted || after.day < trip.start || after.day > trip.end)
+            throw new ConflictError(remote);
+        }
         for (let i = 0; i < op.changes.length; i++) {
-          const after = op.changes[i].after;
+          const change = op.changes[i];
+          const after = change.after;
           if (after.ownerId !== owner) throw new Error("帳號不符");
-          tx.set(refs[i], after);
+          if (isTripVersionTouch(change))
+            tx.update(refs[i], { revision: after.revision, updatedAt: after.updatedAt });
+          else tx.set(refs[i], after);
         }
       });
     },

@@ -5,11 +5,17 @@ export type Change = {
   before: RecordData | null;
   after: RecordData;
 };
+export function isTripVersionTouch(change: Change) {
+  return change.before?.kind === "trip" && change.after.kind === "trip" &&
+    canonical({ ...change.before, revision: 0, updatedAt: "" }) ===
+    canonical({ ...change.after, revision: 0, updatedAt: "" });
+}
 export type Operation = { id: string; label: string; changes: Change[] };
 export type Conflict = {
   operation: Operation;
   remote: RecordData[];
   createdAt: string;
+  reason?: "concurrent" | "oversize" | "legacy" | "range";
 };
 export type Snapshot = {
   records: RecordData[];
@@ -21,13 +27,14 @@ export type Snapshot = {
 export type Remote = {
   commit(op: Operation): Promise<void>;
   read(ids: string[]): Promise<RecordData[]>;
+  readTrip?(tripId: string): Promise<RecordData[]>;
   watch(
     next: (records: RecordData[]) => void,
     error: (e: Error) => void,
   ): () => void;
 };
 export class ConflictError extends Error {
-  constructor(public remote: RecordData[]) {
+  constructor(public remote: RecordData[], public reason: Conflict["reason"] = "concurrent") {
     super("同一項目已在其他裝置修改");
   }
 }
@@ -97,12 +104,19 @@ export function makeOperation(
   updates: RecordData[],
   owner: string,
 ): Operation {
-  if (new Set(updates.map((r) => r.id)).size !== updates.length)
+  const guarded = [...updates];
+  for (const tripId of new Set(updates.filter((r) => r.kind === "item").map((r) => (r as Extract<RecordData, { kind: "item" }>).tripId))) {
+    if (guarded.some((r) => r.id === tripId)) continue;
+    const trip = records.find((r) => r.id === tripId);
+    if (!trip || trip.kind !== "trip" || trip.deleted) throw new Error("找不到此行程所屬旅程，請先恢復旅程資料");
+    guarded.push(trip);
+  }
+  if (new Set(guarded.map((r) => r.id)).size !== guarded.length)
     throw new Error("批次含重複項目");
-  return {
+  const op: Operation = {
     id: uid(),
     label,
-    changes: updates.map((update) => {
+    changes: guarded.map((update) => {
       const before = records.find((r) => r.id === update.id) ?? null;
       if (update.ownerId !== owner || (before && before.ownerId !== owner))
         throw new Error("帳號不符");
@@ -120,6 +134,26 @@ export function makeOperation(
       return { id: update.id, before, after };
     }),
   };
+  const next = applyOperation(records, op);
+  for (const change of op.changes) {
+    const after = change.after;
+    if (after.kind === "item" && !after.deleted && after.day &&
+      (!change.before || change.before.kind !== "item" || change.before.day !== after.day)) {
+      const trip = next.find((r) => r.id === after.tripId);
+      if (!trip || trip.kind !== "trip" || trip.deleted || after.day < trip.start || after.day > trip.end)
+        throw new Error("行程日期超出旅程範圍；原本資料已保留");
+    }
+    if (after.kind === "trip" && change.before?.kind === "trip" &&
+      (after.start !== change.before.start || after.end !== change.before.end)) {
+      if (next.some((r) => r.kind === "item" && !r.deleted && r.tripId === after.id && r.day && (r.day < after.start || r.day > after.end)))
+        throw new Error("新日期範圍會排除既有安排；請先移動這些項目");
+    }
+  }
+  return op;
+}
+export function unguardedItemChange(op: Operation) {
+  return op.changes.some((c) => c.after.kind === "item" &&
+    !op.changes.some((guard) => guard.id === (c.after as Extract<RecordData, { kind: "item" }>).tripId));
 }
 export function applyOperation(records: RecordData[], op: Operation) {
   const result = new Map(records.map((r) => [r.id, r]));
@@ -226,6 +260,8 @@ export class PlannerStore {
       const s = await readSnapshot(this.cacheKey);
       if (this.closed) throw new Error("帳號已切換");
       const op = makeOperation(label, shown, updates, this.owner);
+      if (this.remote && op.changes.length > 450)
+        throw new Error("單次雲端操作最多 450 筆資料；本機與同步佇列未變更。請縮小批次。 ");
       if (!checkBase(s.records, op)) {
         this.snapshot = s;
         this.emit();
@@ -275,6 +311,8 @@ export class PlannerStore {
         })),
         this.owner,
       );
+      if (this.remote && inverse.changes.length > 450)
+        throw new Error("這次復原超過 450 筆，請先匯出資料備份並逐項處理");
       await this.save({
         ...s,
         records: applyOperation(s.records, inverse),
@@ -338,6 +376,10 @@ export class PlannerStore {
           );
           if (!op) break;
           try {
+            if (op.changes.length > 450)
+              throw new ConflictError([], "oversize");
+            if (unguardedItemChange(op))
+              throw new ConflictError([], "legacy");
             await this.remote!.commit(op);
             if (this.closed) break;
             await lock(this.cacheKey, async () => {
@@ -362,7 +404,13 @@ export class PlannerStore {
                 const readIds = new Set(
                   initial.pending.flatMap((p) => p.changes.map((c) => c.id)),
                 );
-                const latest = await this.remote!.read([...readIds]);
+                let latest: RecordData[];
+                try {
+                  latest = await this.remote!.read([...readIds]);
+                } catch (readError) {
+                  if (e.reason === "oversize" || e.reason === "legacy") latest = [];
+                  else throw readError;
+                }
                 await lock(this.cacheKey, async () => {
                   if (this.closed) return;
                   const s = await readSnapshot(this.cacheKey);
@@ -371,16 +419,19 @@ export class PlannerStore {
                     return;
                   }
                   const affected = new Set(op.changes.map((c) => c.id));
-                  const related: Operation[] = [op];
-                  const remaining: Operation[] = [];
-                  for (const pending of s.pending.filter(
-                    (p) => p.id !== op.id,
-                  )) {
-                    if (pending.changes.some((c) => affected.has(c.id))) {
-                      related.push(pending);
+                  const relatedIds = new Set([op.id]);
+                  let expanded = true;
+                  while (expanded) {
+                    expanded = false;
+                    for (const pending of s.pending) {
+                      if (relatedIds.has(pending.id) || !pending.changes.some((c) => affected.has(c.id))) continue;
+                      relatedIds.add(pending.id);
                       pending.changes.forEach((c) => affected.add(c.id));
-                    } else remaining.push(pending);
+                      expanded = true;
+                    }
                   }
+                  const related = s.pending.filter((p) => relatedIds.has(p.id));
+                  const remaining = s.pending.filter((p) => !relatedIds.has(p.id));
                   // Preserve the latest local intention plus earliest base for every related record.
                   const changes = new Map<string, Change>();
                   for (const group of related)
@@ -401,6 +452,7 @@ export class PlannerStore {
                         operation: { ...op, changes: [...changes.values()] },
                         remote: latest.filter((r) => affected.has(r.id)),
                         createdAt: new Date().toISOString(),
+                        reason: e.reason,
                       },
                     ],
                     undo: null,
@@ -426,7 +478,7 @@ export class PlannerStore {
       this.running = false;
     }
   }
-  async resolve(conflictId: string, choice: "remote" | "local") {
+  async resolve(conflictId: string, choice: "remote" | "local", recoveryDay?: string) {
     if (!this.remote) return;
     const initial = await lock(this.cacheKey, () =>
       readSnapshot(this.cacheKey),
@@ -436,8 +488,17 @@ export class PlannerStore {
     );
     if (!resolving) return;
     const latest = await this.remote.read(
-      resolving.operation.changes.map((c) => c.id),
+      [...new Set([...resolving.operation.changes.map((c) => c.id),
+        ...resolving.operation.changes.filter((c) => c.after.kind === "item").map((c) => (c.after as Extract<RecordData, { kind: "item" }>).tripId)])],
     );
+    const shrinkingTrips = resolving.operation.changes.filter((c) =>
+      c.before?.kind === "trip" && c.after.kind === "trip" &&
+      (c.before.start !== c.after.start || c.before.end !== c.after.end));
+    if (choice === "local" && shrinkingTrips.length && !this.remote.readTrip)
+      throw new Error("無法讀取完整遠端旅程安排，不能安全縮短日期；衝突與備份仍保留。");
+    const remoteTripRows = choice === "local"
+      ? (await Promise.all(shrinkingTrips.map((c) => this.remote!.readTrip!(c.id)))).flat()
+      : [];
     await lock(this.cacheKey, async () => {
       if (this.closed) throw new Error("帳號已切換");
       const s = await readSnapshot(this.cacheKey);
@@ -450,15 +511,43 @@ export class PlannerStore {
         records = records.filter((r) => r.id !== c.id);
         if (current) records.push(current);
       }
+      for (const row of latest.filter((r) => r.kind === "trip")) {
+        records = records.filter((r) => r.id !== row.id);
+        records.push(row);
+      }
       let pending = s.pending;
       if (choice === "local") {
+        if (conflict.reason === "oversize")
+          throw new Error("此舊批次超過 450 筆，請先下載衝突備份；無法整批重新同步。可選擇遠端版本並重新分批建立。 ");
+        const localUpdates = conflict.operation.changes.map((c) => {
+          const base = isTripVersionTouch(c) ? (remote.get(c.id) ?? c.after) : c.after;
+          if (base.kind === "item" && base.day) {
+            const ownerTrip = records.find((r) => r.id === base.tripId);
+            if (ownerTrip?.kind === "trip" && (base.day < ownerTrip.start || base.day > ownerTrip.end)) {
+              if (!recoveryDay || recoveryDay < ownerTrip.start || recoveryDay > ownerTrip.end)
+                throw new Error("本機行程超出遠端旅程日期。請先選擇旅程內的復原日期；備份仍保留。");
+              return { ...base, day: recoveryDay, revision: remote.get(c.id)?.revision ?? 0 };
+            }
+          }
+          return { ...base, revision: remote.get(c.id)?.revision ?? 0 };
+        });
+        for (const changedTrip of localUpdates.filter((r) => r.kind === "trip")) {
+          if (changedTrip.kind !== "trip") continue;
+          const latestTrip = records.find((r) => r.id === changedTrip.id);
+          if (latestTrip?.kind !== "trip" ||
+            (latestTrip.start === changedTrip.start && latestTrip.end === changedTrip.end)) continue;
+          const override = new Map(localUpdates.map((r) => [r.id, r]));
+          if (remoteTripRows.some((r) => {
+            const row = override.get(r.id) ?? r;
+            return row.kind === "item" && !row.deleted && row.tripId === changedTrip.id &&
+              row.day && (row.day < changedTrip.start || row.day > changedTrip.end);
+          }))
+            throw new Error("其他裝置已有安排落在縮短後的日期之外。先處理遠端安排；本機衝突與備份仍保留。");
+        }
         const op = makeOperation(
           "保留本機衝突版本",
           records,
-          conflict.operation.changes.map((c) => ({
-            ...c.after,
-            revision: remote.get(c.id)?.revision ?? 0,
-          })),
+          localUpdates,
           this.owner,
         );
         records = applyOperation(records, op);

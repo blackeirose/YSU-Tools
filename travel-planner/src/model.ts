@@ -334,6 +334,12 @@ export function ordered(items: Item[], day?: string) {
     )
     .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
 }
+export function dailySequence(items: Item[]) {
+  const numbers = new Map<string, number>();
+  for (const day of new Set(items.map((i) => i.day).filter((day): day is string => !!day)))
+    ordered(items, day).forEach((item, index) => numbers.set(item.id, index + 1));
+  return numbers;
+}
 export function delayFlexible(
   items: Item[],
   startOrder: number,
@@ -409,11 +415,9 @@ export function validateImport(input: unknown) {
       throw new Error("項目缺少旅程");
     if (r.kind === "item") {
       const p = byId.get(r.placeId);
-      const t = byId.get(r.tripId) as Trip;
       if (
         p?.kind !== "place" ||
-        p.tripId !== r.tripId ||
-        (r.day && (r.day < t.start || r.day > t.end))
+        p.tripId !== r.tripId
       )
         throw new Error("行程地點／日期不一致");
       if (r.day && r.time && ["fixed", "flexible"].includes(r.timeMode)) {
@@ -443,6 +447,17 @@ export function validateImport(input: unknown) {
     }
   }
   return alive;
+}
+export function extendImportedTrips(records: RecordData[]) {
+  return records.map((record) => {
+    if (record.kind !== "trip") return record;
+    const dates = records.filter((r): r is Item => r.kind === "item" && r.tripId === record.id && !!r.day)
+      .map((r) => r.day!);
+    if (!dates.length) return record;
+    const start = [record.start, ...dates].sort()[0];
+    const end = [record.end, ...dates].sort().at(-1)!;
+    return tripSchema.parse({ ...record, start, end });
+  });
 }
 export function remapImport(records: RecordData[], ownerId: string) {
   const mapping = new Map(records.map((r) => [r.id, uid()]));

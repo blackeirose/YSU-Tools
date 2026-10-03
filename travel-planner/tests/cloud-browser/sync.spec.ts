@@ -22,6 +22,94 @@ async function quick(page: Page, name: string) {
     .click();
   await expect(page.getByRole("article", { name, exact: true })).toBeVisible();
 }
+async function createRangeTrip(page: Page, name: string) {
+  await page.getByRole("button", { name: "新增旅程", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("旅程名稱").fill(name);
+  await dialog.getByLabel("開始日期").fill("2030-01-01");
+  await dialog.getByLabel("結束日期").fill("2030-01-03");
+  await dialog.getByRole("button", { name: "儲存旅程" }).click();
+  await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
+  await expect(page.getByText("已同步", { exact: true })).toBeVisible();
+}
+async function shorten(page: Page) {
+  await page.getByRole("button", { name: "編輯旅程" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("結束日期").fill("2030-01-02");
+  await dialog.getByRole("button", { name: "儲存旅程" }).click();
+  await expect(dialog).toHaveCount(0);
+}
+test("R1 emulator: login errors stay in dialog, cancellation and retry recover", async ({ browser }) => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  const email = `auth-${crypto.randomUUID()}@example.test`;
+  try {
+    await login(page, email);
+    await page.getByRole("button", { name: "登出", exact: true }).click();
+    await page.getByRole("button", { name: "私人登入", exact: true }).first().click();
+    let dialog = page.getByRole("dialog");
+    await dialog.getByLabel("Emulator 測試 Email").fill(email);
+    await dialog.getByLabel("Emulator 測試密碼").fill("Wrong synthetic password");
+    await dialog.getByRole("button", { name: "測試登入" }).click();
+    await expect(dialog.getByRole("alert")).toContainText("登入未完成");
+    await expect(dialog.getByRole("button", { name: "使用本機模式" })).toBeVisible();
+    await dialog.getByRole("button", { name: "取消", exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await page.getByRole("button", { name: "私人登入", exact: true }).first().click();
+    dialog = page.getByRole("dialog");
+    await dialog.getByLabel("Emulator 測試 Email").fill(email);
+    await dialog.getByLabel("Emulator 測試密碼").fill("Synthetic-test-only-2030");
+    await dialog.getByRole("button", { name: "測試登入" }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByText("已同步", { exact: true })).toBeVisible();
+  } finally { await context.close(); }
+});
+test("R7 emulator: offline new item versus trip shortening conflicts in both commit orders", async ({ browser }) => {
+  const first = await browser.newContext(), second = await browser.newContext();
+  const a = await first.newPage(), b = await second.newPage();
+  const email = `range-${crypto.randomUUID()}@example.test`;
+  try {
+    await login(a, email);
+    await createRangeTrip(a, "Range case A");
+    await login(b, email);
+    await expect(b.getByRole("heading", { name: "Range case A" })).toBeVisible();
+    await first.setOffline(true);
+    await a.getByLabel("旅行日期", { exact: true }).selectOption("2030-01-03");
+    await quick(a, "Offline Jan3 new");
+    await shorten(b);
+    await expect(b.getByText("已同步", { exact: true })).toBeVisible();
+    await first.setOffline(false);
+    await expect(a.locator(".conflict")).toBeVisible({ timeout: 45000 });
+    expect(await a.locator(".conflict").textContent()).toContain("同步衝突");
+    const backup = a.waitForEvent("download");
+    await a.getByRole("button", { name: "下載兩份備份" }).click();
+    await backup;
+    await a.getByRole("button", { name: /使用遠端版本/ }).click();
+    await expect(a.locator(".conflict")).toHaveCount(0);
+    await expect(a.getByRole("article", { name: "Offline Jan3 new" })).toHaveCount(0);
+
+    await createRangeTrip(a, "Range case B");
+    await quick(a, "Move into Jan3");
+    await expect(a.getByText("已同步", { exact: true })).toBeVisible();
+    await b.getByRole("combobox", { name: "選擇旅程" }).selectOption({ label: "Range case B" });
+    await expect(b.getByRole("article", { name: "Move into Jan3" })).toBeVisible();
+    await second.setOffline(true);
+    await shorten(b);
+    await a.getByRole("article", { name: "Move into Jan3" })
+      .getByRole("combobox", { name: "Move into Jan3移到某日" }).selectOption("2030-01-03");
+    await expect(a.getByText("已同步", { exact: true })).toBeVisible();
+    await second.setOffline(false);
+    await expect(b.locator(".conflict")).toBeVisible({ timeout: 45000 });
+    await b.getByRole("button", { name: "保留本機版本並重新同步" }).click();
+    await expect(b.getByRole("alert")).toContainText("其他裝置已有安排");
+    await expect(b.locator(".conflict")).toBeVisible();
+    await b.getByRole("button", { name: /使用遠端版本/ }).click();
+    await expect(b.getByRole("article", { name: "Move into Jan3" })).toBeVisible();
+    await expect(b.getByLabel("旅行日期", { exact: true })).toContainText("2030-01-03");
+  } finally {
+    await Promise.allSettled([first.close(), second.close()]);
+  }
+});
 test("emulator: independent same-user contexts synchronize both directions and preserve offline move/delete conflict", async ({
   browser,
 }) => {
@@ -118,7 +206,7 @@ test("emulator: independent same-user contexts synchronize both directions and p
     const backup = a.waitForEvent("download");
     await a.getByRole("button", { name: "下載兩份備份" }).click();
     expect((await backup).suggestedFilename()).toBe("travel-conflict.json");
-    await a.getByRole("button", { name: "使用遠端版本" }).click();
+    await a.getByRole("button", { name: /使用遠端版本/ }).click();
     await expect(a.locator(".conflict")).toHaveCount(0);
     await expect(
       a.getByRole("article", { name: "A to B", exact: true }),

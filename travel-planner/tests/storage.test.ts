@@ -206,7 +206,7 @@ describe("recoverable editing", () => {
     await store.clear();
   });
   it("CAS prevents stale cross-day/reorder/deletion writes and batches atomically", () => {
-    const t = blankTrip("owner"),
+    const t = { ...blankTrip("owner"), start: "2030-01-01", end: "2030-01-03" },
       p = blankPlace("owner", t.id, "x"),
       i = blankItem("owner", t, p.id, t.start);
     const original = [t, p, i];
@@ -294,5 +294,141 @@ describe("recoverable editing", () => {
   it("failed persistence never silently acknowledges writes; rejects duplicate batch IDs", () => {
     const t = blankTrip("a");
     expect(() => makeOperation("bad", [], [t, t], "a")).toThrow("重複");
+  });
+  it("serializes trip shortening with offline item creation and movement in either order", () => {
+    const t = { ...blankTrip("owner"), start: "2030-01-01", end: "2030-01-03" };
+    const p = blankPlace("owner", t.id, "Museum");
+    const i = blankItem("owner", t, p.id, "2030-01-02");
+    const base = [t, p, i];
+    const shorten = makeOperation("shorten", base, [{ ...t, end: "2030-01-02" }], "owner");
+    const move = makeOperation("move", base, [{ ...i, day: "2030-01-03" }], "owner");
+    expect(move.changes.map((c) => c.id)).toContain(t.id);
+    expect(checkBase(applyOperation(base, shorten), move)).toBe(false);
+    expect(checkBase(applyOperation(base, move), shorten)).toBe(false);
+    expect(() => makeOperation("outside", applyOperation(base, shorten), [
+      blankItem("owner", t, p.id, "2030-01-03"),
+    ], "owner")).toThrow(/日期|範圍/);
+  });
+  it("rejects a 451-record cloud batch before it reaches IndexedDB, keeping ordinary edits possible", async () => {
+    const owner = crypto.randomUUID();
+    const remote: Remote = { watch: () => () => {}, read: async () => [], commit: async () => {} };
+    const store = new PlannerStore(owner, remote);
+    await store.init();
+    const many = Array.from({ length: 451 }, () => blankTrip(owner));
+    await expect(store.edit("oversized", many)).rejects.toThrow(/450/);
+    expect((await readSnapshot(owner)).records).toHaveLength(0);
+    expect((await readSnapshot(owner)).pending).toHaveLength(0);
+    await store.edit("normal", [blankTrip(owner)]);
+    await store.flush();
+    expect((await readSnapshot(owner)).pending).toHaveLength(0);
+    await store.clear();
+  });
+  it.each([449, 450])("accepts a %i-record cloud batch", async (count) => {
+    const owner = crypto.randomUUID();
+    let committed = 0;
+    const remote: Remote = { watch: () => () => {}, read: async () => [], commit: async (op) => { committed = op.changes.length; } };
+    const store = new PlannerStore(owner, remote);
+    await store.init();
+    await store.edit("batch", Array.from({ length: count }, () => blankTrip(owner)));
+    await store.flush();
+    expect(committed).toBe(count);
+    expect((await readSnapshot(owner)).pending).toHaveLength(0);
+    await store.clear();
+  });
+  it("quarantines an old permanently oversized pending batch and syncs an unrelated edit", async () => {
+    const owner = crypto.randomUUID();
+    const old = makeOperation("old copy", [], Array.from({ length: 451 }, () => blankTrip(owner)), owner);
+    await persist(owner, { records: applyOperation([], old), pending: [old], conflicts: [], undo: old, downloaded: [] });
+    const committed: string[] = [];
+    const remote: Remote = { watch: () => () => {}, read: async () => [], commit: async (op) => { committed.push(op.label); } };
+    const store = new PlannerStore(owner, remote);
+    await store.init();
+    await store.flush();
+    expect(store.snapshot.conflicts[0].reason).toBe("oversize");
+    expect(store.snapshot.records).toHaveLength(451);
+    await store.edit("unrelated", [blankTrip(owner)]);
+    await store.flush();
+    expect(committed).toContain("unrelated");
+    expect(store.snapshot.pending).toHaveLength(0);
+    expect(store.snapshot.conflicts[0].operation.changes).toHaveLength(451);
+    await store.clear();
+  });
+  it("quarantines a legacy offline item operation with its source data intact", async () => {
+    const owner = crypto.randomUUID();
+    const trip = { ...blankTrip(owner), start: "2030-01-01", end: "2030-01-03" };
+    const place = blankPlace(owner, trip.id, "x");
+    const item = blankItem(owner, trip, place.id, "2030-01-03");
+    const legacy = { id: crypto.randomUUID(), label: "old offline item", changes: [{ id: item.id, before: null, after: { ...item, revision: 1 } }] };
+    await persist(owner, { records: [trip, place, legacy.changes[0].after], pending: [legacy], conflicts: [], undo: legacy, downloaded: [] });
+    const remote: Remote = { watch: () => () => {}, read: async () => [trip], commit: async () => { throw new Error("legacy reached cloud"); } };
+    const store = new PlannerStore(owner, remote);
+    await store.init();
+    await store.flush();
+    expect(store.snapshot.conflicts[0].reason).toBe("legacy");
+    expect(store.snapshot.records.find((r) => r.id === item.id)).toBeTruthy();
+    await store.clear();
+  });
+  it("rebases a conflicted item onto a chosen valid day without reverting a remote trip shrink", async () => {
+    const owner = crypto.randomUUID();
+    const trip = { ...blankTrip(owner), start: "2030-01-01", end: "2030-01-03" };
+    const place = blankPlace(owner, trip.id, "keep");
+    const item = blankItem(owner, trip, place.id, "2030-01-01");
+    let server: RecordData[] = [trip, place, item];
+    await persist(owner, { records: server, pending: [], conflicts: [], undo: null, downloaded: [] });
+    const remote: Remote = {
+      watch: () => () => {},
+      read: async (ids) => server.filter((r) => ids.includes(r.id)),
+      commit: async (op) => {
+        if (!checkBase(server, op)) throw new ConflictError(server);
+        server = applyOperation(server, op);
+      },
+    };
+    const store = new PlannerStore(owner, remote);
+    await store.init();
+    navigator.onLine = false;
+    await store.edit("offline move", [{ ...item, day: "2030-01-03" }]);
+    server = applyOperation(server, makeOperation("remote shrink", server, [{ ...trip, end: "2030-01-02" }], owner));
+    navigator.onLine = true;
+    await store.flush();
+    expect(store.snapshot.conflicts).toHaveLength(1);
+    const id = store.snapshot.conflicts[0].operation.id;
+    await expect(store.resolve(id, "local")).rejects.toThrow("請先選擇旅程內");
+    expect(store.snapshot.conflicts).toHaveLength(1);
+    await store.resolve(id, "local", "2030-01-02");
+    await store.flush();
+    expect(server.find((r) => r.id === trip.id)).toMatchObject({ end: "2030-01-02" });
+    expect(server.find((r) => r.id === item.id)).toMatchObject({ day: "2030-01-02" });
+    expect(store.snapshot.conflicts).toHaveLength(0);
+    await store.clear();
+  });
+  it("refuses local trip shrink when a delayed watcher omitted a newer remote item move", async () => {
+    const owner = crypto.randomUUID();
+    const trip = { ...blankTrip(owner), start: "2030-01-01", end: "2030-01-03" };
+    const place = blankPlace(owner, trip.id, "remote stop");
+    const item = blankItem(owner, trip, place.id, "2030-01-01");
+    let server: RecordData[] = [trip, place, item];
+    await persist(owner, { records: server, pending: [], conflicts: [], undo: null, downloaded: [] });
+    const remote: Remote = {
+      watch: () => () => {}, // deliberately delay all server snapshots
+      read: async (ids) => server.filter((r) => ids.includes(r.id)),
+      readTrip: async (tripId) => server.filter((r) => r.kind === "item" && r.tripId === tripId),
+      commit: async (op) => {
+        if (!checkBase(server, op)) throw new ConflictError(server);
+        server = applyOperation(server, op);
+      },
+    };
+    const store = new PlannerStore(owner, remote);
+    await store.init();
+    navigator.onLine = false;
+    await store.edit("offline shorten", [{ ...trip, end: "2030-01-02" }]);
+    server = applyOperation(server, makeOperation("other device moves", server, [{ ...item, day: "2030-01-03" }], owner));
+    navigator.onLine = true;
+    await store.flush();
+    const id = store.snapshot.conflicts[0].operation.id;
+    await expect(store.resolve(id, "local")).rejects.toThrow("其他裝置已有安排");
+    expect(store.snapshot.conflicts).toHaveLength(1);
+    expect(server.find((r) => r.id === trip.id)).toMatchObject({ end: "2030-01-03" });
+    expect(server.find((r) => r.id === item.id)).toMatchObject({ day: "2030-01-03" });
+    await store.clear();
   });
 });

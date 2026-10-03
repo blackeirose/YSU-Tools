@@ -504,6 +504,31 @@ main {
 .map-pin.candidate {
   border-style: dashed;
 }
+.map-pin.dated {
+  width: 64px;
+  font-size: 11px;
+}
+.map-pin.skipped {
+  opacity: .58;
+  text-decoration: line-through;
+}
+.drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: white;
+  cursor: grab;
+  min-width: 44px;
+  min-height: 44px;
+  touch-action: none;
+}
+.outside-items {
+  padding: 12px;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+}
 .map-detail {
   padding: 12px;
   border-top: 1px solid var(--line);

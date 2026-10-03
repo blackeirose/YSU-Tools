@@ -13,10 +13,34 @@ import {
   tripSchema,
   placeSchema,
   validateSchedule,
+  dailySequence,
+  extendImportedTrips,
 } from "../src/model";
 import { calendar, fold } from "../src/calendar";
 import { demos } from "../src/demo";
 describe("travel and geography", () => {
+  it("keeps daily marker numbers when an earlier stop has no coordinates or another date repeats the place", () => {
+    const t = { ...blankTrip("a"), start: "2030-01-01", end: "2030-01-02" };
+    const p = blankPlace("a", t.id, "同名");
+    const first = blankItem("a", t, p.id, t.start, 0);
+    const second = blankItem("a", t, p.id, t.start, 1);
+    const nextDay = blankItem("a", t, p.id, t.end, 0);
+    const candidate = blankItem("a", t, p.id, null);
+    const skipped = { ...blankItem("a", t, p.id, t.end, 1), status: "skipped" as const };
+    const n = dailySequence([first, second, nextDay, candidate, skipped]);
+    expect([...n.values()]).toEqual([1, 2, 1, 2]);
+    expect(n.has(candidate.id)).toBe(false);
+  });
+  it("preserves out-of-range legacy import dates by explicit trip extension", () => {
+    const t = { ...blankTrip("a"), start: "2030-01-01", end: "2030-01-02" };
+    const p = blankPlace("a", t.id, "legacy");
+    const i = blankItem("a", t, p.id, "2030-01-03");
+    const source = { schemaVersion: 1, exportedAt: new Date().toISOString(), records: [t, p, i] };
+    expect(validateImport(source)).toHaveLength(3);
+    const fixed = extendImportedTrips(source.records);
+    expect(fixed.find((r) => r.kind === "trip")).toMatchObject({ start: t.start, end: i.day });
+    expect(fixed.find((r) => r.kind === "item")).toMatchObject({ day: i.day });
+  });
   it("supports year boundary, blank trips and unknown coordinates", () => {
     const t = { ...blankTrip("a"), start: "2030-12-31", end: "2031-01-02" };
     expect(days(t)).toEqual(["2030-12-31", "2031-01-01", "2031-01-02"]);

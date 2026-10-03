@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { Item, Place } from "./model";
+import { dailySequence } from "./model";
 const colors: Record<string, string> = {
   美食: "#9B492D",
   景點: "#315C4B",
@@ -16,6 +17,7 @@ export function TravelMap({
   onSelect,
   pin,
   onPin,
+  showDay = false,
 }: {
   places: Place[];
   items: Item[];
@@ -23,6 +25,7 @@ export function TravelMap({
   onSelect: (i: Item) => void;
   pin: string | null;
   onPin: (id: string, lat: number, lng: number) => void;
+  showDay?: boolean;
 }) {
   const host = useRef<HTMLDivElement>(null),
     map = useRef<L.Map | null>(null),
@@ -84,43 +87,42 @@ export function TravelMap({
     group.clearLayers();
     marks.current.clear();
     const points: L.LatLngExpression[] = [];
-    let seq = 0;
-    const line: L.LatLngExpression[] = [];
+    const numbers = dailySequence(items);
+    const lines = new Map<string, L.LatLngExpression[]>();
     for (const i of items) {
       const p = places.find((p) => p.id === i.placeId);
       if (!p || p.lat === null || p.lng === null) continue;
       const point: L.LatLngExpression = [p.lat, p.lng];
       points.push(point);
       const candidate = i.status === "candidate";
-      if (!candidate) {
-        seq++;
-        line.push(point);
-      }
+      if (!candidate && i.day) lines.set(i.day, [...(lines.get(i.day) ?? []), point]);
+      const label = candidate ? "?" : `${showDay && i.day ? `${i.day.slice(5)} · ` : ""}${numbers.get(i.id) ?? "?"}`;
       const element = document.createElement("span");
-      element.className = `map-pin ${candidate ? "candidate" : ""}`;
+      element.className = `map-pin ${candidate ? "candidate" : ""} ${i.status === "skipped" ? "skipped" : ""}`;
+      if (showDay && i.day) element.classList.add("dated");
       element.style.background = colors[p.category];
-      element.textContent = candidate ? "?" : String(seq);
+      element.textContent = label;
       element.setAttribute(
         "aria-label",
-        `${p.name} ${candidate ? "候選" : seq}`,
+        `${p.name} ${i.day ?? "未排定"} ${candidate ? "候選" : `第 ${numbers.get(i.id)} 站`}${i.status === "skipped" ? " · 已跳過" : ""}`,
       );
       const marker = L.marker(point, {
         icon: L.divIcon({
           html: element,
           className: "marker-host",
-          iconSize: [36, 44],
-          iconAnchor: [18, 40],
+          iconSize: [showDay && i.day ? 64 : 36, 44],
+          iconAnchor: [showDay && i.day ? 32 : 18, 40],
         }),
         keyboard: true,
         title: p.name,
       }).addTo(group);
       const tip = document.createElement("span");
-      tip.textContent = `${p.category} · ${p.name} ${candidate ? "候選" : ""}`;
+      tip.textContent = `${p.category} · ${p.name} · ${i.day ?? "未排定"} ${candidate ? "候選" : `第 ${numbers.get(i.id)} 站`}`;
       marker.bindTooltip(tip);
       marker.on("click", () => callbacks.current.onSelect(i));
       marks.current.set(i.id, marker);
     }
-    if (line.length > 1)
+    for (const line of lines.values()) if (line.length > 1)
       L.polyline(line, {
         color: "#61746A",
         weight: 2,
@@ -133,7 +135,7 @@ export function TravelMap({
         maxZoom: 14,
         animate: false,
       });
-  }, [places, items]);
+  }, [places, items, showDay]);
   useEffect(() => {
     const marker = selected ? marks.current.get(selected) : null;
     if (marker) {
