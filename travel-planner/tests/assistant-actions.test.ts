@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assistantActionAlreadyApplied, assistantItemId } from "../src/assistant-actions";
+import { assistantActionAlreadyApplied, assistantDraftIds, assistantItemId, assertAssistantDraftTrip } from "../src/assistant-actions";
 import { blankItem, blankTrip } from "../src/model";
 
 describe("assistant action replay", () => {
@@ -24,5 +24,18 @@ describe("assistant action replay", () => {
     const timed = { ...item, timeMode: "flexible" as const, time: "09:00" };
     expect(assistantActionAlreadyApplied(timed, { kind: "edit_time", message: "", time: "09:00" })).toBe(true);
     expect(assistantActionAlreadyApplied(timed, { kind: "edit_time", message: "", time: "10:00" })).toBe(false);
+  });
+  it("binds a confirmed draft to its originating trip and reuses IDs only after an Undo tombstone", async () => {
+    expect(() => assertAssistantDraftTrip(trip.id, crypto.randomUUID())).toThrow("旅程已切換");
+    expect(() => assertAssistantDraftTrip(trip.id, trip.id)).not.toThrow();
+    const fingerprint = JSON.stringify({ tripId: trip.id, rows: [{ day: "2030-01-01", name: "甲" }] });
+    const first = await assistantDraftIds(fingerprint, 1, []);
+    expect(first.alreadyAdded).toBe(false);
+    const live = { ...item, id: first.ids[0], revision: 1 };
+    expect((await assistantDraftIds(fingerprint, 1, [live])).alreadyAdded).toBe(true);
+    const redo = await assistantDraftIds(fingerprint, 1, [{ ...live, revision: 2, deleted: true }]);
+    expect(redo.alreadyAdded).toBe(false);
+    expect(redo.ids[0]).not.toBe(first.ids[0]);
+    expect((await assistantDraftIds(fingerprint, 1, [{ ...live, deleted: true }, { ...live, id: redo.ids[0], revision: 1 }])).alreadyAdded).toBe(true);
   });
 });
