@@ -46,3 +46,5 @@ Immutable candidate：`C:/Users/YSU/Codex_Tower/integration-transfer/planner-can
 ## 2026-10-02 R1–R9 修復輪（以上舊 Preview 與驗證數字不代表本輪）
 
 獨立審查後的修復、重現和剩餘邊界詳見 [R1–R9 驗證紀錄](REVIEW_R1_R9_2026-10-02.md)。原 Preview `6ac045607f1d78183c46e201` 是舊產品 source `4cb7fdf`，不能用來驗收本輪。此輪的新 Preview、emulator、獨立 reviewer 和最終 SHAs 必須以新證據填入；不得沿用上面的 PASS。正式 published deploy 在本輪 preflight 重新讀得 `6abf52a7be775989aeaab09d`，尚未發送任何 production 發布。
+
+本輪完整站 draft 的實際瀏覽器試用另發現 configured Preview 的本機模式無法在深層網址刷新後恢復，已補同分頁模式記憶與登出／Auth 清除；replacement Preview 及 source-matched CI 結果以 authority 最終收據為準。不要把先前成功的 HTTP route probe 取代實際 browser reload 驗證。

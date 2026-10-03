@@ -74,8 +74,12 @@ function message(e: unknown) {
   return e instanceof Error ? e.message : String(e);
 }
 export default function App() {
+  const localModeKey = "ysu-travel-planner-local-mode-v1";
+  const resumeLocalMode = () => {
+    try { return sessionStorage.getItem(localModeKey) === "1"; } catch { return false; }
+  };
   const [user, su] = useState<string | null>(null),
-    [demo, sd] = useState(!configured),
+    [demo, sd] = useState(!configured || resumeLocalMode()),
     [store, ss] = useState<PlannerStore | null>(null),
     [loading, sl] = useState(true),
     [, redraw] = useState(0),
@@ -129,11 +133,20 @@ export default function App() {
       return false;
     }
   };
+  const enterLocalMode = () => {
+    try { sessionStorage.setItem(localModeKey, "1"); } catch { /* usable until this page closes */ }
+    sd(true);
+    sle("");
+    slo(false);
+  };
   useEffect(
     () =>
       watchAuth((id) => {
         su(id);
-        if (id) sd(false);
+        if (id) {
+          try { sessionStorage.removeItem(localModeKey); } catch { /* storage unavailable */ }
+          sd(false);
+        }
       }),
     [],
   );
@@ -279,10 +292,12 @@ export default function App() {
   async function signOutNow() {
     const current = activeStore.current;
     if (current) await current.clear();
+    try { sessionStorage.removeItem(localModeKey); } catch { /* storage unavailable */ }
     activeStore.current = null; // explicit logout already chose how to handle pending work
     ss(null);
     await logout();
     su(null);
+    if (demo) sd(false);
     slogout(false);
   }
   async function prepareLogout() {
@@ -1003,7 +1018,7 @@ export default function App() {
             <p>登入後可同步自己的旅程；本機模式只保存在這個瀏覽器。</p>
             {!loading && (
               <>
-                <button className="primary" onClick={() => sd(true)}>
+                <button className="primary" onClick={enterLocalMode}>
                   使用本機模式
                 </button>
                 {configured && (
@@ -2097,13 +2112,7 @@ export default function App() {
             {loginBusy ? "登入中…" : emulator ? "測試登入" : "Google 登入／重試"}
           </button>
           <button type="button" onClick={() => { slo(false); sle(""); }}>取消</button>
-          <button
-            onClick={() => {
-              sle("");
-              sd(true);
-              slo(false);
-            }}
-          >
+          <button onClick={enterLocalMode}>
             使用本機模式
           </button>
         </Modal>

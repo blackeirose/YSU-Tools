@@ -40,6 +40,26 @@ async function shorten(page: Page) {
   await dialog.getByRole("button", { name: "儲存旅程" }).click();
   await expect(dialog).toHaveCount(0);
 }
+test("configured Preview local mode survives a deep-link reload and clears on sign-out", async ({ browser }) => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  try {
+    await page.goto("http://127.0.0.1:4174/travel-planner/");
+    await page.getByRole("button", { name: "使用本機模式" }).first().click();
+    await page.getByRole("button", { name: "載入示範", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "東京 · 合成示範" })).toBeVisible();
+    const deep = page.url();
+    expect(deep).toContain("/travel-planner/trips/");
+    await page.goto(deep);
+    await expect(page.getByRole("heading", { name: "東京 · 合成示範" })).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "東京 · 合成示範" })).toBeVisible();
+    await page.getByRole("button", { name: "登出", exact: true }).click();
+    await expect(page.getByRole("button", { name: "使用本機模式" }).first()).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole("button", { name: "使用本機模式" }).first()).toBeVisible();
+  } finally { await context.close(); }
+});
 test("R1 emulator: login errors stay in dialog, cancellation and retry recover", async ({ browser }) => {
   const context = await browser.newContext();
   const page = await context.newPage();

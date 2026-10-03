@@ -150,7 +150,9 @@ test("R3 another tab toggles a reminder while an older task editor saves only no
     await task.getByRole("button", { name: "編輯", exact: true }).click();
     await expect(dialog.getByLabel("提前提醒（分鐘）")).toHaveValue("1440");
     await expect(dialog.getByLabel("啟用", { exact: true })).not.toBeChecked();
-    await dialog.getByLabel("備註", { exact: true }).fill("stale second note");
+    const staleNote = dialog.locator("textarea");
+    await expect(staleNote).toHaveAccessibleName("備註");
+    await staleNote.fill("stale second note");
     await other.getByRole("dialog").getByRole("button", { name: "關閉", exact: true }).click();
     await other.getByRole("button", { name: "待辦", exact: true }).click();
     await other.locator("article.task").filter({ hasText: "Concurrent reminder synthetic" })
