@@ -1,5 +1,5 @@
-    // YSU Travel Planner: synthetic preview only. Uses the existing trusted
-    // Google owner policy; grants no access to production v1 or sibling paths.
+    // Planner synthetic preview only. Existing production and sibling matches remain
+    // byte-for-byte unchanged when this fragment is appended to the live rules.
     match /travelPlanner/preview-v1/users/{uid}/records/{recordId} {
       function plannerOwner() {
         return request.auth != null && request.auth.uid == uid && trustedGoogle();
@@ -13,10 +13,102 @@
           && request.resource.data.updatedAt is string
           && request.resource.data.size() <= 40;
       }
+      function tripPath(tripId) {
+        return /databases/$(database)/documents/travelPlanner/preview-v1/users/$(uid)/records/$(tripId);
+      }
+      function validItemDependency() {
+        let tripId = request.resource.data.tripId;
+        let path = tripPath(tripId);
+        let after = getAfter(path).data;
+        return existsAfter(path)
+          && after.id == tripId && after.ownerId == uid
+          && after.kind == 'trip' && after.deleted == false
+          && (request.resource.data.day == null
+            || (request.resource.data.day >= after.start
+              && request.resource.data.day <= after.end))
+          // An existing Trip must change in the same atomic write. Old clients
+          // that write only the Item are rejected, including after reconnect.
+          && ((!exists(path) && after.revision == 1)
+            || (exists(path) && after.revision == get(path).data.revision + 1));
+      }
+      function validTripRange() {
+        return request.resource.data.deleted == false
+          && request.resource.data.start is string
+          && request.resource.data.end is string
+          && request.resource.data.start <= request.resource.data.end;
+      }
+      function tripUpdateSafe() {
+        return resource.data.deleted == false && validTripRange()
+          // The client fetches the complete Trip item set from the server and
+          // uses a Trip revision CAS before shortening. Outside items remain as records, projected as
+          // candidates; no sibling batch is required. Legacy item-only writes
+          // remain blocked by validItemDependency().
+          && request.resource.data.get('detachedItemIds', []) is list
+          && request.resource.data.get('detachedItemIds', []).size() <= 15000
+          && ((request.resource.data.start <= resource.data.start
+                && request.resource.data.end >= resource.data.end)
+              || request.resource.data.keys().hasAll(['detachedItemIds']));
+      }
+      function safeRecordCreate() {
+        return request.resource.data.kind == 'trip'
+          ? validTripRange()
+          : (request.resource.data.kind == 'item'
+              ? validItemDependency()
+              : true);
+      }
+      function safeRecordUpdate() {
+        return request.resource.data.kind == 'trip'
+          ? tripUpdateSafe()
+          : (request.resource.data.kind == 'item'
+              ? (request.resource.data.tripId == resource.data.tripId
+                  && validItemDependency())
+              : true);
+      }
       allow read: if plannerOwner();
-      allow create: if plannerOwner() && plannerValid() && request.resource.data.revision == 1;
-      allow update: if plannerOwner() && resource.data.ownerId == uid && plannerValid()
-        && request.resource.data.kind == resource.data.kind
-        && request.resource.data.revision == resource.data.revision + 1;
+      allow create: if plannerOwner() && plannerValid()
+        && request.resource.data.revision == 1 && safeRecordCreate();
+      allow update: if plannerOwner() && resource.data.ownerId == uid
+        && plannerValid() && request.resource.data.kind == resource.data.kind
+        && request.resource.data.revision == resource.data.revision + 1
+        && safeRecordUpdate();
+      allow delete: if false;
+    }
+    // Preview-only pre-inference counters. The signed-in Owner can only raise
+    // one counter by one, never lower/reset it or delete the daily record.
+    match /travelPlanner/preview-v1/users/{uid}/aiUsage/{day} {
+      function aiOwner() {
+        return request.auth != null && request.auth.uid == uid && trustedGoogle();
+      }
+      function validCounts() {
+        return request.resource.data.keys().hasOnly(['ownerId','day','assistCount','exploreCount','visionCount','backgroundCount'])
+          && request.resource.data.keys().hasAll(['ownerId','day','assistCount','exploreCount','visionCount','backgroundCount'])
+          && request.resource.data.ownerId == uid && request.resource.data.day == day
+          && request.resource.data.assistCount is int && request.resource.data.assistCount >= 0 && request.resource.data.assistCount <= 10
+          && request.resource.data.exploreCount is int && request.resource.data.exploreCount >= 0 && request.resource.data.exploreCount <= 1
+          && request.resource.data.visionCount is int && request.resource.data.visionCount >= 0 && request.resource.data.visionCount <= 3
+          && request.resource.data.backgroundCount is int && request.resource.data.backgroundCount >= 0 && request.resource.data.backgroundCount <= 2;
+      }
+      allow get: if aiOwner();
+      allow list: if false;
+      allow create: if aiOwner() && validCounts()
+        && request.resource.data.assistCount + request.resource.data.exploreCount + request.resource.data.visionCount + request.resource.data.backgroundCount == 1;
+      allow update: if aiOwner() && resource.data.ownerId == uid && validCounts()
+        && request.resource.data.day == resource.data.day
+        && ((request.resource.data.assistCount == resource.data.assistCount + 1
+              && request.resource.data.exploreCount == resource.data.exploreCount
+              && request.resource.data.visionCount == resource.data.visionCount
+              && request.resource.data.backgroundCount == resource.data.backgroundCount)
+          || (request.resource.data.assistCount == resource.data.assistCount
+              && request.resource.data.exploreCount == resource.data.exploreCount + 1
+              && request.resource.data.visionCount == resource.data.visionCount
+              && request.resource.data.backgroundCount == resource.data.backgroundCount)
+          || (request.resource.data.assistCount == resource.data.assistCount
+              && request.resource.data.exploreCount == resource.data.exploreCount
+              && request.resource.data.visionCount == resource.data.visionCount + 1
+              && request.resource.data.backgroundCount == resource.data.backgroundCount)
+          || (request.resource.data.assistCount == resource.data.assistCount
+              && request.resource.data.exploreCount == resource.data.exploreCount
+              && request.resource.data.visionCount == resource.data.visionCount
+              && request.resource.data.backgroundCount == resource.data.backgroundCount + 1));
       allow delete: if false;
     }
