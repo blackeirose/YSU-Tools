@@ -25,8 +25,9 @@ class MemoryStore {
     return { modified: true, etag };
   }
 }
-function httpFor(options: { owner?: string; city?: boolean; integerCoordinates?: boolean; failSecond?: boolean } = {}) {
+function httpFor(options: { owner?: string; city?: boolean; cityName?: string; integerCoordinates?: boolean; failSecond?: boolean } = {}) {
   let images = 0, quota = 0;
+  const prompts: string[] = [];
   const http = (async (url: string | URL | Request, init?: RequestInit) => {
     const target = String(url);
     if (target.includes("accounts:lookup")) return Response.json({ users: [{ localId: options.owner ?? "owner" }] });
@@ -34,7 +35,7 @@ function httpFor(options: { owner?: string; city?: boolean; integerCoordinates?:
       ownerId: { stringValue: "owner" }, kind: { stringValue: "trip" }, deleted: { booleanValue: false },
       start: { stringValue: "2030-01-01" }, dayCities: { mapValue: { fields: {
         "2030-01-01": { mapValue: { fields: options.city === false ? {} : {
-          name: { stringValue: "東京" }, timezone: { stringValue: "Asia/Tokyo" },
+          name: { stringValue: options.cityName ?? "東京" }, timezone: { stringValue: "Asia/Tokyo" },
           lat: options.integerCoordinates ? { integerValue: "35" } : { doubleValue: 35.6 },
           lng: options.integerCoordinates ? { integerValue: "139" } : { doubleValue: 139.7 },
         } } },
@@ -45,8 +46,9 @@ function httpFor(options: { owner?: string; city?: boolean; integerCoordinates?:
       return new Response("", { status: 404 });
     }
     if (target.includes("/v1beta/models/gemini-3.1-flash-lite-image:generateContent")) {
-      const body = JSON.parse(String(init?.body)) as { generationConfig: { responseModalities: string[]; responseFormat: { image: { aspectRatio: string; imageSize: string } } } };
+      const body = JSON.parse(String(init?.body)) as { contents: { parts: { text?: string }[] }[]; generationConfig: { responseModalities: string[]; responseFormat: { image: { aspectRatio: string; imageSize: string } } } };
       expect(body.generationConfig).toEqual({ responseModalities: ["IMAGE"], responseFormat: { image: { aspectRatio: "3:2", imageSize: "1K" } } });
+      prompts.push(body.contents[0].parts[0].text ?? "");
       images++;
       if (options.failSecond && images === 2) return new Response("", { status: 500 });
       return Response.json({ candidates: [{ content: { parts: [{ inlineData: {
@@ -54,7 +56,7 @@ function httpFor(options: { owner?: string; city?: boolean; integerCoordinates?:
     }
     throw new Error(`Unexpected outbound request: ${target}`);
   }) as typeof fetch;
-  return { http, counts: () => ({ images, quota }) };
+  return { http, counts: () => ({ images, quota }), prompts };
 }
 
 describe("owner-only persistent background generation", () => {
@@ -87,6 +89,19 @@ describe("owner-only persistent background generation", () => {
     expect((await startBackground(request(), env, fake.http, provided)).status).toBe(502);
     expect((await startBackground(request(), env, fake.http, provided)).status).toBe(200);
     expect(fake.counts()).toEqual({ images: 3, quota: 2 });
+  });
+  it("a failed lower panel keeps the original city after the first-day city changes", async () => {
+    const store = new MemoryStore(), tokyo = httpFor({ failSecond: true });
+    const provided = store as unknown as ReturnType<typeof backgroundStore>;
+    expect((await startBackground(request(), env, tokyo.http, provided)).status).toBe(502);
+    const osaka = httpFor({ cityName: "大阪" });
+    expect((await startBackground(request(), env, osaka.http, provided)).status).toBe(200);
+    expect(osaka.prompts).toHaveLength(1);
+    expect(osaka.prompts[0]).toContain("東京");
+    expect(osaka.prompts[0]).not.toContain("大阪");
+    const state = await readBackground(new Request(`https://tools.ycsu.cc/travel-planner/api/background/status?tripId=${tripId}`,
+      { headers: { Authorization: "Bearer owner" } }), env, osaka.http, provided);
+    expect(await state.json()).toMatchObject({ state: "ready", city: "東京" });
   });
   it("accepts integer Firestore coordinates and retains the original poster when first-day city is later cleared", async () => {
     const store = new MemoryStore();
