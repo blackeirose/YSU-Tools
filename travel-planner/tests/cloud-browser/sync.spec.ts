@@ -141,6 +141,7 @@ test("R7 emulator: offline new item versus trip shortening conflicts in both com
     await shorten(b);
     await a.getByRole("article", { name: "Move into Jan3" })
       .getByRole("combobox", { name: "Move into Jan3移到某日" }).selectOption("2030-01-03");
+    await expect(a.locator('[data-day="2030-01-03"]').getByRole("article", { name: "Move into Jan3" })).toBeVisible();
     await expect(a.getByText("已同步", { exact: true })).toBeVisible();
     await second.setOffline(false);
     await expect(b.locator(".conflict")).toBeVisible({ timeout: 45000 });
