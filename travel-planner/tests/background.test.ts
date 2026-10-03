@@ -60,6 +60,19 @@ function httpFor(options: { owner?: string; city?: boolean; cityName?: string; i
 }
 
 describe("owner-only persistent background generation", () => {
+  it("returns 401 before service-availability checks and makes no paid call", async () => {
+    const store = new MemoryStore() as unknown as ReturnType<typeof backgroundStore>;
+    const unavailable = () => undefined;
+    let calls = 0;
+    const http = (async () => { calls++; throw new Error("should not call external services"); }) as typeof fetch;
+    const anonymousStart = new Request(`https://preview.test/travel-planner/api/background/start?tripId=${tripId}`,
+      { method: "POST" });
+    const anonymousRead = new Request(`https://preview.test/travel-planner/api/background/status?tripId=${tripId}`);
+    expect((await startBackground(anonymousStart, unavailable, http, store)).status).toBe(401);
+    expect((await readBackground(anonymousRead, unavailable, http, store)).status).toBe(401);
+    expect((await startBackground(request(), unavailable, http, store)).status).toBe(503);
+    expect(calls).toBe(0);
+  });
   it("requires the authenticated owner and confirmed first-day city before paid calls", async () => {
     const store = new MemoryStore();
     const fake = httpFor({ owner: "other" });
