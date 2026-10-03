@@ -2,7 +2,14 @@
 import { execFileSync } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
+import { createRequire, builtinModules } from "node:module";
 import { zipFunctions } from "@netlify/zip-it-and-ship-it";
+
+// zip-it-and-ship-it can leave bare imports in a pnpm layout while archiving
+// only .pnpm/store paths. Bundle packages first so a deployed ZIP has no
+// dependency on symlinks that ZIP cannot preserve.
+const requireFromPackager = createRequire(import.meta.resolve("@netlify/zip-it-and-ship-it"));
+const { build } = requireFromPackager("esbuild");
 
 const check = process.argv.includes("--check");
 const sourceCommit = check ? "CHECK-ONLY" : execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
@@ -10,7 +17,20 @@ const dirty = check ? true : !!execFileSync("git", ["status", "--porcelain"], { 
 if (dirty && !check) throw new Error("Commit source before release function bundling");
 const output = "artifacts/planner-functions";
 await mkdir(output, { recursive: true });
-const result = await zipFunctions("netlify/functions", output, { basePath: process.cwd(),
+const entrypoints = `${output}/entrypoints`;
+const bundled = await build({
+  entryPoints: ["netlify/functions/travel-ai.mts", "netlify/functions/travel-background.mts",
+    "netlify/functions/travel-background-read.mts"],
+  outdir: entrypoints, outExtension: { ".js": ".mjs" },
+  bundle: true, packages: "bundle", platform: "node", format: "esm", target: "node22",
+  metafile: true, logLevel: "warning",
+});
+const builtins = new Set(builtinModules.map((name) => name.replace(/^node:/, "")));
+for (const output of Object.values(bundled.metafile.outputs))
+  for (const dependency of output.imports ?? [])
+    if (dependency.external && !builtins.has(dependency.path.replace(/^node:/, "")))
+      throw new Error(`Unbundled Function dependency: ${dependency.path}`);
+const result = await zipFunctions(entrypoints, output, { basePath: process.cwd(),
   config: { "*": { nodeBundler: "esbuild", nodeVersion: "22" } } });
 const contract = {
   "travel-ai": { invocationMode: "stream", path: "/travel-planner/api/ai" },
