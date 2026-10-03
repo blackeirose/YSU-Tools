@@ -26,7 +26,7 @@ import {
 } from "firebase/firestore";
 import type { RecordData } from "./model";
 import { recordSchema } from "./model";
-import { ConflictError, canonical, deniedWriteConflict, isTripVersionTouch, productionTripViolation, unguardedItemChange } from "./storage";
+import { ConflictError, canonical, deniedWriteConflict, deniedWriteReadFailure, isTripVersionTouch, productionTripViolation, unguardedItemChange } from "./storage";
 import type { Operation, Remote } from "./storage";
 import { cloudScope } from "./cloud-config";
 const env = import.meta.env;
@@ -214,10 +214,10 @@ export function cloudRemote(owner: string): Remote {
             throw deniedWriteConflict(op, latest);
           } catch (readError) {
             if (readError instanceof ConflictError) throw readError;
-            // If the owner cannot read the records, retrying the same write is
-            // unsafe. Preserve the local operation as a policy conflict.
+            // A temporary read failure cannot prove a policy violation. Keep
+            // the pending operation for retry once connectivity returns.
+            throw deniedWriteReadFailure(readError);
           }
-          throw new ConflictError([], "policy");
         }
         throw error;
       }
