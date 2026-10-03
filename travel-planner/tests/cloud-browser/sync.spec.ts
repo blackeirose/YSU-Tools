@@ -23,6 +23,15 @@ async function quick(page: Page, name: string) {
     .click();
   await expect(page.getByRole("article", { name, exact: true })).toBeVisible();
 }
+async function editing(page: Page) {
+  const button = page.getByRole("button", { name: "編輯", exact: true });
+  if (await button.isVisible()) await button.click();
+}
+async function operations(page: Page) {
+  const drawer = page.locator("details.trip-operations");
+  if (!(await drawer.evaluate((element) => (element as HTMLDetailsElement).open)))
+    await drawer.locator(":scope > summary").click();
+}
 async function createRangeTrip(page: Page, name: string) {
   await page.getByRole("button", { name: "新增旅程", exact: true }).click();
   const dialog = page.getByRole("dialog");
@@ -32,8 +41,10 @@ async function createRangeTrip(page: Page, name: string) {
   await dialog.getByRole("button", { name: "儲存旅程" }).click();
   await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
   await expect(page.getByText("已同步", { exact: true })).toBeVisible();
+  await editing(page);
 }
 async function shorten(page: Page) {
+  await operations(page);
   await page.getByRole("button", { name: "編輯旅程" }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("結束日期").fill("2030-01-02");
@@ -59,7 +70,7 @@ test("configured Preview local mode survives a deep-link reload and clears on si
     const backupDownload = page.waitForEvent("download");
     await page.getByRole("dialog").getByRole("button", { name: "下載本機備份" }).click();
     const backup = JSON.parse(await readFile((await (await backupDownload).path())!, "utf8"));
-    expect(backup.schemaVersion).toBe(1);
+    expect(backup.schemaVersion).toBe(2);
     expect(backup.records.some((record: { kind: string }) => record.kind === "trip")).toBe(true);
     await page.getByRole("dialog").getByRole("button", { name: "清除並離開" }).click();
     await expect(page.getByRole("button", { name: "使用本機模式" }).first()).toBeVisible();
@@ -103,6 +114,7 @@ test("R7 emulator: offline new item versus trip shortening conflicts in both com
     await createRangeTrip(a, "Range case A");
     await login(b, email);
     await expect(b.getByRole("heading", { name: "Range case A" })).toBeVisible();
+    await editing(b);
     await first.setOffline(true);
     await a.getByLabel("旅行日期", { exact: true }).selectOption("2030-01-03");
     await quick(a, "Offline Jan3 new");
@@ -158,9 +170,11 @@ test("emulator: independent same-user contexts synchronize both directions and p
     await dialog.getByLabel("開始日期").fill("2030-01-01");
     await dialog.getByLabel("結束日期").fill("2030-01-03");
     await dialog.getByRole("button", { name: "儲存旅程" }).click();
+    await editing(a);
     await quick(a, "A to B");
     await expect(a.getByText("已同步", { exact: true })).toBeVisible();
     await login(b, email);
+    await editing(b);
     await expect(
       b.getByRole("article", { name: "A to B", exact: true }),
     ).toBeVisible();
@@ -206,6 +220,7 @@ test("emulator: independent same-user contexts synchronize both directions and p
       .getByRole("button", { name: "關閉", exact: true })
       .click();
     await a.reload();
+    await editing(a);
     await expect(
       a.getByRole("article", { name: "A to B", exact: true }),
     ).toContainText("B newer version");
