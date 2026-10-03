@@ -701,6 +701,34 @@ export default function App() {
     assistantDone.current.set(fingerprint, Date.now());
     return action.message;
   }
+  async function applyAssistantDraft(action: AssistantAction): Promise<string> {
+    if (!trip || !store || action.kind !== "draft" || !action.draftItems?.length)
+      throw new Error("草案不完整，未寫入行程");
+    if (action.draftItems.length > 20 || action.draftItems.some((row) => !dateList.includes(row.day)))
+      throw new Error("草案含旅程外日期或超過 20 項；請先調整旅程日期，原行程未變更");
+    const fingerprint = JSON.stringify({ tripId: trip.id, rows: action.draftItems });
+    const ids = await Promise.all(action.draftItems.map((_, index) =>
+      assistantItemId(`${fingerprint}:${index}`, 0, 0)));
+    if (ids.some((id) => records.some((record) => record.id === id)))
+      return "這份草案已加入過，未重複新增；可使用復原或手動調整。";
+    const nextOrder = new Map<string, number>();
+    const updates: RecordData[] = [];
+    for (const [index, row] of action.draftItems.entries()) {
+      const place = { ...blankPlace(store.owner, trip.id, row.name),
+        notes: "旅伴草案；地點、營業與預約尚未查證", source: "Gemini 草案（未查證）" };
+      const order = nextOrder.get(row.day) ?? maxOrder(row.day);
+      nextOrder.set(row.day, order + 1);
+      const item = { ...blankItem(store.owner, trip, place.id, row.day, order), id: ids[index],
+        timeMode: row.time ? "flexible" as const : row.period ? "period" as const : "sequence" as const,
+        time: row.time ?? null, period: row.period ?? "上午" as const,
+        notes: row.notes ?? "", departureZone: dayCity(trip, row.day).timezone };
+      updates.push(place, item);
+    }
+    await edit("確認旅伴草案", updates);
+    sy(action.draftItems[0].day);
+    sn(`已將 ${action.draftItems.length} 項草案加入行程；地點尚未查證，可復原。`);
+    return `已加入 ${action.draftItems.length} 項；地點未定位且預約未確認。`;
+  }
   async function saveSuggestion(s: Suggestion, d: string | null) {
     const p = {
       ...blankPlace(store!.owner, trip!.id, s.name),
@@ -2154,7 +2182,7 @@ export default function App() {
       {assistantOpen && trip && user && !demo && <TravelerAssistant tripId={trip.id} selectedDay={activeDay}
         city={currentCity?.name || trip.cities} selectedItem={selectedItem && pFor(selectedItem) ? { id: selectedItem.id, name: pFor(selectedItem)!.name } : undefined}
         token={async () => { if (!auth?.currentUser) throw new Error("登入已失效"); return auth.currentUser.getIdToken(); }}
-        onAction={executeAssistant} onClose={() => sas(false)} />}
+        onAction={executeAssistant} onDraft={applyAssistantDraft} onClose={() => sas(false)} />}
       {assistantChoice && <Modal title="選擇地點" onClose={() => sacChoice(null)}>
         <p>請確認要加入的實際地點；尚未變更行程。</p>
         {assistantChoice.places.map((place) => <button key={place.source} onClick={() => void attempt(async () => {
