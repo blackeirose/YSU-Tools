@@ -1,6 +1,18 @@
 # Travel Planner UX / Gemini upgrade — Full Gate
 
-Status: IN PROGRESS. No candidate or production release from this branch is accepted yet.
+Status: ISOLATED PREVIEW READY FOR SYNTHETIC LOCAL TRIAL; FULL GATE NOT PASS. Production remains the 2026-10-02 release.
+
+## Latest source-matched checkpoint — 2026-10-03
+
+- Product runtime source: `blackeirose/YSU-Tools` Draft [PR #3](https://github.com/blackeirose/YSU-Tools/pull/3), remote commit `42cf4cbe95cfdcc40f9cec2322f9afa9a8763c66` (same runtime tree as local `f04b2d0`). [CI 37162263860](https://github.com/blackeirose/YSU-Tools/actions/runs/37162263860) PASS: 79 unit tests and source-matched Firebase emulator/browser integration.
+- Publisher source: `blackeirose/social-capture-tool` Draft [PR #23](https://github.com/blackeirose/social-capture-tool/pull/23), remote commit `f438e47de8c83de192ffaef609d19ae4189a3875` (same publisher tree as local `d4f71c2`). [CI 37162294923](https://github.com/blackeirose/social-capture-tool/actions/runs/37162294923) PASS: merged rules and 75 publisher tests.
+- Complete-host [isolated Preview](https://6ac1921df800e63bc4e905cb--ycsu-tools-router.netlify.app/travel-planner/): deploy `6ac1921df800e63bc4e905cb`, `ready`, `deploy-preview`, 326 static files and nine functions (six retained sibling functions plus three Planner-only functions). Canonical remote `validate` PASS for source hashes, protected sibling bytes, routes, schedules, traffic and scoped PWA. Anonymous Planner AI/background routes return 401 after the function loads. This proves loading and the unauthenticated boundary, not a Gemini call.
+- Preview-only Firebase rules for `preview-v1` were additively published and read back at SHA256 `af4473b0dbc319bdb4a703a89c3e2e5714c5991d581609f7f68227188c71f470`. The exact Preview hostname alone was added to Firebase Authorized Domains. Production `v1` and sibling permissions were not changed. The production Netlify deploy was re-read after Preview validation as `6ac0989e1e8fabf48ee75360`.
+- In the current Preview, synthetic local Tokyo opened at a direct deep URL and survived refresh. A 390×844 browser viewport moved the 1/7 item to 1/8, showed destination-day feedback, undid it and retained the original item after refresh. At 1440×900, the day board and two ordered markers appeared; document width 1425 equaled client width 1425. Local mode explicitly states it does not sync across devices. These checks do not establish real cloud sync.
+- Independent reviewers `/root/review_travel_risks` and `/root/review_upgrade_risks` separately reviewed the R7 denied-write retry and self-contained Function packaging respectively, then marked their **source scopes** PASS/no remaining P1/P2. They did not approve the overall Full Gate or a live authenticated AI result.
+- Google popup sign-in on this Preview did not complete in the TOWER in-app browser or Chrome attempt; no credential extraction or TLS bypass was used. Owner's earlier Windows Chrome certificate error is a separate observed condition, with root cause unproven. Real Preview Owner cloud CRUD, two independent browser contexts, real Gemini text/audio/vision, durable generated background and cross-device image readback remain UNVERIFIED. Actual paid upgrade API calls: zero confirmed; actual charges/credit offsets unknown.
+
+The older F0/F1 local checkpoint below is retained as development history. Where it says Preview, emulator CI or rule application was still open, this latest checkpoint supersedes that status. Production release is gated on the remaining real integration and Full Gate checks; do not promote this synthetic Preview.
 
 ## F0: verified last known good and protected state
 
