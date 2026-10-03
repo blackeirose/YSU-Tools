@@ -54,6 +54,7 @@ test("configured Preview local mode survives a deep-link reload and clears on si
     await expect(page.getByRole("heading", { name: "東京 · 合成示範" })).toBeVisible();
     await page.reload();
     await expect(page.getByRole("heading", { name: "東京 · 合成示範" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "離開本機模式" })).toBeEnabled();
     await page.getByRole("button", { name: "離開本機模式", exact: true }).click();
     const backupDownload = page.waitForEvent("download");
     await page.getByRole("dialog").getByRole("button", { name: "下載本機備份" }).click();

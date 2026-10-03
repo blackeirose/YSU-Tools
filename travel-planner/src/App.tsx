@@ -882,7 +882,7 @@ export default function App() {
               登出
             </button>
           ) : demo && configured ? (
-            <button onClick={() => sexit(true)}>離開本機模式</button>
+            <button disabled={!store || loading} onClick={() => sexit(true)}>離開本機模式</button>
           ) : configured ? (
             <button onClick={() => slo(true)}>私人登入</button>
           ) : (
@@ -2011,13 +2011,13 @@ export default function App() {
           </a>
         </Modal>
       )}
-      {localExitOpen && demo && configured && (
+      {localExitOpen && demo && configured && store && !loading && (
         <Modal title="離開本機模式" onClose={() => sexit(false)}>
           <p>離開會清除此瀏覽器的本機旅程。若要保留資料，請先下載 JSON 備份。</p>
           <button onClick={() => download("travel-planner-local-backup.json", JSON.stringify({
             schemaVersion: 1,
             exportedAt: new Date().toISOString(),
-            records: store?.snapshot.records ?? [],
+            records: store.snapshot.records,
           }, null, 2), "application/json")}>下載本機備份</button>
           <button className="danger" onClick={() => void attempt(async () => {
             await signOutNow();
