@@ -14,8 +14,8 @@ if (env.VITE_USE_EMULATORS === "true" || env.VITE_FIREBASE_NAMESPACE !== "v1")
 for (const key of ["API_KEY", "AUTH_DOMAIN", "PROJECT_ID", "APP_ID"])
   if (!env["VITE_FIREBASE_" + key])
     throw new Error("Missing Firebase setting: " + key);
-if (env.VITE_AI_ENDPOINT)
-  throw new Error("AI remains disabled for this owner trial");
+if (env.VITE_AI_ENDPOINT !== "/travel-planner/api/ai")
+  throw new Error("Production requires the exact reviewed Planner-only AI route");
 for (const args of [
   ["node_modules/typescript/bin/tsc", "-b"],
   ["node_modules/vite/bin/vite.js", "build"],
@@ -28,7 +28,7 @@ writeFileSync("dist/version.json", JSON.stringify({
   mode: "production",
   namespace: "v1",
   syntheticOnly: false,
-  aiEnabled: false,
+  aiEnabled: true,
   lockHash: createHash("sha256").update(readFileSync("pnpm-lock.yaml")).digest("hex"),
 }, null, 2));
 execFileSync(process.execPath, ["scripts/build-sw.mjs"], { stdio: "inherit", env });

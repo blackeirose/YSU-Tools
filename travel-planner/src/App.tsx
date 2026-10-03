@@ -9,7 +9,6 @@ import {
   watchAuth,
   storageScope,
   previewCloud,
-  namespace,
   login,
   logout,
   cloudRemote,
@@ -21,6 +20,7 @@ import {
   blankPlace,
   blankItem,
   days,
+  dayCity,
   localToday,
   ordered,
   parseMaps,
@@ -28,6 +28,9 @@ import {
   mapsPlace,
   navigation,
   delayFlexible,
+  overlaps,
+  shrinkTripPlan,
+  effectiveItem,
   otherZone,
   instant,
   validateImport,
@@ -42,6 +45,14 @@ import { demos } from "./demo";
 import { Modal, TripForm, PlaceForm, ItemForm, TaskForm } from "./Forms";
 import type { ReminderDraft } from "./Forms";
 import { TravelMap } from "./Map";
+import { PlaceSearch } from "./PlaceSearch";
+import { ImportFlow } from "./ImportFlow";
+import { TravelerAssistant } from "./TravelerAssistant";
+import { TripBackground } from "./TripBackground";
+import { assistantActionAlreadyApplied, assistantItemId } from "./assistant-actions";
+import type { AssistantAction } from "./server/gemini";
+import { fillPlaceFromPhoton, searchPhoton } from "./place-search";
+import type { PhotonPlace } from "./place-search";
 import "./style.css";
 type Tab = "today" | "map" | "candidates" | "tasks";
 type Editor =
@@ -74,6 +85,10 @@ function message(e: unknown) {
   }
   return e instanceof Error ? e.message : String(e);
 }
+const timezoneChoices = (() => {
+  try { return ["UTC", ...Intl.supportedValuesOf("timeZone")]; }
+  catch { return ["UTC", "Asia/Tokyo", "Pacific/Honolulu", "America/Los_Angeles"]; }
+})();
 export default function App() {
   const localModeKey = "ysu-travel-planner-local-mode-v1";
   const resumeLocalMode = () => {
@@ -88,6 +103,11 @@ export default function App() {
     [day, sy] = useState(""),
     [tab, sb] = useState<Tab>("today"),
     [multi, sm] = useState(true),
+    [viewMode, sview] = useState<"view" | "edit">("view"),
+    [mapVisible, smapVisible] = useState(() => {
+      try { return localStorage.getItem("travel-planner-map-visible") !== "false"; }
+      catch { return true; }
+    }),
     [selected, si] = useState<string | null>(null),
     [editor, se] = useState<Editor>(null),
     [notice, sn] = useState(""),
@@ -102,8 +122,11 @@ export default function App() {
     [ratio, sz] = useState(43),
     [archived, sh] = useState(false),
     [imported, simp] = useState<RecordData[] | null>(null),
+    [importFlow, sif] = useState(false),
     [reminders, srem] = useState(false),
     [explore, sx] = useState(false),
+    [assistantOpen, sas] = useState(false),
+    [assistantChoice, sacChoice] = useState<{ action: AssistantAction; requestId: string; places: PhotonPlace[] } | null>(null),
     [help, shelp] = useState(false),
     [loginOpen, slo] = useState(false),
     [loginError, sle] = useState(""),
@@ -114,6 +137,8 @@ export default function App() {
     [email, sem] = useState(""),
     [password, spw] = useState(""),
     [aiQuery, saq] = useState(""),
+    [aiArea, saai] = useState(""),
+    [aiAreaEdited, saaiEdited] = useState(false),
     [aiCategory, sac] = useState(""),
     [budget, sbudget] = useState(""),
     [walk, swalk] = useState(""),
@@ -123,7 +148,8 @@ export default function App() {
   const file = useRef<HTMLInputElement>(null),
     activeStore = useRef<PlannerStore | null>(null),
     recovery = useRef(new Map<string, Snapshot>()),
-    ack = useRef(new Set<string>());
+    ack = useRef(new Set<string>()),
+    assistantDone = useRef(new Map<string, number>());
   const attempt = async (fn: () => Promise<unknown>, success?: string): Promise<boolean> => {
     ser("");
     try {
@@ -238,17 +264,21 @@ export default function App() {
   const places = records.filter(
     (r) => r.kind === "place" && r.tripId === trip?.id,
   ) as Place[];
-  const items = records.filter(
+  const rawItems = records.filter(
     (r) => r.kind === "item" && r.tripId === trip?.id,
   ) as Item[];
+  const items = trip ? rawItems.map((item) => effectiveItem(trip, item)) : rawItems;
+  const projectedRecords = trip ? records.map((record) => record.kind === "item" && record.tripId === trip.id
+    ? effectiveItem(trip, record) : record) : records;
   const tasks = records.filter(
     (r) => r.kind === "task" && r.tripId === trip?.id,
   ) as Task[];
   const dateList = trip ? days(trip) : [];
+  const overlapByItem = overlaps(items);
   const outsideItems = trip
-    ? items.filter((i) => i.day && (i.day < trip.start || i.day > trip.end))
+    ? rawItems.filter((i) => i.day && (i.day < trip.start || i.day > trip.end) && !(trip.detachedItemIds ?? []).includes(i.id))
     : [];
-  const today = trip ? localToday(trip.timezone) : "";
+  const today = trip ? (dateList.find((date) => localToday(dayCity(trip, date).timezone) === date) ?? "") : "";
   const activeDay = dateList.includes(day)
     ? day
     : route && trip && route[1] === trip.id && dateList.includes(route[2])
@@ -256,6 +286,14 @@ export default function App() {
       : dateList.includes(today)
         ? today
         : (dateList[0] ?? "");
+  useEffect(() => { saaiEdited(false); saai(""); }, [trip?.id]);
+  useEffect(() => {
+    if (!aiAreaEdited && trip) saai(dayCity(trip, activeDay).name || trip.cities);
+  }, [trip?.id, trip?.dayCities, trip?.cities, activeDay, aiAreaEdited]);
+  useEffect(() => {
+    try { localStorage.setItem("travel-planner-map-visible", String(mapVisible)); }
+    catch { /* storage may be unavailable */ }
+  }, [mapVisible]);
   useEffect(() => {
     if (trip && activeDay)
       window.history.replaceState(
@@ -366,6 +404,12 @@ export default function App() {
     ]);
     sn(d ? "已加入當日行程" : "已存成候選");
   }
+  async function addLocated(found: PhotonPlace, d: string | null) {
+    if (!trip || !store) throw new Error("請先選擇旅程");
+    const place = fillPlaceFromPhoton(blankPlace(store.owner, trip.id, found.name), found);
+    await edit("搜尋地點並安排", [place, blankItem(store.owner, trip, place.id, d, maxOrder(d))]);
+    sn(d ? `已將 ${found.name} 加入 ${d}；地圖已同步。` : `已將 ${found.name} 加入候選。`);
+  }
   async function move(i: Item, d: string, index?: number) {
     if (d === i.day && index === undefined && i.status !== "candidate") {
       sn("這項安排已在所選日期。");
@@ -380,6 +424,15 @@ export default function App() {
     );
     if (d !== i.day) sy(d);
     sn(d !== i.day ? `已移到 ${d}；可復原。` : "排序已更新；可復原。");
+  }
+  async function delayAfter(i: Item) {
+    const result = delayFlexible(items.filter((x) => x.day === i.day), i.order);
+    if (result.conflicts.length)
+      throw new Error(result.conflicts.map((conflict) => conflict.replace(/([0-9a-f-]{36})/g,
+        (id) => pFor(items.find((row) => row.id === id)!)?.name ?? id)).join("；") + "。尚未套用延後。");
+    if (!result.updates.length) { sn("後續沒有可延後的彈性時間"); return; }
+    await edit("後續彈性行程延後 30 分鐘", result.updates);
+    sn("已延後 30 分鐘；固定預約不變");
   }
   async function reorder(i: Item, delta: number) {
     if (!i.day) return;
@@ -435,20 +488,13 @@ export default function App() {
   }
   async function saveTrip(t: Trip) {
     const previous = records.find((record) => record.id === t.id);
-    if (configured && !demo && namespace === "v1" && previous?.kind === "trip" &&
-      (t.start > previous.start || t.end < previous.end))
-      throw new Error("正式雲端版目前無法縮短旅程日期；請先保留原日期。此限制可避免舊裝置將安排留在範圍外。");
-    const outside = records.filter(
-      (i) =>
-        i.kind === "item" &&
-        i.tripId === t.id &&
-        i.day &&
-        (i.day < t.start || i.day > t.end),
-    );
-    if (outside.length)
-      throw new Error("新日期範圍會排除既有安排；請先移動這些項目。");
-    await edit("儲存旅程", [t]);
+    if (previous?.kind === "trip" && (t.start > previous.start || t.end < previous.end) && !store?.isRemoteReady())
+      throw new Error("請等雲端旅程載入完成後再縮短日期；草稿與既有安排仍保留。");
+    const planned = previous?.kind === "trip" ? shrinkTripPlan(previous, t, rawItems)
+      : { trip: { ...t, backgroundRequested: true }, items: [], affected: 0 };
+    await edit("儲存旅程與待定安排", [planned.trip, ...planned.items]);
     chooseTrip(t.id);
+    sn(planned.affected ? `已更新日期；${planned.affected} 項安排移入待定。原預約與截止提醒未更改，請確認是否改期；可復原。` : "旅程日期與城市已更新。");
   }
   async function saveItem(i: Item, before: number | null) {
     validateSchedule(i);
@@ -522,7 +568,7 @@ export default function App() {
   const reminderErrors: string[] = [];
   try {
     if (trip)
-      reminderList = dueReminders(records, trip, Temporal.Now.instant(), (e) =>
+      reminderList = dueReminders(projectedRecords, trip, Temporal.Now.instant(), (e) =>
         reminderErrors.push(message(e)),
       );
   } catch {
@@ -533,7 +579,7 @@ export default function App() {
     const tick = () => {
       try {
         for (const r of dueReminders(
-          records,
+          projectedRecords,
           trip,
           Temporal.Now.instant(),
           () => {},
@@ -564,16 +610,19 @@ export default function App() {
       sbusy(true);
       try {
         const token = await currentUser.getIdToken();
-        const response = await fetch(import.meta.env.VITE_AI_ENDPOINT, {
+        const response = await fetch(import.meta.env.VITE_AI_ENDPOINT || "/travel-planner/api/ai", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
+            mode: "explore",
+            requestId: crypto.randomUUID(),
             tripId: trip.id,
             query: aiQuery,
-            area: city || trip.cities,
+            selectedDay: activeDay,
+            city: aiArea || currentCity?.name || trip.cities,
             category: aiCategory,
             budget,
             walkingRange: walk,
@@ -587,6 +636,70 @@ export default function App() {
         sbusy(false);
       }
     });
+  }
+  const actionFingerprint = (action: AssistantAction) => JSON.stringify({ trip: trip?.id, kind: action.kind,
+    name: action.name?.trim().toLocaleLowerCase(), itemId: action.itemId, day: action.day, time: action.time, period: action.period });
+  async function applyAssistantPlace(found: PhotonPlace, action: AssistantAction, requestId: string) {
+    if (!trip || !store) throw new Error("請先選擇旅程");
+    const fingerprint = actionFingerprint(action);
+    const stableId = await assistantItemId(fingerprint, found.lat, found.lng);
+    if (records.some((record) => record.id === stableId))
+      return "這筆旅伴指令先前已處理，未重複新增；如需再次安排可手動新增。";
+    if ((assistantDone.current.get(fingerprint) ?? 0) > Date.now() - 120000)
+      return "這筆指令剛執行過，未重複新增；可使用復原。";
+    const targetDay = action.day ?? null;
+    if (targetDay && !dateList.includes(targetDay)) throw new Error("指令日期不在旅程內；請先確認日期");
+    if (items.some((existing) => existing.day === targetDay && existing.time === (action.time ?? null) &&
+      pFor(existing)?.lat === found.lat && pFor(existing)?.lng === found.lng))
+      return "這個地點與時刻已在行程中，未重複新增。";
+    const place = fillPlaceFromPhoton(blankPlace(store.owner, trip.id, found.name), found);
+    const item = { ...blankItem(store.owner, trip, place.id, targetDay, maxOrder(targetDay)), id: stableId,
+      ...(action.time ? { timeMode: "flexible" as const, time: action.time } : {}),
+      ...(action.period ? { period: action.period } : {}),
+      departureZone: targetDay ? dayCity(trip, targetDay).timezone : trip.timezone };
+    await edit(`旅伴新增 ${requestId}`, [place, item]);
+    assistantDone.current.set(fingerprint, Date.now());
+    sacChoice(null); if (targetDay) sy(targetDay);
+    si(item.id);
+    sn(`旅伴已加入 ${targetDay ?? "待定"}：${found.name}；可復原。`);
+    return `已加入 ${targetDay ?? "待定"}：${found.name}。地點來自 ${found.source.split(" · ")[0]}；時間是可調整安排，並非已訂位。`;
+  }
+  async function executeAssistant(action: AssistantAction, requestId: string): Promise<string> {
+    if (!trip || !store) throw new Error("請先選擇旅程");
+    if (["clarify", "draft", "suggest"].includes(action.kind)) return action.message;
+    if (action.kind === "add") {
+      if (!action.name?.trim()) throw new Error("尚未取得清楚地點名稱，請補充一個名稱");
+      const found = await searchPhoton(action.name, dayCity(trip, action.day ?? activeDay).name);
+      const exact = found.filter((place) => place.name.toLocaleLowerCase() === action.name!.trim().toLocaleLowerCase());
+      if (exact.length === 1) return applyAssistantPlace(exact[0], action, requestId);
+      if (!found.length) throw new Error("找不到可核對的位置，請用地點搜尋手動選擇；指令與行程未變更");
+      sacChoice({ action, requestId, places: found });
+      return "找到多個可能地點。請選擇正確位置後才會加入；原行程尚未變更。";
+    }
+    if (action.kind === "undo") {
+      if (!store.snapshot.undo) return "目前沒有可安全復原的操作。";
+      await store.undo(); sn("已復原最近一次操作"); return "已復原最近一次操作。";
+    }
+    const item = items.find((row) => row.id === action.itemId);
+    if (!item) throw new Error("找不到要修改的行程；請先選取卡片再重試");
+    const fingerprint = actionFingerprint(action);
+    if (assistantActionAlreadyApplied(item, action))
+      return "這項變更已在目前行程中，未重複寫入；原復原紀錄仍保留。";
+    if (action.kind === "move") {
+      if (!action.day || !dateList.includes(action.day)) throw new Error("請指定旅程內的目的日期");
+      await move(item, action.day);
+    } else if (action.kind === "candidate") {
+      await edit(`旅伴移到待定 ${requestId}`, [{ ...item, status: "candidate" }]);
+      sn("已移到待定；原日期與預約資訊仍保留，可復原。");
+    } else if (action.kind === "edit_time") {
+      if (item.timeMode === "fixed") throw new Error("固定預約不可由旅伴自動改時，請手動確認真實預約後編輯");
+      if (!action.time) throw new Error("請提供明確時刻");
+      await edit(`旅伴改時間 ${requestId}`, [{ ...item, timeMode: "flexible", time: action.time,
+        ...(action.period ? { period: action.period } : {}) }]);
+      sn("時間已更新為可調整安排；可復原。");
+    } else throw new Error("這類指令尚需手動確認");
+    assistantDone.current.set(fingerprint, Date.now());
+    return action.message;
   }
   async function saveSuggestion(s: Suggestion, d: string | null) {
     const p = {
@@ -638,6 +751,7 @@ export default function App() {
   );
   const selectedItem = items.find((i) => i.id === selected),
     selectedPlace = selectedItem ? pFor(selectedItem) : undefined;
+  const currentCity = trip ? dayCity(trip, activeDay) : null;
   const todayItems = ordered(items, activeDay).filter(
     (i) => i.status === "planned",
   );
@@ -656,6 +770,9 @@ export default function App() {
           }
         })
       : undefined;
+  const nextChoices = next
+    ? [next, ...todayItems.filter((item) => item.id !== next.id && overlapByItem.get(next.id)?.includes(item.id))]
+    : [];
   const cards = (i: Item, index: number, candidate = false) => {
     const p = pFor(i);
     if (!p) return null;
@@ -664,9 +781,8 @@ export default function App() {
         id={`item-${i.id}`}
         key={i.id}
         className={`item ${selected === i.id ? "selected" : ""} ${i.status}`}
-        draggable={!candidate}
         onDragStart={(e) => {
-          if ((e.target as HTMLElement).closest("select,input,textarea,a")) {
+          if (!(e.target as HTMLElement).closest(".drag-handle")) {
             e.preventDefault();
             return;
           }
@@ -698,9 +814,15 @@ export default function App() {
           {!candidate && <span className="ordinal">{index + 1}</span>}
           {p.name}
         </button>
+        {i.day && <p className="item-date">安排日期：<strong>{i.day}</strong></p>}
+        {i.candidateOrigin && <p className="item-date">原安排：{i.candidateOrigin.day} · {i.candidateOrigin.reason === "trip-range" ? "因旅程日期縮短移入待定" : "待定"}</p>}
+        {(overlapByItem.get(i.id)?.length ?? 0) > 0 && <p className={`overlap-note ${i.timeMode === "fixed" ? "fixed" : ""}`}>
+          與 {overlapByItem.get(i.id)!.map((id) => pFor(items.find((row) => row.id === id))?.name ?? "其他安排").join("、")} 時間重疊；可保留為備案。
+        </p>}
         {!candidate && (
           <span
             className="drag-handle desktop-only"
+            draggable
             aria-label={`拖曳${p.name}`}
             title="拖曳排序或移到其他日期"
           >↕</span>
@@ -811,33 +933,7 @@ export default function App() {
                 跳過
               </button>
               <button
-                onClick={() =>
-                  void attempt(async () => {
-                    const result = delayFlexible(
-                      items.filter((x) => x.day === i.day),
-                      i.order,
-                    );
-                    if (result.conflicts.length)
-                      throw new Error(
-                        result.conflicts
-                          .map((c) =>
-                            c.replace(
-                              /([0-9a-f-]{36})/g,
-                              (id) =>
-                                pFor(items.find((x) => x.id === id)!)?.name ??
-                                id,
-                            ),
-                          )
-                          .join("；") + "。尚未套用延後。",
-                      );
-                    if (!result.updates.length) {
-                      sn("後續沒有可延後的彈性時間");
-                      return;
-                    }
-                    await edit("後續彈性行程延後 30 分鐘", result.updates);
-                    sn("已延後 30 分鐘；固定預約不變");
-                  })
-                }
+                onClick={() => void attempt(() => delayAfter(i))}
               >
                 後續彈性延後 30 分
               </button>
@@ -895,7 +991,10 @@ export default function App() {
           )}
         </div>
       </header>
-      <main>
+      <main className={viewMode === "view" ? "view-mode" : "edit-mode"}>
+        {trip && <TripBackground trip={trip} enabled={!demo && !!user && !!auth?.currentUser}
+          cloudReady={!!store?.isRemoteReady() && !store.snapshot.pending.length}
+          token={async () => { if (!auth?.currentUser) throw new Error("登入已失效"); return auth.currentUser.getIdToken(); }} />}
         {recovery.current.size > 0 && (
           <div className="error banner" role="alert">
             登入狀態已變更。有未同步修改暫存在此分頁，請先不要重新整理或關閉；重新登入原帳號即可復原。其他帳號無法存取這份暫存。
@@ -906,7 +1005,7 @@ export default function App() {
                     "travel-planner-session-recovery.json",
                     JSON.stringify(
                       {
-                        schemaVersion: 1,
+                        schemaVersion: 2,
                         recovery: recovery.current.get(user),
                       },
                       null,
@@ -927,19 +1026,12 @@ export default function App() {
           </p>
         )}
         <datalist id="zones">
-          {[
-            "Asia/Tokyo",
-            "America/Los_Angeles",
-            "Pacific/Honolulu",
-            "Asia/Taipei",
-            "Europe/London",
-            "America/New_York",
-          ].map((z) => (
+          {timezoneChoices.map((z) => (
             <option key={z}>{z}</option>
           ))}
         </datalist>
         {notice && (
-          <div className="notice" role="status">
+          <div className="notice status-toast" role="status">
             {notice}
             <button onClick={() => sn("")} aria-label="關閉訊息">
               ✕
@@ -1039,7 +1131,8 @@ export default function App() {
           </section>
         ) : (
           <>
-            <section className="trip-toolbar">
+            <div className="trip-overview">
+            <section className={`trip-toolbar ${trip ? "has-trip" : ""}`}>
               <label>
                 旅程
                 <select
@@ -1062,6 +1155,7 @@ export default function App() {
               >
                 新增旅程
               </button>
+              <button onClick={() => sif(true)}>從檔案建立旅程</button>
               <button
                 onClick={() =>
                   void attempt(
@@ -1084,8 +1178,7 @@ export default function App() {
                 看封存
               </label>
             </section>
-            {trip ? (
-              <>
+            {trip && (
                 <section className="trip-summary">
                   <div>
                     <h2>{trip.name}</h2>
@@ -1099,12 +1192,15 @@ export default function App() {
                       </p>
                     )}
                   </div>
-                  <details
-                    className="trip-operations"
-                    open={window.matchMedia("(min-width:701px)").matches}
-                  >
+                   <details className="trip-operations">
                     <summary>旅程操作</summary>
                     <div className="actions">
+                      <div className="mobile-trip-create">
+                        <button className="primary" onClick={() => se({ type: "trip", value: blankTrip(store.owner) })}>新增旅程</button>
+                        <button onClick={() => sif(true)}>從檔案建立旅程</button>
+                        <button onClick={() => void attempt(() => edit("載入合成示範", demos(store.owner)), "已加入兩份合成示範")}>載入示範</button>
+                        <label className="check"><input type="checkbox" checked={archived} onChange={(event) => { sh(event.target.checked); st(null); }} />看封存</label>
+                      </div>
                       <button onClick={() => se({ type: "trip", value: trip })}>
                         編輯旅程
                       </button>
@@ -1153,7 +1249,7 @@ export default function App() {
                                 "travel-planner.json",
                                 JSON.stringify(
                                   {
-                                    schemaVersion: 1,
+                                    schemaVersion: 2,
                                     exportedAt: new Date().toISOString(),
                                     records: records.filter(
                                       (r) =>
@@ -1174,12 +1270,15 @@ export default function App() {
                           <button onClick={() => file.current?.click()}>
                             JSON 匯入
                           </button>
+                          <button onClick={() => sif(true)}>
+                            CSV／XLSX／PDF／圖片匯入
+                          </button>
                           <button
                             onClick={() => {
                               try {
                                 download(
                                   "travel-planner.ics",
-                                  calendar(records, trip),
+                                  calendar(projectedRecords, trip),
                                   "text/calendar",
                                 );
                                 sn(
@@ -1200,6 +1299,10 @@ export default function App() {
                     </div>
                   </details>
                 </section>
+            )}
+            </div>
+            {trip ? (
+              <>
                 <input
                   hidden
                   ref={file}
@@ -1228,13 +1331,14 @@ export default function App() {
                       }}
                     >
                       {dateList.map((d) => (
-                        <option key={d}>
+                        <option key={d} value={d}>
                           {d}
                           {d === today ? " · 今天" : ""}
                         </option>
                       ))}
                     </select>
                   </label>
+                  <span className="active-city">目前 {activeDay} · {currentCity?.assigned ? currentCity.name : "城市未指定"} · {currentCity?.timezone}</span>
                   <button
                     onClick={() =>
                       sy(dateList.includes(today) ? today : dateList[0])
@@ -1250,15 +1354,25 @@ export default function App() {
                       多日總覽
                     </button>
                   </div>
-                  <button onClick={() => srem(true)}>提醒中心</button>
-                  <button onClick={() => sx(true)}>探索地點</button>
+                  <div className="desktop-only mode-switch" aria-label="查看或編輯模式">
+                    <button aria-pressed={viewMode === "view"} onClick={() => sview("view")}>查看</button>
+                    <button aria-pressed={viewMode === "edit"} onClick={() => sview("edit")}>編輯</button>
+                  </div>
+                  <button className="desktop-only-button" aria-expanded={mapVisible} onClick={() => smapVisible((value) => !value)}>{mapVisible ? "收合地圖" : "顯示地圖"}</button>
+                  <button className="desktop-only-button" aria-pressed={tab === "candidates"} onClick={() => sb(tab === "candidates" ? "today" : "candidates")}>候選 ({items.filter((item) => item.status === "candidate").length})</button>
+                  <button className="desktop-only-button" aria-pressed={tab === "tasks"} onClick={() => sb(tab === "tasks" ? "today" : "tasks")}>待辦</button>
+                  <button className="primary" disabled={demo || !user} onClick={() => sas(true)}>旅伴助手</button>
+                  <details className="menu toolbar-more"><summary>更多</summary><div className="actions">
+                    <button onClick={() => srem(true)}>提醒中心</button>
+                    <button onClick={() => sx(true)}>探索地點</button>
+                  </div></details>
                 </section>
                 {tab === "today" && (
                   <section className="next-stop">
                     <div>
                       <strong>
                         {next
-                          ? "下一站"
+                          ? nextChoices.length > 1 ? "下一站有多個可選安排" : "下一站"
                           : trip.demo
                             ? "示範日期行程"
                             : today === activeDay
@@ -1266,23 +1380,14 @@ export default function App() {
                               : "所選日期行程"}
                       </strong>
                       <span>
-                        {next ? pFor(next)?.name : "依自己的步調調整安排"}
+                        {nextChoices.length > 1 ? nextChoices.map((item) => pFor(item)?.name).filter(Boolean).join("／") : next ? pFor(next)?.name : "依自己的步調調整安排"}
                       </span>
                     </div>
-                    {next && pFor(next) && (
-                      <a
-                        className="primary"
-                        target="_blank"
-                        rel="noreferrer"
-                        href={navigation(pFor(next)!)}
-                      >
-                        導航 ↗
-                      </a>
-                    )}
+                    {nextChoices.map((item) => pFor(item) && <a key={item.id} className="primary" target="_blank" rel="noreferrer" href={navigation(pFor(item)!)}>導航 {pFor(item)!.name} ↗</a>)}
                   </section>
                 )}
                 <div
-                  className="workspace"
+                  className={`workspace ${mapVisible ? "" : "no-map"}`}
                   style={{ "--map-size": `${ratio}%` } as React.CSSProperties}
                 >
                   <section
@@ -1314,9 +1419,12 @@ export default function App() {
                               }).format(new Date(`${d}T12:00:00Z`))}
                             </span>
                             <span>{d === today ? "今天" : ""}</span>
+                            <span className="day-city">{trip.dayCities?.[d]?.name ?? "城市未指定"}</span>
                           </button>
                           <QuickAdd
                             onAdd={(name) => attempt(() => addName(name, d))}
+                            cityHint={dayCity(trip, d).name}
+                            onPick={(found) => attempt(() => addLocated(found, d))}
                           />
                           {ordered(items, d).map((i, n) => cards(i, n))}
                           {!ordered(items, d).length && (
@@ -1347,7 +1455,7 @@ export default function App() {
                       </section>
                     )}
                   </section>
-                  {(tab === "today" || tab === "map") && (
+                  {(tab === "map" || (tab === "today" && mapVisible)) && (
                     <section
                       className={`map-panel ${tab !== "map" ? "mobile-hidden" : ""}`}
                     >
@@ -1376,6 +1484,7 @@ export default function App() {
                       </div>
                       <TravelMap
                         places={places}
+                        city={currentCity}
                         showDay={mapFilter === "all"}
                         items={mapItems}
                         selected={selected}
@@ -1444,6 +1553,8 @@ export default function App() {
                       )}
                       <QuickAdd
                         onAdd={(name) => attempt(() => addName(name, null))}
+                        cityHint={currentCity?.name ?? ""}
+                        onPick={(found) => attempt(() => addLocated(found, null))}
                       />
                       <div className="filters">
                         <label>
@@ -1549,6 +1660,11 @@ export default function App() {
                         固定活動、出發提醒屬旅途中；訂票、付款、準備事項屬行前。未查交通時，不判斷必須何時出發。
                       </p>
                       {tasks.map((t) => {
+                        const linkedItem = t.itemId ? items.find((item) => item.id === t.itemId) : undefined;
+                        const reservationMismatch = !!linkedItem && !!t.date && !!t.time && t.type !== "出發提醒" &&
+                          (linkedItem.status === "candidate" ||
+                            (t.type === "活動提醒" && !!linkedItem.day &&
+                              (linkedItem.day !== t.date || linkedItem.time !== t.time || linkedItem.departureZone !== t.timezone)));
                         let late = false,
                           soon = false;
                         try {
@@ -1600,10 +1716,16 @@ export default function App() {
                             {t.itemId && (
                               <p>
                                 連結：
-                                {pFor(items.find((i) => i.id === t.itemId)!)
+                                {pFor(linkedItem)
                                   ?.name ?? "安排已刪除"}
                               </p>
                             )}
+                            {reservationMismatch && <div className="reservation-warning" role="status">
+                              <strong>原預約與目前安排不同，請確認改期或取消。</strong>
+                              <p>原日期與提醒仍保留；移入待定不代表店家已更改預約。處理狀態：{t.reservationResolution ?? "待確認改期"}。</p>
+                              <div className="actions">{(["保留原預約", "已處理", "已取消"] as const).map((choice) => <button key={choice} disabled={t.reservationResolution === choice} onClick={() => void attempt(() => edit("記錄預約處理結果", [{ ...t, reservationResolution: choice }]))}>{choice}</button>)}</div>
+                            </div>}
+                            {linkedItem?.status === "candidate" && t.type === "出發提醒" && <p className="notice">安排目前待定；一般出發提醒已暫停。</p>}
                             <div className="actions">
                               <button
                                 onClick={() => se({ type: "task", value: t })}
@@ -1730,9 +1852,43 @@ export default function App() {
           </>
         )}
       </main>
+      {viewMode === "view" && selectedItem && selectedPlace && trip && (
+        <Modal title={selectedPlace.name} onClose={() => si(null)} wide>
+          <p className="detail-date">{selectedItem.day ?? "待定"} · {itemTime(selectedItem)} · {selectedItem.status === "candidate" ? "候選" : selectedItem.status === "done" ? "完成" : selectedItem.status === "skipped" ? "跳過" : "已排定"}</p>
+          {selectedPlace.originalName && <p>{selectedPlace.originalName}</p>}
+          <p>{selectedPlace.address || selectedPlace.city || "地址待補充"}</p>
+          {selectedItem.candidateOrigin && <p className="notice">原安排 {selectedItem.candidateOrigin.day}；因縮短旅程移入待定。原時間與內容仍保留。</p>}
+          {selectedItem.notes && <p>{selectedItem.notes}</p>}
+          {selectedPlace.notes && <p>{selectedPlace.notes}</p>}
+          {(overlapByItem.get(selectedItem.id)?.length ?? 0) > 0 && <p className="overlap-note">與其他安排時間重疊，可保留為備案。</p>}
+          <div className="actions">
+            <a className="primary" href={navigation(selectedPlace)} target="_blank" rel="noreferrer">導航 ↗</a>
+            <a href={mapsPlace(selectedPlace)} target="_blank" rel="noreferrer">地圖 ↗</a>
+            <button onClick={() => { se({ type: "item", value: selectedItem }); si(null); }}>編輯安排</button>
+            <button onClick={() => { se({ type: "place", value: selectedPlace }); si(null); }}>編輯地點</button>
+            {selectedItem.day && <button onClick={() => void attempt(() => delayAfter(selectedItem))}>後續彈性延後 30 分</button>}
+            {replace && selectedItem.status === "candidate" && <button className="primary" onClick={() => void attempt(async () => { await replaceItem(selectedItem, replace); si(null); })}>替換「{pFor(replace)?.name}」</button>}
+            {selectedItem.status !== "candidate" && <button onClick={() => { sr(selectedItem); si(null); sb("candidates"); }}>用候選替換</button>}
+            {selectedItem.status !== "candidate" && <button onClick={() => void attempt(async () => { await edit("改成候選", [{ ...selectedItem, status: "candidate", day: null }]); si(null); })}>移到待定</button>}
+            {selectedItem.status !== "candidate" && <button onClick={() => void attempt(async () => { await edit("標記完成", [{ ...selectedItem, status: "done" }]); si(null); })}>完成</button>}
+            {selectedItem.status !== "candidate" && <button onClick={() => void attempt(async () => { await edit("跳過安排", [{ ...selectedItem, status: "skipped" }]); si(null); })}>跳過</button>}
+          </div>
+          <label className="detail-move">移到某日 · 目前 {selectedItem.day ?? "待定"}
+            <select aria-label={`${selectedPlace.name}詳細移到某日`} value="" onChange={(event) => {
+              if (event.target.value) void attempt(async () => { await move(selectedItem, event.target.value); si(null); });
+            }}>
+              <option value="">選擇日期</option>
+              {dateList.map((date) => <option key={date} value={date}>{date}</option>)}
+            </select>
+          </label>
+          {dateList.length === 1 && <p className="hint">目前只有一天，可先延長旅程。</p>}
+          <button onClick={() => si(null)}>關閉詳細資訊</button>
+        </Modal>
+      )}
       {editor?.type === "trip" && (
         <TripForm
           trip={editor.value}
+          items={items}
           onClose={() => se(null)}
           onSave={saveTrip}
         />
@@ -1797,6 +1953,14 @@ export default function App() {
           </button>
         </Modal>
       )}
+      {importFlow && store && <ImportFlow owner={store.owner} currentTrip={trip} records={records}
+        token={!demo && auth?.currentUser ? () => auth!.currentUser!.getIdToken() : undefined}
+        onClose={() => sif(false)} onApply={async (updates) => {
+          await edit("檔案匯入", updates);
+          const created = updates.find((row): row is Trip => row.kind === "trip");
+          if (created) chooseTrip(created.id);
+          sn(`已匯入 ${updates.filter((row) => row.kind === "item").length} 項；請核對預約與未定位地點。`);
+        }} />}
       {reminders && trip && (
         <Modal title="提醒中心" onClose={() => srem(false)}>
           <p>
@@ -1808,7 +1972,7 @@ export default function App() {
               try {
                 download(
                   "travel-planner.ics",
-                  calendar(records, trip),
+                  calendar(projectedRecords, trip),
                   "text/calendar",
                 );
               } catch (e) {
@@ -1893,11 +2057,12 @@ export default function App() {
             <label>
               地區
               <input
-                value={city}
-                onChange={(e) => sc(e.target.value)}
-                placeholder={trip.cities}
+                value={aiArea}
+                onChange={(e) => { saai(e.target.value); saaiEdited(true); }}
+                placeholder="地區"
               />
             </label>
+            <button type="button" onClick={() => { saai(dayCity(trip, activeDay).name || trip.cities); saaiEdited(false); }}>依當日城市</button>
             <label>
               類別
               <input
@@ -1930,7 +2095,7 @@ export default function App() {
           <a
             target="_blank"
             rel="noreferrer"
-            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([city || trip.cities, aiQuery, aiCategory].join(" "))}`}
+            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([aiArea || trip.cities, aiQuery, aiCategory].join(" "))}`}
           >
             普通 Maps 搜尋 ↗
           </a>
@@ -1986,6 +2151,16 @@ export default function App() {
           ))}
         </Modal>
       )}
+      {assistantOpen && trip && user && !demo && <TravelerAssistant tripId={trip.id} selectedDay={activeDay}
+        city={currentCity?.name || trip.cities} selectedItem={selectedItem && pFor(selectedItem) ? { id: selectedItem.id, name: pFor(selectedItem)!.name } : undefined}
+        token={async () => { if (!auth?.currentUser) throw new Error("登入已失效"); return auth.currentUser.getIdToken(); }}
+        onAction={executeAssistant} onClose={() => sas(false)} />}
+      {assistantChoice && <Modal title="選擇地點" onClose={() => sacChoice(null)}>
+        <p>請確認要加入的實際地點；尚未變更行程。</p>
+        {assistantChoice.places.map((place) => <button key={place.source} onClick={() => void attempt(async () => {
+          await applyAssistantPlace(place, assistantChoice.action, assistantChoice.requestId);
+        })}>{place.name} · {place.city} · {place.address}</button>)}
+      </Modal>}
       {help && (
         <Modal title="使用與安裝說明" onClose={() => shelp(false)}>
           <p>
@@ -2022,7 +2197,7 @@ export default function App() {
         <Modal title="離開本機模式" onClose={() => sexit(false)}>
           <p>離開會清除此瀏覽器的本機旅程。若要保留資料，請先下載 JSON 備份。</p>
           <button onClick={() => download("travel-planner-local-backup.json", JSON.stringify({
-            schemaVersion: 1,
+            schemaVersion: 2,
             exportedAt: new Date().toISOString(),
             records: store.snapshot.records,
           }, null, 2), "application/json")}>下載本機備份</button>
@@ -2046,7 +2221,7 @@ export default function App() {
                 "travel-planner-recovery.json",
                 JSON.stringify(
                   {
-                    schemaVersion: 1,
+                    schemaVersion: 2,
                     exportedAt: new Date().toISOString(),
                     records: store.snapshot.records,
                     recovery: {
@@ -2145,10 +2320,14 @@ export default function App() {
     </>
   );
 }
-function QuickAdd({ onAdd }: { onAdd: (name: string) => Promise<boolean> }) {
+function QuickAdd({ onAdd, onPick, cityHint }: {
+  onAdd: (name: string) => Promise<boolean>;
+  onPick: (found: PhotonPlace) => Promise<boolean>;
+  cityHint: string;
+}) {
   const [name, sn] = useState(""),
     [busy, sb] = useState(false);
-  return (
+  return <>
     <form
       className="quick-add"
       onSubmit={async (e) => {
@@ -2172,5 +2351,10 @@ function QuickAdd({ onAdd }: { onAdd: (name: string) => Promise<boolean> }) {
         {busy ? "…" : "＋"}
       </button>
     </form>
-  );
+    <PlaceSearch query={name} cityHint={cityHint} onPick={(found) => {
+      if (busy) return;
+      sb(true);
+      void onPick(found).then((ok) => { if (ok) sn(""); }).finally(() => sb(false));
+    }} />
+  </>;
 }

@@ -1,5 +1,7 @@
 # Travel Planner V1 — 隔離試用交付
 
+> **New upgrade in progress, 2026-10-03:** `feature/travel-planner-ux-gemini-20261003` is an isolated UX/Gemini candidate. This file retains V1 release history below. For this new source, use [Full Gate](UPGRADE_GATE_2026-10-03.md) and [upgrade report](RELEASE_REPORT_2026-10-03.md). No 2026-10-03 upgrade Preview or production deploy has been made, and the local development URL is not a persistent Preview. The 2026-10-02 production deployment remains live. Do not use prior V1 Preview or emulator PASS as proof that Gemini, background images, import vision or the new cloud rules work.
+
 > **Current release, 2026-10-02 PDT:** [Travel Planner is now live at tools.ycsu.cc/travel-planner/](PRODUCTION_RELEASE_REPORT_2026-10-02.md), deploy `6ac0989e1e8fabf48ee75360`. Production cloud login/sync and physical iPhone remain unverified. The Preview-only and “no production deploy” statements below are historical checkpoints, not the current release state.
 
 **最新 R1–R9 修復版隔離 Preview 可用本機合成資料試用；此新 origin 的 Google 雲端登入尚未驗證／授權。沒有 production deploy。**

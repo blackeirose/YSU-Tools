@@ -227,7 +227,7 @@ describe("portable data", () => {
   it("rejects schema versions, duplicate IDs, foreign place references and out-of-range days", () => {
     const data = demos("a");
     expect(() =>
-      validateImport({ schemaVersion: 2, exportedAt: "now", records: data }),
+      validateImport({ schemaVersion: 3, exportedAt: "now", records: data }),
     ).toThrow();
     expect(() =>
       validateImport({

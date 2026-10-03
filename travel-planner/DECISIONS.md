@@ -1,5 +1,14 @@
 # Decisions
 
+## SUPERSEDING UPGRADE DECISIONS — 2026-10-03
+
+- This upgrade replaces the older blanket statement below that AI cannot modify an itinerary. The Owner now permits clear, single-item voice or text instructions to yield **typed actions**; the app validates ownership, record revision, date, fixed booking and Undo before applying them. Vague requests, large batches, imports and complete drafts need a preview/confirmation. AI never books, pays, sends messages or acts without the user's instruction.
+- The product stays at `/travel-planner/` on the existing Firebase Auth/Firestore architecture. Isolated feature work may be released once the **Full Gate** passes; the current production release is the last known good until then. No direct Planner-dist deployment, DNS change, sibling overwrite, Supabase in Planner or Tracker/MAIN update belongs to this upgrade.
+- Daily cities are optional additive fields on Trip. First-day confirmed city and location identify a trip background. Date shortening retains out-of-range items as detached candidates and preserves original scheduling/reservation metadata; expanding dates does not silently restore them.
+- Photon provides constrained external location lookup with debounce and source attribution. Public Nominatim is not used as unbounded autocomplete and Google Places data is not plotted on Leaflet.
+- Gemini text/vision and image generation run only through owner-scoped Planner functions, server-side credentials and pre-call quotas. A quota in counts is a conservative guard, not a proven US-dollar cutoff; pricing and actual Gateway route must be checked before paid Preview or production enablement. Durable backgrounds use Planner-only Blob keys and a two-panel adaptation of Owner Skill YSU-SKILL-021 v1.0.0. No generated result is claimed until a real call and storage/readback pass.
+- Source-matched emulator, authentic Preview, independent review and complete-host preservation are release gates. Local Chromium viewport tests or same-context tabs do not substitute for real dual-context cloud/offline verification or a physical iPhone.
+
 ## LOCKED — User instruction, 2026-10-02
 
 - New product lives in `blackeirose/YSU-Tools/travel-planner` on an isolated feature branch. Preserve every existing root/sibling file.

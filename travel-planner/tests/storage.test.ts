@@ -41,7 +41,7 @@ beforeAll(() => {
   });
 });
 describe("recoverable editing", () => {
-  it("production policy rejects Trip shrink and tombstone before queuing Undo", async () => {
+  it("production policy rejects Trip tombstone but permits a safe range Undo", async () => {
     const owner = crypto.randomUUID();
     const original = { ...blankTrip(owner), start: "2030-01-01", end: "2030-01-03" };
     let server: RecordData[] = [];
@@ -67,9 +67,10 @@ describe("recoverable editing", () => {
     const current = store.snapshot.records.find((r) => r.id === original.id) as typeof original;
     await store.edit("extend", [{ ...current, end: "2030-01-04" }]);
     await store.flush();
-    await expect(store.undo()).rejects.toThrow("不能縮短");
+    await store.undo();
+    await store.flush();
     expect(store.snapshot.pending).toHaveLength(0);
-    expect(server.find((r) => r.id === original.id)).toMatchObject({ end: "2030-01-04" });
+    expect(server.find((r) => r.id === original.id)).toMatchObject({ end: "2030-01-03" });
     await store.clear();
   });
   it("isolates a legacy policy-rejected pending Trip edit and continues unrelated sync", async () => {
@@ -86,7 +87,8 @@ describe("recoverable editing", () => {
         if (issue) throw new Error(issue);
       },
       async commit(op) {
-        if (productionTripViolation(op)) throw new ConflictError([], "policy");
+        if (op.changes.some((change) => change.before?.kind === "trip" && change.after.kind === "trip" &&
+          change.after.end < change.before.end && !change.after.detachedItemIds)) throw new ConflictError([], "policy");
         server = applyOperation(server, op);
       },
     };
@@ -464,7 +466,7 @@ describe("recoverable editing", () => {
     expect(store.snapshot.conflicts).toHaveLength(0);
     await store.clear();
   });
-  it("refuses local trip shrink when a delayed watcher omitted a newer remote item move", async () => {
+  it("rebases local trip shrink with a concurrent remote move as a recoverable candidate", async () => {
     const owner = crypto.randomUUID();
     const trip = { ...blankTrip(owner), start: "2030-01-01", end: "2030-01-03" };
     const place = blankPlace(owner, trip.id, "remote stop");
@@ -488,9 +490,10 @@ describe("recoverable editing", () => {
     navigator.onLine = true;
     await store.flush();
     const id = store.snapshot.conflicts[0].operation.id;
-    await expect(store.resolve(id, "local")).rejects.toThrow("其他裝置已有安排");
-    expect(store.snapshot.conflicts).toHaveLength(1);
-    expect(server.find((r) => r.id === trip.id)).toMatchObject({ end: "2030-01-03" });
+    await store.resolve(id, "local");
+    await store.flush();
+    expect(store.snapshot.conflicts).toHaveLength(0);
+    expect(server.find((r) => r.id === trip.id)).toMatchObject({ end: "2030-01-02", detachedItemIds: [item.id] });
     expect(server.find((r) => r.id === item.id)).toMatchObject({ day: "2030-01-03" });
     await store.clear();
   });

@@ -20,6 +20,7 @@ test("real trip deep link restores selected day and scoped PWA excludes private/
   await page.getByLabel("旅行日期", { exact: true }).selectOption("2030-01-08");
   await expect(page).toHaveURL(/\/trips\/[0-9a-f-]+\/day\/2030-01-08$/);
   const url = page.url();
+  const origin = new URL(url).origin;
   await page.goto(url);
   await page.reload();
   await expect(page.getByLabel("旅行日期", { exact: true })).toHaveValue(
@@ -36,7 +37,7 @@ test("real trip deep link restores selected day and scoped PWA excludes private/
   const scope = await page.evaluate(
     async () => (await navigator.serviceWorker.ready).scope,
   );
-  expect(scope).toBe("http://127.0.0.1:4173/travel-planner/");
+  expect(scope).toBe(`${origin}/travel-planner/`);
   const urls = await page.evaluate(async () =>
     (
       await Promise.all(
@@ -52,15 +53,13 @@ test("real trip deep link restores selected day and scoped PWA excludes private/
   expect(
     urls.every(
       (u) =>
-        u.startsWith("http://127.0.0.1:4173/travel-planner/") &&
+        u.startsWith(`${origin}/travel-planner/`) &&
         !/api|googleapis|openstreetmap/.test(u),
     ),
   ).toBe(true);
   const isolated = await context.browser()!.newContext();
   const other = await isolated.newPage();
-  await other
-    .goto("/travel-planner/", { waitUntil: "load" })
-    .catch(async () => other.goto("http://127.0.0.1:4173/travel-planner/"));
+  await other.goto(`${origin}/travel-planner/`, { waitUntil: "load" });
   await expect(
     other.getByRole("heading", { name: "東京 · 合成示範", exact: true }),
   ).toHaveCount(0);
@@ -88,12 +87,13 @@ test("same local account tabs serialize changes; desktop drag supports cross-day
     page.getByRole("article", { name: "Second tab place", exact: true }),
   ).toBeVisible();
   if (info.project.name === "desktop") {
+    await page.getByRole("button", { name: "編輯", exact: true }).first().click();
     const card = page.getByRole("article", {
       name: "Second tab place",
       exact: true,
     });
     const target = page.locator('[data-day="2030-01-07"]');
-    await card.dragTo(target.locator(".day-heading"), {
+    await card.locator(".drag-handle").dragTo(target.locator(".day-heading"), {
       sourcePosition: { x: 8, y: 8 },
       targetPosition: { x: 8, y: 8 },
     });
@@ -136,6 +136,7 @@ test("new trip dates are independent of selected trip, while existing arrangemen
   page,
 }) => {
   await demo(page);
+  if ((await page.viewportSize())!.width <= 700) await operations(page);
   await page.getByRole("button", { name: "新增旅程", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("旅程名稱").fill("Independent new trip");
@@ -155,10 +156,11 @@ test("new trip dates are independent of selected trip, while existing arrangemen
   await dialog.getByLabel("開始日期").fill("2031-02-01");
   await dialog.getByLabel("結束日期").fill("2031-02-02");
   await dialog.getByRole("button", { name: "儲存旅程" }).click();
-  await expect(dialog.getByRole("alert")).toContainText(
-    "新日期範圍會排除既有安排",
-  );
-  await dialog.getByRole("button", { name: "取消", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByLabel("旅行日期", { exact: true })).toHaveValue("2031-02-01");
+  await expect(page.getByText(/移入待定/).first()).toBeVisible();
+  await operations(page);
+  await page.getByRole("button", { name: "復原", exact: true }).click();
   await expect(page.getByLabel("旅行日期", { exact: true })).toHaveValue(
     "2030-01-06",
   );
@@ -189,17 +191,21 @@ test("new trip → minimal place → manual location → same marker, persistenc
     exact: true,
   });
   await expect(card).toBeVisible();
-  await card.getByRole("button", { name: "地點", exact: true }).click();
+  await card.click();
+  await dialog.getByRole("button", { name: "編輯地點" }).click();
   await dialog.getByLabel("緯度", { exact: true }).fill("35.7148");
   await dialog.getByLabel("經度", { exact: true }).fill("139.7967");
   await dialog.getByLabel("地址", { exact: true }).fill("Synthetic address");
   await dialog.getByRole("button", { name: "儲存地點" }).click();
-  await page.getByRole("button", { name: "地圖", exact: true }).click();
+  if (info.project.name === "mobile")
+    await page.getByRole("navigation", { name: "主要導覽" }).getByRole("button", { name: "地圖" }).click();
   await expect(page.locator(".map-pin")).toHaveCount(1);
   await page.locator(".map-pin").click();
   await expect(
     page.getByRole("article", { name: "Duplicate name", exact: true }),
   ).toHaveClass(/selected/);
+  if (await dialog.count()) await dialog.getByRole("button", { name: "關閉", exact: true }).click();
+  await operations(page);
   await page.getByRole("button", { name: "下載行程", exact: true }).click();
   await page.reload();
   await expect(
@@ -234,14 +240,18 @@ test("new trip → minimal place → manual location → same marker, persistenc
 });
 test("cross-day move, replacement preserves original, undo survives reload", async ({
   page,
-}) => {
+}, info) => {
   await demo(page);
   await operations(page);
   await page.getByLabel("旅行日期", { exact: true }).selectOption("2030-01-07");
+  if (info.project.name === "desktop") await page.getByRole("button", { name: "編輯", exact: true }).first().click();
   const temple = page
     .getByRole("article", { name: "淺草寺", exact: true })
     .filter({ has: page.getByText("上午", { exact: true }) });
-  await temple.getByLabel("淺草寺移到某日").selectOption("2030-01-09");
+  if (info.project.name === "mobile") {
+    await temple.click();
+    await page.getByRole("dialog").getByLabel("淺草寺詳細移到某日").selectOption("2030-01-09");
+  } else await temple.getByLabel("淺草寺移到某日").selectOption("2030-01-09");
   await page.getByLabel("旅行日期", { exact: true }).selectOption("2030-01-09");
   await expect(
     page.getByRole("article", { name: "淺草寺", exact: true }).first(),
@@ -250,27 +260,41 @@ test("cross-day move, replacement preserves original, undo survives reload", asy
   await operations(page);
   await page.getByRole("button", { name: "復原", exact: true }).click();
   await page.getByLabel("旅行日期", { exact: true }).selectOption("2030-01-07");
+  if (info.project.name === "desktop") await page.getByRole("button", { name: "編輯", exact: true }).first().click();
   const active = page
     .locator(".active-day")
     .getByRole("article", { name: "淺草寺", exact: true });
-  await active.locator("summary").click();
-  await active.getByRole("button", { name: "用候選替換" }).click();
+  if (info.project.name === "mobile") {
+    await active.click();
+    await page.getByRole("dialog").getByRole("button", { name: "用候選替換" }).click();
+  } else {
+    await active.locator("summary").click();
+    await active.getByRole("button", { name: "用候選替換" }).click();
+  }
   const lunch = page.getByRole("article", {
     name: "親子午餐候選（未查證）",
     exact: true,
   });
-  await lunch.getByRole("button", { name: "替換「淺草寺」" }).click();
+  if (info.project.name === "mobile") {
+    await lunch.getByRole("button", { name: "親子午餐候選（未查證）" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "替換「淺草寺」" }).click();
+  } else await lunch.getByRole("button", { name: "替換「淺草寺」" }).click();
   await expect(
     page
       .locator(".active-day")
       .getByRole("article", { name: "親子午餐候選（未查證）", exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: /候選 \(/ }).click();
+  if (info.project.name === "mobile")
+    await page.getByRole("navigation", { name: "主要導覽" }).getByRole("button", { name: "候選" }).click();
+  else await page.getByRole("button", { name: /候選 \(/ }).click();
   await expect(
     page.getByRole("article", { name: "淺草寺", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "復原", exact: true }).click();
-  await page.getByRole("button", { name: "今天", exact: true }).click();
+  if (info.project.name === "mobile")
+    await page.getByRole("navigation", { name: "主要導覽" }).getByRole("button", { name: "今天" }).click();
+  else await page.getByRole("button", { name: /候選 \(/ }).click();
+  await page.getByLabel("旅行日期", { exact: true }).selectOption("2030-01-07");
   await expect(
     page
       .locator(".active-day")
@@ -279,18 +303,27 @@ test("cross-day move, replacement preserves original, undo survives reload", asy
 });
 test("fixed appointments stay fixed, tasks, calendar and import preview", async ({
   page,
-}) => {
+}, info) => {
   await demo(page);
   await operations(page);
   await page.getByLabel("旅行日期", { exact: true }).selectOption("2030-01-07");
+  if (info.project.name === "desktop") await page.getByRole("button", { name: "編輯", exact: true }).first().click();
   const fixed = page
     .locator(".active-day")
     .getByRole("article", { name: "東京國立博物館", exact: true });
   await expect(fixed.getByText("13:00 · 固定預約")).toBeVisible();
-  await fixed.locator("summary").click();
-  await fixed.getByRole("button", { name: "後續彈性延後 30 分" }).click();
+  if (info.project.name === "mobile") {
+    await fixed.click();
+    await page.getByRole("dialog").getByRole("button", { name: "後續彈性延後 30 分" }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "關閉", exact: true }).click();
+  } else {
+    await fixed.locator("summary").click();
+    await fixed.getByRole("button", { name: "後續彈性延後 30 分" }).click();
+  }
   await expect(fixed.getByText("13:00 · 固定預約")).toBeVisible();
-  await page.getByRole("button", { name: "待辦", exact: true }).click();
+  if (info.project.name === "mobile")
+    await page.getByRole("navigation", { name: "主要導覽" }).getByRole("button", { name: "待辦" }).click();
+  else await page.getByRole("button", { name: "待辦", exact: true }).click();
   await page.getByRole("button", { name: "新增待辦" }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("事項", { exact: true }).fill("Synthetic deadline");
@@ -331,12 +364,14 @@ test("subpath deep URL refresh, disabled AI, map failure and 390/1440 layout", a
   ).toBeVisible();
   await page.reload();
   await page.getByRole("button", { name: "載入示範", exact: true }).click();
+  await page.locator("details.toolbar-more > summary").click();
   await page.getByRole("button", { name: "探索地點" }).click();
   await expect(
     page.getByRole("button", { name: "AI 探索", exact: true }),
   ).toBeDisabled();
   await page.getByRole("button", { name: "關閉", exact: true }).click();
-  await page.getByRole("button", { name: "地圖", exact: true }).click();
+  if (info.project.name === "mobile")
+    await page.getByRole("navigation", { name: "主要導覽" }).getByRole("button", { name: "地圖" }).click();
   await expect(
     page.getByText("底圖暫時無法載入；行程及已知位置仍可使用。"),
   ).toBeVisible();

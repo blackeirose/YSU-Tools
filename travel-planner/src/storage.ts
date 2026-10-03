@@ -47,7 +47,7 @@ const empty = (): Snapshot => ({
   downloaded: [],
 });
 const DB = "ysu-travel-planner-v1";
-const canonical = (value: unknown): string =>
+export const canonical = (value: unknown): string =>
   JSON.stringify(value, (_key, part) =>
     part && typeof part === "object" && !Array.isArray(part)
       ? Object.fromEntries(
@@ -112,6 +112,14 @@ export function makeOperation(
     if (!trip || trip.kind !== "trip" || trip.deleted) throw new Error("找不到此行程所屬旅程，請先恢復旅程資料");
     guarded.push(trip);
   }
+  for (const update of updates) {
+    if (update.kind !== "item") continue;
+    const tripIndex = guarded.findIndex((r) => r.kind === "trip" && r.id === update.tripId);
+    const current = guarded[tripIndex];
+    if (current?.kind !== "trip" || !(current.detachedItemIds ?? []).includes(update.id)) continue;
+    if (update.deleted || (update.day && update.day >= current.start && update.day <= current.end))
+      guarded[tripIndex] = { ...current, detachedItemIds: current.detachedItemIds!.filter((id) => id !== update.id) };
+  }
   if (new Set(guarded.map((r) => r.id)).size !== guarded.length)
     throw new Error("批次含重複項目");
   const op: Operation = {
@@ -146,8 +154,9 @@ export function makeOperation(
     }
     if (after.kind === "trip" && change.before?.kind === "trip" &&
       (after.start !== change.before.start || after.end !== change.before.end)) {
-      if (next.some((r) => r.kind === "item" && !r.deleted && r.tripId === after.id && r.day && (r.day < after.start || r.day > after.end)))
-        throw new Error("新日期範圍會排除既有安排；請先移動這些項目");
+      if (next.some((r) => r.kind === "item" && !r.deleted && r.tripId === after.id && r.day &&
+        (r.day < after.start || r.day > after.end) && !(after.detachedItemIds ?? []).includes(r.id)))
+        throw new Error("有安排尚未記錄為待定；資料未變更，請重新載入旅程後再試");
     }
   }
   return op;
@@ -161,9 +170,6 @@ export function productionTripViolation(op: Operation): string | null {
     if (change.after.kind !== "trip") continue;
     if (change.after.deleted)
       return "正式雲端旅程不能刪除；請封存旅程。原操作及本機資料仍保留。";
-    if (change.before?.kind === "trip" &&
-      (change.after.start > change.before.start || change.after.end < change.before.end))
-      return "正式雲端旅程目前不能縮短日期；原操作及本機資料仍保留。";
   }
   return null;
 }
@@ -191,6 +197,7 @@ export class PlannerStore {
   private running = false;
   private flight?: Promise<void>;
   private remoteReady = false;
+  isRemoteReady() { return !this.remote || this.remoteReady; }
   private cacheKey: string;
   constructor(
     public owner: string,
@@ -538,6 +545,11 @@ export class PlannerStore {
           if (base.kind === "item" && base.day) {
             const ownerTrip = records.find((r) => r.id === base.tripId);
             if (ownerTrip?.kind === "trip" && (base.day < ownerTrip.start || base.day > ownerTrip.end)) {
+              // A concurrent range change is resolved with the user's explicit
+              // Trip choice below. Preserve this item's original date until the
+              // Trip has a durable detached-ID projection.
+              if (conflict.operation.changes.some((change) => change.after.kind === "trip" && change.id === base.tripId && !isTripVersionTouch(change)))
+                return { ...base, revision: remote.get(c.id)?.revision ?? 0 };
               if (!recoveryDay || recoveryDay < ownerTrip.start || recoveryDay > ownerTrip.end)
                 throw new Error("本機行程超出遠端旅程日期。請先選擇旅程內的復原日期；備份仍保留。");
               return { ...base, day: recoveryDay, revision: remote.get(c.id)?.revision ?? 0 };
@@ -551,12 +563,14 @@ export class PlannerStore {
           if (latestTrip?.kind !== "trip" ||
             (latestTrip.start === changedTrip.start && latestTrip.end === changedTrip.end)) continue;
           const override = new Map(localUpdates.map((r) => [r.id, r]));
-          if (remoteTripRows.some((r) => {
+          const outside = [...remoteTripRows, ...localUpdates].filter((r) => {
             const row = override.get(r.id) ?? r;
             return row.kind === "item" && !row.deleted && row.tripId === changedTrip.id &&
               row.day && (row.day < changedTrip.start || row.day > changedTrip.end);
-          }))
-            throw new Error("其他裝置已有安排落在縮短後的日期之外。先處理遠端安排；本機衝突與備份仍保留。");
+          }).map((r) => r.id);
+          const index = localUpdates.findIndex((r) => r.id === changedTrip.id);
+          localUpdates[index] = { ...changedTrip,
+            detachedItemIds: [...new Set([...(changedTrip.detachedItemIds ?? []), ...outside])] };
         }
         const op = makeOperation(
           "保留本機衝突版本",

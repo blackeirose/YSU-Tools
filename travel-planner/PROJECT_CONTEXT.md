@@ -1,5 +1,11 @@
 # YSU Travel Planner
 
+## UX / Gemini upgrade in review — 2026-10-03 PDT
+
+An isolated upgrade is under development on `feature/travel-planner-ux-gemini-20261003`; it has **not** replaced the 2026-10-02 production release below. The current branch adds compact desktop/mobile planning, daily city and IANA timezone, Photon-assisted place selection, a scoped Gemini assistant, guarded XLSX/CSV/PDF/image import, date-shrink candidate retention, overlap warnings, and a city background job. The AI, paid image generation, cloud rules, complete-host Preview, live dual-context synchronization, and production release require source-matched remote validation. See [the current Full Gate](docs/UPGRADE_GATE_2026-10-03.md). Historical statements below describe earlier releases and must not be used as proof of this upgrade.
+
+The new instruction permits typed, owner-initiated single-item AI actions through the same application validation, revision and Undo paths. Suggestions, ambiguous instructions, and whole-trip drafts need review; the assistant never books, pays, messages others, or modifies a trip on its own. No Supabase is used by Planner. The publisher remains `social-capture-tool:scripts/shared_host_release.py`; never upload Planner `dist` as a whole site.
+
 ## Current production checkpoint — 2026-10-02 PDT
 
 Owner-authorized complete-host production release is live at <https://tools.ycsu.cc/travel-planner/> on Netlify deploy `6ac0989e1e8fabf48ee75360`; product runtime source is `47a78f8d7fe45d65ca7d99ee757e16b65238093f`. Owner-only Firestore `travelPlanner/v1` rules were published and read back. Shared sibling files and six Functions passed complete-host acceptance. Production Google login and real cloud write/read remain unverified in this task; the browser popup stayed in progress. The Owner clarified that the Supabase ban applies only to Planner. Tracker/MAIN public duplicate checks now pass, but registration awaits the Tracker Owner OTP session and MAIN's existing `registry-ops` management credential; no runtime row has been written. AI and background Push remain disabled. See [the current release record](docs/PRODUCTION_RELEASE_REPORT_2026-10-02.md); the 21:41 checkpoint below is historical.

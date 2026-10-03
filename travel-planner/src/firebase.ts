@@ -26,7 +26,7 @@ import {
 } from "firebase/firestore";
 import type { RecordData } from "./model";
 import { recordSchema } from "./model";
-import { ConflictError, isTripVersionTouch, productionTripViolation, unguardedItemChange } from "./storage";
+import { ConflictError, canonical, isTripVersionTouch, productionTripViolation, unguardedItemChange } from "./storage";
 import type { Operation, Remote } from "./storage";
 import { cloudScope } from "./cloud-config";
 const env = import.meta.env;
@@ -148,28 +148,27 @@ export function cloudRemote(owner: string): Remote {
       if (namespace === "v1" && productionTripViolation(op))
         throw new ConflictError([], "policy");
       const shrinkingTrips = op.changes.filter((c) => c.before?.kind === "trip" && c.after.kind === "trip" &&
-        (c.before.start !== c.after.start || c.before.end !== c.after.end));
-      // The web Transaction API reads document refs only. Fetch candidate IDs
-      // from the server first, then re-read every candidate inside the CAS transaction.
-      // New clients also touch Trip revision on item edits, closing the add/move race.
-      const knownTripRows = (await Promise.all(shrinkingTrips.map((c) => readTripRows(c.id)))).flat();
+        (c.after.start > c.before.start || c.after.end < c.before.end));
+      // Every item write also touches the Trip revision. A server query before
+      // CAS finds the IDs to detach; a concurrent add/move invalidates that CAS.
+      // No per-item writes are needed for a large date-range change.
+      const knownTripRows = await Promise.all(shrinkingTrips.map((c) => readTripRows(c.id)));
+      for (let i = 0; i < shrinkingTrips.length; i++) {
+        const next = shrinkingTrips[i].after;
+        if (next.kind !== "trip") continue;
+        if (knownTripRows[i].some((row) => row.kind === "item" && !row.deleted && row.day &&
+          (row.day < next.start || row.day > next.end) && !(next.detachedItemIds ?? []).includes(row.id)))
+          throw new ConflictError(knownTripRows[i], "range");
+      }
       try {
         await runTransaction(db!, async (tx) => {
         assertOwner();
         const refs = op.changes.map((c) => doc(records, c.id));
-        const changeIds = new Set(op.changes.map((c) => c.id));
-        const extraRefs = [...new Set(knownTripRows.filter((r) => r.kind === "item" && !changeIds.has(r.id)).map((r) => r.id))]
-          .map((id) => doc(records, id));
-        const [snapshots, extraSnapshots] = await Promise.all([
-          Promise.all(refs.map((r) => tx.get(r))),
-          Promise.all(extraRefs.map((r) => tx.get(r))),
-        ]);
+        const snapshots = await Promise.all(refs.map((r) => tx.get(r)));
         const remote = snapshots
           .filter((s) => s.exists())
           .map((s) => recordSchema.parse(s.data()) as RecordData);
         // Idempotent ack after reconnect: exact revisions and full payload must agree.
-        const canonical = (value: unknown): string =>
-          JSON.stringify(value, Object.keys(value as object).sort());
         if (
           op.changes.every(
             (c, i) =>
@@ -186,18 +185,6 @@ export function cloudRemote(owner: string): Remote {
           )
         )
           throw new ConflictError(remote);
-        for (const changedTrip of shrinkingTrips) {
-          const trip = changedTrip.after;
-          if (trip.kind !== "trip") continue;
-          const all = [...snapshots, ...extraSnapshots]
-            .filter((snapshot) => snapshot.exists())
-            .map((snapshot) => recordSchema.parse(snapshot.data()));
-          const byId = new Map(all.map((r) => [r.id, r]));
-          for (const change of op.changes) byId.set(change.id, change.after);
-          if ([...byId.values()].some((row) => row.kind === "item" && !row.deleted && row.tripId === trip.id && row.day &&
-            (row.day < trip.start || row.day > trip.end)))
-            throw new ConflictError(all, "range");
-        }
         for (const change of op.changes) {
           const after = change.after;
           if (after.kind !== "item" || after.deleted || !after.day ||

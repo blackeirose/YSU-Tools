@@ -60,7 +60,9 @@ export function events(
           before: [],
         });
       }
-      if (r.kind === "task" && r.date && r.time && r.status !== "完成") {
+      if (r.kind === "task" && r.date && r.time && r.status !== "完成" && r.reservationResolution !== "已取消") {
+        const linked = r.itemId ? own.find((item) => item.kind === "item" && item.id === r.itemId) as Item | undefined : undefined;
+        if (r.type === "出發提醒" && linked?.status === "candidate") continue;
         const start = instant(r.date, r.time, r.timezone);
         list.push({
           id: r.id,

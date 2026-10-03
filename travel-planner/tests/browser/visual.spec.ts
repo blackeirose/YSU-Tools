@@ -8,7 +8,7 @@ test("synthetic Tokyo map selection/zoom and multicity year-boundary visual evid
   await page.goto("/travel-planner/");
   await page.getByRole("button", { name: "載入示範", exact: true }).click();
   await page.getByLabel("旅行日期", { exact: true }).selectOption("2030-01-07");
-  await page.getByRole("button", { name: "地圖", exact: true }).click();
+  if (info.project.name === "mobile") await page.getByRole("button", { name: "地圖", exact: true }).click();
   await expect(page.locator(".map-pin")).toHaveCount(2);
   const marker = page.locator(".leaflet-marker-icon").first();
   const before = await marker.getAttribute("style");

@@ -17,6 +17,7 @@ export function TravelMap({
   onSelect,
   pin,
   onPin,
+  city,
   showDay = false,
 }: {
   places: Place[];
@@ -25,6 +26,7 @@ export function TravelMap({
   onSelect: (i: Item) => void;
   pin: string | null;
   onPin: (id: string, lat: number, lng: number) => void;
+  city?: { lat: number | null; lng: number | null } | null;
   showDay?: boolean;
 }) {
   const host = useRef<HTMLDivElement>(null),
@@ -41,7 +43,7 @@ export function TravelMap({
       zoomAnimation: false,
       fadeAnimation: false,
       markerZoomAnimation: false,
-    }).setView([35.68, 139.76], 10);
+    }).setView([20, 0], 2);
     map.current = m;
     layer.current = L.layerGroup().addTo(m);
     const tiles = L.tileLayer(
@@ -129,13 +131,17 @@ export function TravelMap({
         dashArray: "5 8",
         interactive: false,
       }).addTo(group);
-    if (points.length && !selected)
+    if (!selected && points.length)
       m.fitBounds(L.latLngBounds(points), {
         padding: [40, 40],
         maxZoom: 14,
         animate: false,
       });
-  }, [places, items, showDay]);
+    else if (!selected && city?.lat != null && city.lng != null)
+      m.setView([city.lat, city.lng], 11, { animate: false });
+    else if (!selected && !points.length)
+      m.setView([20, 0], 2, { animate: false });
+  }, [places, items, showDay, city?.lat, city?.lng]);
   useEffect(() => {
     const marker = selected ? marks.current.get(selected) : null;
     if (marker) {

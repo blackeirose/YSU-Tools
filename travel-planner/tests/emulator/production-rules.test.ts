@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { beforeAll, afterAll, describe, it } from "vitest";
 import { initializeTestEnvironment, assertFails, assertSucceeds } from "@firebase/rules-unit-testing";
 import type { RulesTestEnvironment } from "@firebase/rules-unit-testing";
-import { doc, getDoc, setDoc, writeBatch } from "firebase/firestore";
+import { doc, getDoc, setDoc, writeBatch, deleteDoc } from "firebase/firestore";
 import { blankItem, blankTrip } from "../../src/model";
 
 let env: RulesTestEnvironment;
@@ -28,6 +28,26 @@ beforeAll(async () => {
 afterAll(async () => env?.cleanup());
 
 describe("production v1 server enforcement", () => {
+  it("reserves paid Gemini calls monotonically in an Owner-only daily counter", async () => {
+    const claims = { email: ownerEmail, email_verified: true, firebase: { sign_in_provider: "google.com" } };
+    const owner = env.authenticatedContext("owner", claims).firestore();
+    const other = env.authenticatedContext("other", { ...claims, email: "other@example.test" }).firestore();
+    const path = "travelPlanner/v1/users/owner/aiUsage/2030-01-01";
+    const ref = doc(owner, path);
+    const first = { ownerId: "owner", day: "2030-01-01", assistCount: 1, exploreCount: 0, visionCount: 0, backgroundCount: 0 };
+    await assertFails(getDoc(doc(other, path)));
+    await assertFails(setDoc(doc(other, path), first));
+    await assertFails(setDoc(ref, { ...first, assistCount: 0 }));
+    await assertSucceeds(setDoc(ref, first));
+    await assertFails(setDoc(ref, { ...first, assistCount: 0 }));
+    await assertFails(setDoc(ref, { ...first, assistCount: 3 }));
+    await assertFails(setDoc(ref, { ...first, ownerId: "other", assistCount: 2 }));
+    await assertSucceeds(setDoc(ref, { ...first, assistCount: 2 }));
+    await assertSucceeds(setDoc(ref, { ...first, assistCount: 2, exploreCount: 1 }));
+    await assertSucceeds(setDoc(ref, { ...first, assistCount: 2, exploreCount: 1, backgroundCount: 1 }));
+    await assertFails(setDoc(ref, { ...first, assistCount: 2, exploreCount: 2 }));
+    await assertFails(deleteDoc(ref));
+  });
   it("rejects anonymous, another user, physical deletion and old Item-only writes", async () => {
     const claims = { email: ownerEmail, email_verified: true, firebase: { sign_in_provider: "google.com" } };
     const owner = env.authenticatedContext("owner", claims).firestore();
@@ -49,7 +69,7 @@ describe("production v1 server enforcement", () => {
     await assertFails((async () => { const b = writeBatch(owner); b.delete(itemRef); await b.commit(); })());
   });
 
-  it("accepts guarded moves in either write order; rejects out-of-range days and Trip shortening", async () => {
+  it("accepts a versioned Trip shrink with detached IDs, while rejecting stale and out-of-range item writes", async () => {
     const claims = { email: ownerEmail, email_verified: true, firebase: { sign_in_provider: "google.com" } };
     const owner = env.authenticatedContext("owner", claims).firestore();
     const trip = { ...blankTrip("owner"), start: "2031-12-30", end: "2032-01-02", revision: 1 };
@@ -68,14 +88,19 @@ describe("production v1 server enforcement", () => {
     invalid.set(itemRef, { ...item, revision: 3, day: "2032-01-03" });
     invalid.set(tripRef, { ...trip, revision: 3 });
     await assertFails(invalid.commit());
-    await assertFails(setDoc(tripRef, { ...trip, revision: 3, end: "2031-12-31" }));
-    await assertSucceeds(setDoc(tripRef, { ...trip, revision: 3, end: "2032-01-03" }));
-    await assertFails(setDoc(itemRef, { ...item, revision: 3, day: "2032-01-03" }));
+    await assertFails(setDoc(tripRef, { ...trip, revision: 3, end: "2031-12-30" }));
+    await assertSucceeds(setDoc(tripRef, { ...trip, revision: 3, end: "2031-12-30", detachedItemIds: [item.id] }));
+    await assertFails(setDoc(itemRef, { ...item, revision: 3, day: "2031-12-31" }));
+    const restore = writeBatch(owner);
+    restore.set(itemRef, { ...item, revision: 3, day: "2031-12-30" });
+    restore.set(tripRef, { ...trip, revision: 4, end: "2031-12-30", detachedItemIds: [] });
+    await assertSucceeds(restore.commit());
+    await assertSucceeds(setDoc(tripRef, { ...trip, revision: 5, end: "2032-01-03", detachedItemIds: [] }));
     const reverseOrder = writeBatch(owner);
-    reverseOrder.set(itemRef, { ...item, revision: 3, day: "2032-01-03" });
-    reverseOrder.set(tripRef, { ...trip, revision: 4, end: "2032-01-03" });
+    reverseOrder.set(itemRef, { ...item, revision: 4, day: "2032-01-03" });
+    reverseOrder.set(tripRef, { ...trip, revision: 6, end: "2032-01-03", detachedItemIds: [] });
     await assertSucceeds(reverseOrder.commit());
-    await assertFails(setDoc(tripRef, { ...trip, revision: 5, deleted: true }));
+    await assertFails(setDoc(tripRef, { ...trip, revision: 7, deleted: true }));
     const saved = await getDoc(itemRef);
     if (saved.data()?.day !== "2032-01-03") throw new Error("Guarded move did not persist");
   });

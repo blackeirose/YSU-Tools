@@ -1,5 +1,7 @@
 # 驗證紀錄 — 最終隔離 Preview
 
+> **2026-10-03 UX / Gemini upgrade checkpoint:** The V1 results below are historical and do not certify this new branch. The [current Full Gate](UPGRADE_GATE_2026-10-03.md) and [upgrade release report](RELEASE_REPORT_2026-10-03.md) track source-matched evidence. Local current-branch evidence: typecheck/build PASS, 67 unit tests PASS, three exact Netlify function bundles PASS, publisher component tests 13/13 PASS. Chromium full run: 52 PASS, 9 desktop-only controls intentionally skipped on mobile, one stale mobile inline-action selector; the corrected detail-drawer flow then passed individually, yielding 53 covered executed workflows. All screens linked there use synthetic local data. Real Gemini, image/Blob, Firebase dual-context, emulator CI and remote complete-host Preview are still UNVERIFIED.
+
 已驗證 source：`4cb7fdf71f7c5557f726f079ebc2104dc0b8430a`。後續文件 commit 不改變成品；Planner 測試資料全為合成。
 
 | 檢查 | 實際結果 |

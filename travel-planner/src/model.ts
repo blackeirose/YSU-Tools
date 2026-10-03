@@ -32,6 +32,14 @@ const base = {
   deleted: z.boolean().default(false),
 };
 const common = { tripId: id };
+const dayCitySchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  region: z.string().max(200).optional(),
+  timezone: zone,
+  lat: z.number().min(-90).max(90).nullable(),
+  lng: z.number().min(-180).max(180).nullable(),
+  source: z.string().max(3000).optional(),
+}).refine((city) => (city.lat === null) === (city.lng === null), "城市座標必須一起設定");
 export const tripSchema = z
   .object({
     ...base,
@@ -40,10 +48,14 @@ export const tripSchema = z
     start: date,
     end: date,
     cities: z.string().max(1000),
+    dayCities: z.record(date, dayCitySchema).optional(),
+    backgroundRequested: z.boolean().optional(),
+    detachedItemIds: z.array(id).max(15000).optional(),
     timezone: zone,
     travelers: z.number().int().min(1).max(100),
     archived: z.boolean(),
     demo: z.boolean().default(false),
+    importSource: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   })
   .refine(
     (t) =>
@@ -93,6 +105,12 @@ export const itemSchema = z
     arrivalZone: zone,
     travelers: z.number().int().min(1).max(100).nullable(),
     notes: z.string().max(10000),
+    candidateOrigin: z.object({
+      day: date,
+      order: z.number().finite(),
+      status: z.enum(["planned", "done", "skipped"]),
+      reason: z.literal("trip-range"),
+    }).optional(),
   })
   .refine(
     (i) =>
@@ -117,6 +135,7 @@ export const taskSchema = z
       "出發提醒",
     ]),
     status: z.enum(["待訂", "已訂", "待確認", "完成"]),
+    reservationResolution: z.enum(["待確認改期", "保留原預約", "已處理", "已取消"]).optional(),
     date: date.nullable(),
     time: clock.nullable(),
     timezone: zone,
@@ -146,6 +165,7 @@ export type Item = z.infer<typeof itemSchema>;
 export type Task = z.infer<typeof taskSchema>;
 export type Reminder = z.infer<typeof reminderSchema>;
 export type RecordData = Trip | Place | Item | Task | Reminder;
+export type DayCity = z.infer<typeof dayCitySchema>;
 export function validateSchedule(r: Item | Task) {
   try {
     if (r.kind === "task") {
@@ -193,6 +213,94 @@ export function days(t: Pick<Trip, "start" | "end">) {
   while (Temporal.PlainDate.compare(d, end) <= 0 && result.length < 120) {
     result.push(d.toString());
     d = d.add({ days: 1 });
+  }
+  return result;
+}
+export function dayCity(trip: Trip, day: string): DayCity & { assigned: boolean } {
+  const assigned = trip.dayCities?.[day];
+  if (assigned) return { ...assigned, assigned: true };
+  // Legacy `cities` did not say which date belonged to which city. This is a
+  // search hint only; the UI must show that no day city has been confirmed.
+  const first = trip.cities.split(/[、,，;；]/).map((v) => v.trim()).find(Boolean) ?? "";
+  return { name: first, timezone: trip.timezone, lat: null, lng: null, assigned: false };
+}
+const cityZones: Record<string, string> = {
+  "東京": "Asia/Tokyo", tokyo: "Asia/Tokyo",
+  "大阪": "Asia/Tokyo", osaka: "Asia/Tokyo",
+  "京都": "Asia/Tokyo", kyoto: "Asia/Tokyo",
+  "名古屋": "Asia/Tokyo", nagoya: "Asia/Tokyo",
+  "台北": "Asia/Taipei", taipei: "Asia/Taipei",
+  "檀香山": "Pacific/Honolulu", honolulu: "Pacific/Honolulu",
+  "洛杉磯": "America/Los_Angeles", "los angeles": "America/Los_Angeles",
+  "舊金山": "America/Los_Angeles", "san francisco": "America/Los_Angeles",
+};
+export function cityTimezoneHint(name: string): string | null {
+  return cityZones[name.trim().toLocaleLowerCase()] ?? null;
+}
+export function assignDayCity(
+  trip: Trip,
+  from: string,
+  to: string,
+  name: string,
+  timezone: string,
+  location?: Pick<DayCity, "lat" | "lng" | "source" | "region">,
+): Trip {
+  const city = dayCitySchema.parse({ name, timezone, lat: location?.lat ?? null, lng: location?.lng ?? null, region: location?.region, source: location?.source });
+  if (from > to || from < trip.start || to > trip.end) throw new Error("城市日期須在旅程範圍內");
+  const selected = days({ start: from, end: to });
+  return tripSchema.parse({ ...trip, dayCities: Object.fromEntries([
+    ...Object.entries(trip.dayCities ?? {}).filter(([date]) => date < from || date > to),
+    ...selected.map((date) => [date, city]),
+  ]) });
+}
+
+export function shrinkTripPlan(trip: Trip, updated: Trip, items: Item[]) {
+  const next = tripSchema.parse(updated);
+  if (trip.id !== next.id || trip.ownerId !== next.ownerId) throw new Error("旅程身分不符");
+  const excluded = items.filter((item) => !item.deleted && item.tripId === trip.id && item.day &&
+    (item.day < next.start || item.day > next.end));
+  const alreadyDetached = new Set(trip.detachedItemIds ?? []);
+  return {
+    trip: tripSchema.parse({ ...next, detachedItemIds: [...new Set([...(trip.detachedItemIds ?? []), ...excluded.map((item) => item.id)])] }),
+    affected: excluded.filter((item) => !alreadyDetached.has(item.id)).length,
+    items: [] as Item[],
+  };
+}
+
+export function effectiveItem(trip: Trip, item: Item): Item {
+  if (item.deleted || item.tripId !== trip.id || !item.day ||
+    (!(trip.detachedItemIds ?? []).includes(item.id) && item.day >= trip.start && item.day <= trip.end)) return item;
+  return itemSchema.parse({
+    ...item,
+    day: null,
+    status: "candidate",
+    candidateOrigin: item.candidateOrigin ?? {
+      day: item.day,
+      order: item.order,
+      status: item.status === "candidate" ? "planned" : item.status,
+      reason: "trip-range",
+    },
+  });
+}
+
+export function overlaps(items: Item[]): Map<string, string[]> {
+  const result = new Map<string, string[]>();
+  const timed = items.flatMap((item) => {
+    if (item.deleted || !item.day || item.status === "candidate" || !item.time ||
+      !["fixed", "flexible"].includes(item.timeMode) ||
+      (!item.arrivalDay && item.duration <= 0)) return [];
+    try {
+      const start = instant(item.day, item.time, item.departureZone);
+      const end = item.arrivalDay && item.arrivalTime
+        ? instant(item.arrivalDay, item.arrivalTime, item.arrivalZone)
+        : start.add({ minutes: item.duration });
+      return Temporal.Instant.compare(end, start) > 0 ? [{ item, start, end }] : [];
+    } catch { return []; }
+  });
+  for (const a of timed) for (const b of timed) {
+    if (a.item.id === b.item.id) continue;
+    if (Temporal.Instant.compare(a.start, b.end) < 0 && Temporal.Instant.compare(a.end, b.start) > 0)
+      result.set(a.item.id, [...(result.get(a.item.id) ?? []), b.item.id]);
   }
   return result;
 }
@@ -401,7 +509,7 @@ export function delayFlexible(
   return { updates, conflicts };
 }
 export const exportSchema = z.object({
-  schemaVersion: z.literal(1),
+  schemaVersion: z.union([z.literal(1), z.literal(2)]),
   exportedAt: z.string(),
   records: z.array(recordSchema).max(15000),
 });
@@ -451,7 +559,7 @@ export function validateImport(input: unknown) {
 export function extendImportedTrips(records: RecordData[]) {
   return records.map((record) => {
     if (record.kind !== "trip") return record;
-    const dates = records.filter((r): r is Item => r.kind === "item" && r.tripId === record.id && !!r.day)
+    const dates = records.filter((r): r is Item => r.kind === "item" && r.tripId === record.id && !!r.day && !(record.detachedItemIds ?? []).includes(r.id))
       .map((r) => r.day!);
     if (!dates.length) return record;
     const start = [record.start, ...dates].sort()[0];
@@ -463,6 +571,8 @@ export function remapImport(records: RecordData[], ownerId: string) {
   const mapping = new Map(records.map((r) => [r.id, uid()]));
   return records.map((r) => {
     const copy = { ...r, ...baseRecord(ownerId), id: mapping.get(r.id)! };
+    if (copy.kind === "trip" && copy.detachedItemIds)
+      copy.detachedItemIds = copy.detachedItemIds.flatMap((id) => { const mapped = mapping.get(id); return mapped ? [mapped] : []; });
     if (copy.kind !== "trip") copy.tripId = mapping.get(copy.tripId)!;
     if (copy.kind === "item") copy.placeId = mapping.get(copy.placeId)!;
     if (copy.kind === "task" && copy.itemId)

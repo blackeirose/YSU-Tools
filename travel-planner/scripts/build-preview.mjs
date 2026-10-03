@@ -18,10 +18,8 @@ if (
 for (const key of ["API_KEY", "AUTH_DOMAIN", "PROJECT_ID", "APP_ID"])
   if (!env["VITE_FIREBASE_" + key])
     throw new Error("Missing Firebase setting: " + key);
-if (env.VITE_AI_ENDPOINT)
-  throw new Error(
-    "AI requires a separately reviewed function contract and usage authorization",
-  );
+if (env.VITE_AI_ENDPOINT !== "/travel-planner/api/ai")
+  throw new Error("Preview requires the exact reviewed Planner-only AI route");
 for (const args of [
   ["node_modules/typescript/bin/tsc", "-b"],
   ["node_modules/vite/bin/vite.js", "build"],
@@ -37,7 +35,7 @@ writeFileSync(
       mode: "preview",
       namespace: "preview-v1",
       syntheticOnly: true,
-      aiEnabled: false,
+      aiEnabled: true,
       lockHash: createHash("sha256")
         .update(readFileSync("pnpm-lock.yaml"))
         .digest("hex"),
