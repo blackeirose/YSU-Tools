@@ -27,3 +27,13 @@
 - Active Auto-review handles eligible sandbox requests; it does not remove network, filesystem, company or browser confirmation boundaries. Do not ask again for already-authorized routine work. Record technical login/tool barriers separately from authorization.
 
 Reconsider implementation details only within user scope and current canonical rules. Changing locked boundaries requires explicit Owner instruction.
+
+## OWNER AUTHORIZATION — production URL and registration, 2026-10-02 21:41 PDT
+
+Owner explicitly requested:「我需要發佈到YCSU上  這樣我才方便測試   發布後並且要更新到TRACKER和MAIN上」
+
+This supersedes the earlier no-production and no-MAIN/Tracker task holds for this release only. The authorized destination remains https://tools.ycsu.cc/travel-planner/. After the production entry is verified, update the Travel Planner records in Tracker and MAIN to the actually verified status. No further generic "may I publish / update the registries?" confirmation is needed.
+
+This is release authorization, not evidence of release or a waiver of data-protection and complete-host validation gates. It does not authorize direct promotion of synthetic preview receipts, DNS/billing changes, broader access, disabling TLS verification, sibling changes, deleting user data, or enabling AI/background Push. Prepare a production-appropriate candidate with separate data scope and the required R7 server enforcement; changes must stay within Planner and preserve shared Owner/sibling policies. Surface a concrete diff if completing this requires broader shared-policy changes.
+
+Canonical execution and environment limits: docs/PRODUCTION_RELEASE_HANDOFF_2026-10-02.md. This branch records authorization/preparation only; it has not been deployed and is not a new LKG.
