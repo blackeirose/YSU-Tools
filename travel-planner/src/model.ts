@@ -170,6 +170,10 @@ export function validateSchedule(r: Item | Task) {
   try {
     if (r.kind === "task") {
       if (r.date && r.time) instant(r.date, r.time, r.timezone);
+    } else if (!r.day && r.status === "candidate") {
+      // A detached cross-day booking keeps its original departure/arrival
+      // details for recovery. Relative time is checked when it is re-scheduled.
+      return;
     } else if (r.day && r.time && ["fixed", "flexible"].includes(r.timeMode)) {
       const start = instant(r.day, r.time, r.departureZone);
       if (
