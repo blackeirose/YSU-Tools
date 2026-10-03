@@ -49,7 +49,7 @@ import { PlaceSearch } from "./PlaceSearch";
 import { ImportFlow } from "./ImportFlow";
 import { TravelerAssistant } from "./TravelerAssistant";
 import { TripBackground } from "./TripBackground";
-import { assistantActionAlreadyApplied, assistantItemId } from "./assistant-actions";
+import { assistantActionAlreadyApplied, assistantDraftIds, assistantItemId, assertAssistantDraftTrip } from "./assistant-actions";
 import type { AssistantAction } from "./server/gemini";
 import { fillPlaceFromPhoton, searchPhoton } from "./place-search";
 import type { PhotonPlace } from "./place-search";
@@ -701,15 +701,15 @@ export default function App() {
     assistantDone.current.set(fingerprint, Date.now());
     return action.message;
   }
-  async function applyAssistantDraft(action: AssistantAction): Promise<string> {
+  async function applyAssistantDraft(action: AssistantAction, expectedTripId: string): Promise<string> {
     if (!trip || !store || action.kind !== "draft" || !action.draftItems?.length)
       throw new Error("草案不完整，未寫入行程");
+    assertAssistantDraftTrip(expectedTripId, trip.id);
     if (action.draftItems.length > 20 || action.draftItems.some((row) => !dateList.includes(row.day)))
       throw new Error("草案含旅程外日期或超過 20 項；請先調整旅程日期，原行程未變更");
     const fingerprint = JSON.stringify({ tripId: trip.id, rows: action.draftItems });
-    const ids = await Promise.all(action.draftItems.map((_, index) =>
-      assistantItemId(`${fingerprint}:${index}`, 0, 0)));
-    if (ids.some((id) => records.some((record) => record.id === id)))
+    const { ids, alreadyAdded } = await assistantDraftIds(fingerprint, action.draftItems.length, store.snapshot.records);
+    if (alreadyAdded)
       return "這份草案已加入過，未重複新增；可使用復原或手動調整。";
     const nextOrder = new Map<string, number>();
     const updates: RecordData[] = [];
@@ -2179,7 +2179,7 @@ export default function App() {
           ))}
         </Modal>
       )}
-      {assistantOpen && trip && user && !demo && <TravelerAssistant tripId={trip.id} selectedDay={activeDay}
+      {assistantOpen && trip && user && !demo && <TravelerAssistant key={trip.id} tripId={trip.id} selectedDay={activeDay}
         city={currentCity?.name || trip.cities} selectedItem={selectedItem && pFor(selectedItem) ? { id: selectedItem.id, name: pFor(selectedItem)!.name } : undefined}
         token={async () => { if (!auth?.currentUser) throw new Error("登入已失效"); return auth.currentUser.getIdToken(); }}
         onAction={executeAssistant} onDraft={applyAssistantDraft} onClose={() => sas(false)} />}
