@@ -109,6 +109,7 @@ export default function App() {
     [recoveryDays, srecoveryDays] = useState<Record<string, string>>({}),
     [loginBusy, slb] = useState(false),
     [logoutOpen, slogout] = useState(false),
+    [localExitOpen, sexit] = useState(false),
     [email, sem] = useState(""),
     [password, spw] = useState(""),
     [aiQuery, saq] = useState(""),
@@ -880,6 +881,8 @@ export default function App() {
             >
               登出
             </button>
+          ) : demo && configured ? (
+            <button onClick={() => sexit(true)}>離開本機模式</button>
           ) : configured ? (
             <button onClick={() => slo(true)}>私人登入</button>
           ) : (
@@ -2006,6 +2009,21 @@ export default function App() {
           >
             回報底圖問題 ↗
           </a>
+        </Modal>
+      )}
+      {localExitOpen && demo && configured && (
+        <Modal title="離開本機模式" onClose={() => sexit(false)}>
+          <p>離開會清除此瀏覽器的本機旅程。若要保留資料，請先下載 JSON 備份。</p>
+          <button onClick={() => download("travel-planner-local-backup.json", JSON.stringify({
+            schemaVersion: 1,
+            exportedAt: new Date().toISOString(),
+            records: store?.snapshot.records ?? [],
+          }, null, 2), "application/json")}>下載本機備份</button>
+          <button className="danger" onClick={() => void attempt(async () => {
+            await signOutNow();
+            sexit(false);
+          }, "已離開本機模式並清除本機資料")}>清除並離開</button>
+          <button onClick={() => sexit(false)}>繼續使用</button>
         </Modal>
       )}
       {logoutOpen && store && (

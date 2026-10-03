@@ -54,10 +54,18 @@ test("configured Preview local mode survives a deep-link reload and clears on si
     await expect(page.getByRole("heading", { name: "東京 · 合成示範" })).toBeVisible();
     await page.reload();
     await expect(page.getByRole("heading", { name: "東京 · 合成示範" })).toBeVisible();
-    await page.getByRole("button", { name: "登出", exact: true }).click();
+    await page.getByRole("button", { name: "離開本機模式", exact: true }).click();
+    const backupDownload = page.waitForEvent("download");
+    await page.getByRole("dialog").getByRole("button", { name: "下載本機備份" }).click();
+    const backup = JSON.parse(await readFile((await (await backupDownload).path())!, "utf8"));
+    expect(backup.schemaVersion).toBe(1);
+    expect(backup.records.some((record: { kind: string }) => record.kind === "trip")).toBe(true);
+    await page.getByRole("dialog").getByRole("button", { name: "清除並離開" }).click();
     await expect(page.getByRole("button", { name: "使用本機模式" }).first()).toBeVisible();
     await page.reload();
     await expect(page.getByRole("button", { name: "使用本機模式" }).first()).toBeVisible();
+    await page.getByRole("button", { name: "使用本機模式" }).first().click();
+    await expect(page.getByRole("heading", { name: "東京 · 合成示範" })).toHaveCount(0);
   } finally { await context.close(); }
 });
 test("R1 emulator: login errors stay in dialog, cancellation and retry recover", async ({ browser }) => {
