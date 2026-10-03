@@ -6,6 +6,7 @@ import {
   makeOperation,
   applyOperation,
   checkBase,
+  deniedWriteConflict,
   readSnapshot,
   persist,
   productionTripViolation,
@@ -42,6 +43,13 @@ beforeAll(() => {
   });
 });
 describe("recoverable editing", () => {
+  it("classifies a rules denial after a concurrent Trip revision as recoverable", () => {
+    const owner = crypto.randomUUID();
+    const trip = { ...blankTrip(owner), start: "2030-01-01", end: "2030-01-03" };
+    const op = makeOperation("shorten", [trip], [{ ...trip, end: "2030-01-02", detachedItemIds: [] }], owner);
+    expect(deniedWriteConflict(op, [{ ...trip, revision: trip.revision + 1 }]).reason).toBe("concurrent");
+    expect(deniedWriteConflict(op, [trip]).reason).toBe("policy");
+  });
   it("undoes a detached candidate move without resurrecting an out-of-range day", async () => {
     const owner = crypto.randomUUID();
     const trip = { ...blankTrip(owner), start: "2030-01-01", end: "2030-01-02", detachedItemIds: ["placeholder"] };
