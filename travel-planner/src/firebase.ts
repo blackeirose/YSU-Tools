@@ -26,7 +26,7 @@ import {
 } from "firebase/firestore";
 import type { RecordData } from "./model";
 import { recordSchema } from "./model";
-import { ConflictError, canonical, isTripVersionTouch, productionTripViolation, unguardedItemChange } from "./storage";
+import { ConflictError, canonical, deniedWriteConflict, isTripVersionTouch, productionTripViolation, unguardedItemChange } from "./storage";
 import type { Operation, Remote } from "./storage";
 import { cloudScope } from "./cloud-config";
 const env = import.meta.env;
@@ -203,8 +203,22 @@ export function cloudRemote(owner: string): Remote {
         }
         });
       } catch (error) {
-        if ((error as { code?: string }).code === "permission-denied")
+        if ((error as { code?: string }).code === "permission-denied") {
+          // Firestore rules can report a concurrent revision change as a denial
+          // when another transaction commits after our reads. Re-read from the
+          // server before treating it as a permanent policy rejection.
+          try {
+            assertOwner();
+            const snapshots = await Promise.all(op.changes.map((c) => getDocFromServer(doc(records, c.id))));
+            const latest = snapshots.filter((s) => s.exists()).map((s) => recordSchema.parse(s.data()));
+            throw deniedWriteConflict(op, latest);
+          } catch (readError) {
+            if (readError instanceof ConflictError) throw readError;
+            // If the owner cannot read the records, retrying the same write is
+            // unsafe. Preserve the local operation as a policy conflict.
+          }
           throw new ConflictError([], "policy");
+        }
         throw error;
       }
     },
