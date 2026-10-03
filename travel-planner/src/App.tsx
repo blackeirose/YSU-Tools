@@ -966,6 +966,8 @@ export default function App() {
                 ? "舊版操作超過 450 筆雲端限制，未送出；本機資料完整保留。請先下載備份，再選遠端版本清除這批未同步資料，其他無關編輯可繼續同步。"
                 : c.reason === "legacy"
                   ? "升級前的離線操作缺少旅程日期保護，已暫停送出。本機資料仍保留；先下載兩份備份，再確認是否重新同步。"
+                  : c.reason === "policy"
+                    ? "正式雲端規則拒絕這批操作。已保留本機修改並暫停此批；請下載備份，再選擇遠端版本。其他無關編輯可繼續同步。"
                   : "其他裝置修改了同一項目。本機與遠端內容均保留；以下選擇會影響這批移動／排序／刪除。"}
             </p>
             <details>
@@ -988,7 +990,7 @@ export default function App() {
             >
               使用遠端版本（捨棄此批本機修改）
             </button>
-            {c.reason !== "oversize" && (() => {
+            {c.reason !== "oversize" && c.reason !== "policy" && (() => {
               const item = c.operation.changes.map((change) => change.after).find((r) => r.kind === "item");
               if (!item || item.kind !== "item") return null;
               const latestTrip = c.remote.find((r) => r.kind === "trip" && r.id === item.tripId) ?? records.find((r) => r.kind === "trip" && r.id === item.tripId);
@@ -1000,7 +1002,7 @@ export default function App() {
                 </select>
               </label> : null;
             })()}
-            {c.reason !== "oversize" && <button
+            {c.reason !== "oversize" && c.reason !== "policy" && <button
               onClick={() =>
                 void attempt(() => store.resolve(c.operation.id, "local", recoveryDays[c.operation.id]))
               }

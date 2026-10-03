@@ -15,7 +15,7 @@ export type Conflict = {
   operation: Operation;
   remote: RecordData[];
   createdAt: string;
-  reason?: "concurrent" | "oversize" | "legacy" | "range";
+  reason?: "concurrent" | "oversize" | "legacy" | "range" | "policy";
 };
 export type Snapshot = {
   records: RecordData[];
@@ -25,6 +25,7 @@ export type Snapshot = {
   downloaded: string[];
 };
 export type Remote = {
+  preflight?(op: Operation): void;
   commit(op: Operation): Promise<void>;
   read(ids: string[]): Promise<RecordData[]>;
   readTrip?(tripId: string): Promise<RecordData[]>;
@@ -155,6 +156,17 @@ export function unguardedItemChange(op: Operation) {
   return op.changes.some((c) => c.after.kind === "item" &&
     !op.changes.some((guard) => guard.id === (c.after as Extract<RecordData, { kind: "item" }>).tripId));
 }
+export function productionTripViolation(op: Operation): string | null {
+  for (const change of op.changes) {
+    if (change.after.kind !== "trip") continue;
+    if (change.after.deleted)
+      return "正式雲端旅程不能刪除；請封存旅程。原操作及本機資料仍保留。";
+    if (change.before?.kind === "trip" &&
+      (change.after.start > change.before.start || change.after.end < change.before.end))
+      return "正式雲端旅程目前不能縮短日期；原操作及本機資料仍保留。";
+  }
+  return null;
+}
 export function applyOperation(records: RecordData[], op: Operation) {
   const result = new Map(records.map((r) => [r.id, r]));
   for (const c of op.changes) result.set(c.id, c.after);
@@ -260,6 +272,7 @@ export class PlannerStore {
       const s = await readSnapshot(this.cacheKey);
       if (this.closed) throw new Error("帳號已切換");
       const op = makeOperation(label, shown, updates, this.owner);
+      this.remote?.preflight?.(op);
       if (this.remote && op.changes.length > 450)
         throw new Error("單次雲端操作最多 450 筆資料；本機與同步佇列未變更。請縮小批次。 ");
       if (!checkBase(s.records, op)) {
@@ -311,6 +324,7 @@ export class PlannerStore {
         })),
         this.owner,
       );
+      this.remote?.preflight?.(inverse);
       if (this.remote && inverse.changes.length > 450)
         throw new Error("這次復原超過 450 筆，請先匯出資料備份並逐項處理");
       await this.save({
@@ -550,6 +564,7 @@ export class PlannerStore {
           localUpdates,
           this.owner,
         );
+        this.remote?.preflight?.(op);
         records = applyOperation(records, op);
         pending = [...pending, op];
       }

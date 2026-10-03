@@ -25,8 +25,10 @@ latest live baseline, all six protected Function ZIPs, preserved traffic rules,
 and a fresh Production-context deployment. A synthetic preview receipt cannot
 be promoted.
 
-If a client has pending operations from before this rule change, the existing
-conflict recovery retains rejected operations locally. Export the local JSON
+The production client rejects a prohibited Trip shrink/tombstone before it
+changes IndexedDB, including Undo. An older pending operation rejected by
+the rules is quarantined as a policy conflict with its local version intact;
+unrelated queued operations can then continue. Export the local JSON
 before resolving a conflict; do not clear site data, overwrite a pending
 operation, or delete the v1 namespace. Rolling back the static app does not
 roll back Firestore records. Rollback of the host must be assembled from the

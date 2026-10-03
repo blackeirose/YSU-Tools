@@ -26,7 +26,7 @@ import {
 } from "firebase/firestore";
 import type { RecordData } from "./model";
 import { recordSchema } from "./model";
-import { ConflictError, isTripVersionTouch, unguardedItemChange } from "./storage";
+import { ConflictError, isTripVersionTouch, productionTripViolation, unguardedItemChange } from "./storage";
 import type { Operation, Remote } from "./storage";
 import { cloudScope } from "./cloud-config";
 const env = import.meta.env;
@@ -108,6 +108,12 @@ export function cloudRemote(owner: string): Remote {
     return snapshot.docs.map((row) => recordSchema.parse(row.data()));
   };
   return {
+    preflight(op: Operation) {
+      if (namespace === "v1") {
+        const issue = productionTripViolation(op);
+        if (issue) throw new Error(issue);
+      }
+    },
     async read(ids) {
       assertOwner();
       const rows = await Promise.all(
@@ -139,13 +145,16 @@ export function cloudRemote(owner: string): Remote {
       assertOwner();
       if (op.changes.length > 450) throw new Error("單次批次過大");
       if (unguardedItemChange(op)) throw new ConflictError([], "legacy");
+      if (namespace === "v1" && productionTripViolation(op))
+        throw new ConflictError([], "policy");
       const shrinkingTrips = op.changes.filter((c) => c.before?.kind === "trip" && c.after.kind === "trip" &&
         (c.before.start !== c.after.start || c.before.end !== c.after.end));
       // The web Transaction API reads document refs only. Fetch candidate IDs
       // from the server first, then re-read every candidate inside the CAS transaction.
       // New clients also touch Trip revision on item edits, closing the add/move race.
       const knownTripRows = (await Promise.all(shrinkingTrips.map((c) => readTripRows(c.id)))).flat();
-      await runTransaction(db!, async (tx) => {
+      try {
+        await runTransaction(db!, async (tx) => {
         assertOwner();
         const refs = op.changes.map((c) => doc(records, c.id));
         const changeIds = new Set(op.changes.map((c) => c.id));
@@ -205,7 +214,12 @@ export function cloudRemote(owner: string): Remote {
             tx.update(refs[i], { revision: after.revision, updatedAt: after.updatedAt });
           else tx.set(refs[i], after);
         }
-      });
+        });
+      } catch (error) {
+        if ((error as { code?: string }).code === "permission-denied")
+          throw new ConflictError([], "policy");
+        throw error;
+      }
     },
   };
 }

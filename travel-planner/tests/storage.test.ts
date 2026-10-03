@@ -8,6 +8,7 @@ import {
   checkBase,
   readSnapshot,
   persist,
+  productionTripViolation,
 } from "../src/storage";
 import type { RecordData } from "../src/model";
 import type { Remote, Operation } from "../src/storage";
@@ -40,6 +41,68 @@ beforeAll(() => {
   });
 });
 describe("recoverable editing", () => {
+  it("production policy rejects Trip shrink and tombstone before queuing Undo", async () => {
+    const owner = crypto.randomUUID();
+    const original = { ...blankTrip(owner), start: "2030-01-01", end: "2030-01-03" };
+    let server: RecordData[] = [];
+    const remote: Remote = {
+      watch: () => () => {},
+      read: async (ids) => server.filter((r) => ids.includes(r.id)),
+      preflight(op) {
+        const issue = productionTripViolation(op);
+        if (issue) throw new Error(issue);
+      },
+      async commit(op) {
+        if (productionTripViolation(op)) throw new ConflictError([], "policy");
+        server = applyOperation(server, op);
+      },
+    };
+    const store = new PlannerStore(owner, remote);
+    await store.init();
+    await store.edit("create", [original]);
+    await store.flush();
+    await expect(store.undo()).rejects.toThrow("不能刪除");
+    expect(store.snapshot.pending).toHaveLength(0);
+    expect(store.snapshot.records.find((r) => r.id === original.id)?.deleted).toBe(false);
+    const current = store.snapshot.records.find((r) => r.id === original.id) as typeof original;
+    await store.edit("extend", [{ ...current, end: "2030-01-04" }]);
+    await store.flush();
+    await expect(store.undo()).rejects.toThrow("不能縮短");
+    expect(store.snapshot.pending).toHaveLength(0);
+    expect(server.find((r) => r.id === original.id)).toMatchObject({ end: "2030-01-04" });
+    await store.clear();
+  });
+  it("isolates a legacy policy-rejected pending Trip edit and continues unrelated sync", async () => {
+    const owner = crypto.randomUUID();
+    const base = { ...blankTrip(owner), start: "2030-01-01", end: "2030-01-04", revision: 1 };
+    const stale = makeOperation("old offline shrink", [base], [{ ...base, end: "2030-01-02" }], owner);
+    let server: RecordData[] = [base];
+    await persist(owner, { records: applyOperation([base], stale), pending: [stale], conflicts: [], undo: stale, downloaded: [] });
+    const remote: Remote = {
+      watch: () => () => {},
+      read: async (ids) => server.filter((r) => ids.includes(r.id)),
+      preflight(op) {
+        const issue = productionTripViolation(op);
+        if (issue) throw new Error(issue);
+      },
+      async commit(op) {
+        if (productionTripViolation(op)) throw new ConflictError([], "policy");
+        server = applyOperation(server, op);
+      },
+    };
+    const store = new PlannerStore(owner, remote);
+    await store.init();
+    await store.flush();
+    expect(store.snapshot.conflicts[0].reason).toBe("policy");
+    expect(store.snapshot.conflicts[0].operation.changes[0].after).toMatchObject({ end: "2030-01-02" });
+    await store.edit("unrelated", [blankTrip(owner)]);
+    await store.flush();
+    expect(server).toHaveLength(2);
+    expect(store.snapshot.pending).toHaveLength(0);
+    await store.resolve(store.snapshot.conflicts[0].operation.id, "remote");
+    expect(store.snapshot.records.find((r) => r.id === base.id)).toMatchObject({ end: "2030-01-04" });
+    await store.clear();
+  });
   it("a stalled network commit does not block offline edits or overwrite their queue on ack", async () => {
     const owner = crypto.randomUUID();
     let release!: () => void, entered!: () => void;
