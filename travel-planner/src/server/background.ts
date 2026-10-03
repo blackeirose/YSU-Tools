@@ -17,12 +17,12 @@ export const backgroundStore = (env: Env) => env("TRAVEL_PLANNER_FIREBASE_NAMESP
 const keyFor = (namespace: string, uid: string, tripId: string) => `${namespace}/${uid}/${tripId}`;
 
 export async function ownerTrip(req: Request, env: Env, http: Http = fetch, requireCity = true) {
+  const token = req.headers.get("Authorization")?.match(/^Bearer ([A-Za-z0-9._-]+)$/)?.[1];
+  if (!token) return { error: json(401, { error: "請先私人登入" }) } as const;
   const project = env("TRAVEL_PLANNER_FIREBASE_PROJECT_ID"), webKey = env("TRAVEL_PLANNER_FIREBASE_WEB_KEY"),
     ownerId = env("TRAVEL_PLANNER_AI_OWNER_UID"), namespace = env("TRAVEL_PLANNER_FIREBASE_NAMESPACE");
   if (!project || !webKey || !ownerId || !["v1", "preview-v1"].includes(namespace ?? ""))
     return { error: json(503, { error: "Planner 服務設定不完整" }) } as const;
-  const token = req.headers.get("Authorization")?.match(/^Bearer ([A-Za-z0-9._-]+)$/)?.[1];
-  if (!token) return { error: json(401, { error: "請先私人登入" }) } as const;
   const tripId = new URL(req.url).searchParams.get("tripId");
   const parsed = input.safeParse({ tripId });
   if (!parsed.success) return { error: json(400, { error: "旅程識別不正確" }) } as const;
@@ -77,6 +77,8 @@ async function generate(http: Http, env: Env, prompt: string, reference?: { mime
 
 export async function startBackground(req: Request, env: Env, http: Http = fetch, store: Store = backgroundStore(env)) {
   if (req.method !== "POST") return json(405, { error: "只接受 POST" });
+  if (!req.headers.get("Authorization")?.match(/^Bearer ([A-Za-z0-9._-]+)$/))
+    return json(401, { error: "請先私人登入" });
   if (!gatewayReady(env)) return json(503, { error: "Planner 圖片服務尚未啟用" });
   let owner: Awaited<ReturnType<typeof ownerTrip>>;
   try { owner = await ownerTrip(req, env, http); }
