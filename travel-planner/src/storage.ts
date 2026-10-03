@@ -211,6 +211,12 @@ export function deniedWriteConflict(op: Operation, latest: RecordData[]) {
     ? new ConflictError(latest, "policy")
     : new ConflictError(latest, "concurrent");
 }
+/** Only a confirmed read denial proves this is a durable access-policy error. */
+export function deniedWriteReadFailure(error: unknown) {
+  return (error as { code?: string })?.code === "permission-denied"
+    ? new ConflictError([], "policy")
+    : error;
+}
 export class PlannerStore {
   snapshot = empty();
   status = "載入中";
