@@ -178,6 +178,26 @@ export function applyOperation(records: RecordData[], op: Operation) {
   for (const c of op.changes) result.set(c.id, c.after);
   return [...result.values()];
 }
+/** An Undo must restore the visible candidate, not write an out-of-range raw day. */
+export function undoUpdates(op: Operation, records: RecordData[]): RecordData[] {
+  const projected = new Set<string>();
+  const updates = op.changes.map((change) => {
+    const before = change.before ?? { ...change.after, deleted: true };
+    if (before.kind !== "item" || before.deleted || !before.day)
+      return { ...before, revision: change.after.revision };
+    const targetTrip = op.changes.find((candidate) => candidate.id === before.tripId)?.before ??
+      records.find((record) => record.id === before.tripId);
+    if (targetTrip?.kind !== "trip" || (before.day >= targetTrip.start && before.day <= targetTrip.end))
+      return { ...before, revision: change.after.revision };
+    projected.add(before.id);
+    return { ...before, revision: change.after.revision, day: null, status: "candidate" as const,
+      candidateOrigin: before.candidateOrigin ?? { day: before.day, order: before.order,
+        status: before.status === "candidate" ? "planned" as const : before.status, reason: "trip-range" as const } };
+  });
+  return updates.map((update) => update.kind === "trip" && projected.size
+    ? { ...update, detachedItemIds: (update.detachedItemIds ?? []).filter((id) => !projected.has(id)) }
+    : update);
+}
 export function checkBase(records: RecordData[], op: Operation) {
   return op.changes.every(
     (c) =>
@@ -325,10 +345,7 @@ export class PlannerStore {
       const inverse = makeOperation(
         `復原：${op.label}`,
         s.records,
-        op.changes.map((c) => ({
-          ...(c.before ?? { ...c.after, deleted: true }),
-          revision: c.after.revision,
-        })),
+        undoUpdates(op, s.records),
         this.owner,
       );
       this.remote?.preflight?.(inverse);
