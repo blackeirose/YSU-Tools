@@ -1,5 +1,9 @@
 # Decisions
 
+## Release decision — 2026-10-03
+
+The new complete-host Preview is a synthetic `deploy-preview` at `6ac1921df800e63bc4e905cb`. Its Firebase hostname authorization and `preview-v1` Owner rules are confined to this Planner test scope. Product and publisher CI, independent source reviews and protected-host validation pass, but TOWER's normal Google popup did not complete. Anonymous Planner Function 401s verify entry/auth rejection, **not** real Gemini execution. The Owner's conditional production authorization has not become an unconditional promotion: retain the current `6ac0989e1e8fabf48ee75360` production deploy until authenticated cloud, paid assistant/vision/background and data recovery gates are verified. Continue to keep Planner free of Supabase and leave sibling tools, DNS, MAIN and Tracker unchanged for this upgrade.
+
 ## SUPERSEDING UPGRADE DECISIONS — 2026-10-03
 
 - This upgrade replaces the older blanket statement below that AI cannot modify an itinerary. The Owner now permits clear, single-item voice or text instructions to yield **typed actions**; the app validates ownership, record revision, date, fixed booking and Undo before applying them. Vague requests, large batches, imports and complete drafts need a preview/confirmation. AI never books, pays, sends messages or acts without the user's instruction.
