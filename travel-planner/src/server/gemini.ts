@@ -81,13 +81,13 @@ export async function reserveQuota(http: typeof fetch, base: string, token: stri
 const safeSource = (url: string) => { try { const parsed = new URL(url); return parsed.protocol === "https:" ? parsed.href : ""; } catch { return ""; } };
 export async function geminiHandler(req: Request, env: Env, http: typeof fetch = fetch): Promise<Response> {
   if (req.method !== "POST") return reply(405, { error: "只接受 POST" });
+  const token = req.headers.get("Authorization")?.match(/^Bearer ([A-Za-z0-9._-]+)$/)?.[1];
+  if (!token) return reply(401, { error: "請先私人登入" });
   if (!gatewayReady(env)) return reply(503, { error: "Gemini 尚未啟用；主要行程與一般搜尋仍可使用。" });
   const project = env("TRAVEL_PLANNER_FIREBASE_PROJECT_ID"), webKey = env("TRAVEL_PLANNER_FIREBASE_WEB_KEY"),
     ownerId = env("TRAVEL_PLANNER_AI_OWNER_UID"), namespace = env("TRAVEL_PLANNER_FIREBASE_NAMESPACE");
   if (!project || !webKey || !ownerId || !namespace || !["v1", "preview-v1"].includes(namespace) ||
     !/^[a-z][a-z0-9-]{3,62}$/.test(project)) return reply(503, { error: "Planner 服務設定不完整" });
-  const token = req.headers.get("Authorization")?.match(/^Bearer ([A-Za-z0-9._-]+)$/)?.[1];
-  if (!token) return reply(401, { error: "請先私人登入" });
   let input: AssistantInput;
   try {
     if (Number(req.headers.get("content-length") ?? 0) > 1_500_000) return reply(413, { error: "附件過大" });
