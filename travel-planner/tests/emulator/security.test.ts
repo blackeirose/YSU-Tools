@@ -21,7 +21,7 @@ beforeAll(async () => {
 });
 afterAll(async () => env?.cleanup());
 describe("owner rules — real Firestore emulator required", () => {
-  it("owner CRUD revisions pass; anonymous, other user and physical deletes fail", async () => {
+  it("owner revisions pass; anonymous, other user, Trip tombstones and physical deletes fail", async () => {
     const t = { ...blankTrip("alice"), revision: 1 };
     const path = `travelPlanner/preview-v1/users/alice/records/${t.id}`;
     const alice = env.authenticatedContext("alice").firestore();
@@ -36,7 +36,9 @@ describe("owner rules — real Firestore emulator required", () => {
       setDoc(doc(alice, path), { ...t, ownerId: "bob", revision: 2 }),
     );
     await assertFails(setDoc(doc(alice, path), { ...t, revision: 1 }));
-    await assertSucceeds(
+    // A Trip tombstone can strand child records. The range-safe policy keeps
+    // the Trip available for recovery; archive is the supported hide action.
+    await assertFails(
       setDoc(doc(alice, path), { ...t, deleted: true, revision: 2 }),
     );
     await assertFails(deleteDoc(doc(alice, path)));
