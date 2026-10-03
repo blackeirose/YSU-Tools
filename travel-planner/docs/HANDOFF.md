@@ -2,8 +2,8 @@
 
 **最新 R1–R9 修復版隔離 Preview 可用本機合成資料試用；此新 origin 的 Google 雲端登入尚未驗證／授權。沒有 production deploy。**
 
-- [最新修復版 Preview](https://6ac0801b69bdac3b089c94fc--ycsu-tools-router.netlify.app/travel-planner/)：deploy `6ac0801b69bdac3b089c94fc`，產品 source `c7424d7deb01ae02e5636c7663999b16df34ae17`，發布 authority source `8cd01da7b9bb18e0551f477a0e0e420718a2ddb0`。從「使用本機模式」載入合成東京／跨年示範，可測移日／Undo、提醒與 ICS、深層網址刷新、備份並離開。遠端 Chrome 桌機與 390px 模擬手機已實測；實體 iPhone 未測。
-- [來源對應 emulator CI](https://github.com/blackeirose/YSU-Tools/actions/runs/37095493325) PASS：38 unit、2 rules、4 獨立 context 流程。獨立原始碼 reviewer 對提醒、跨記錄、佇列與最新本機退出差異 PASS；不代表實機或正式雲端驗收。
+- [最新修復版 Preview](https://6ac08433dbc4b56d7f3160d1--ycsu-tools-router.netlify.app/travel-planner/)：deploy `6ac08433dbc4b56d7f3160d1`，產品 source `380ae4aa56c5266f590a5ecf299f6ea0b4cc9986`，發布 authority source `d9ddbd37fcdad555549e93467bf822855b99a694`。從「使用本機模式」載入合成東京／跨年示範，可測移日／Undo、提醒與 ICS、深層網址刷新、備份並離開。遠端 Chrome 桌機與 390px 模擬手機已實測；實體 iPhone 未測。
+- [來源對應 emulator CI](https://github.com/blackeirose/YSU-Tools/actions/runs/37096453816) PASS：38 unit、2 rules、4 獨立 context 流程。獨立原始碼 reviewer 對提醒、跨記錄、佇列與本機退出載入門檻複核 PASS；不代表實機或正式雲端驗收。
 - 新 draft origin 未加入 Firebase Authorized Domains；需要另行精確授權才可在**此新網址**測 Google 雲端同步。Owner 受影響 Chrome 的憑證錯誤亦需分開由裝置／IT 查明。AI／背景 Push 未啟用。正式站 production ID 前後均為 `6abf52a7be775989aeaab09d`。完整 R1–R9 與回復見 [驗證紀錄](REVIEW_R1_R9_2026-10-02.md)。
 
 以下原始 V1 交接與連結屬**歷史里程碑**；舊 Preview 不能驗收本輪修復。
