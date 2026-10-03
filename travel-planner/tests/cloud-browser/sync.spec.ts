@@ -285,6 +285,7 @@ test("emulator: independent same-user contexts synchronize both directions and p
         .locator('[data-day="2030-01-02"]')
         .getByRole("article", { name: "B to A", exact: true }),
     ).toBeVisible();
+    await operations(b);
     await b.getByRole("button", { name: "復原", exact: true }).click();
     await expect(
       a
@@ -303,6 +304,7 @@ test("emulator: independent same-user contexts synchronize both directions and p
     await expect(
       a.getByRole("article", { name: "B to A", exact: true }),
     ).toHaveCount(0);
+    await operations(b);
     await b.getByRole("button", { name: "復原", exact: true }).click();
     await expect(
       a.getByRole("article", { name: "B to A", exact: true }),
