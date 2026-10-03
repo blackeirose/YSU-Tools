@@ -7,6 +7,7 @@ import {
   applyOperation,
   checkBase,
   deniedWriteConflict,
+  deniedWriteReadFailure,
   readSnapshot,
   persist,
   productionTripViolation,
@@ -49,6 +50,39 @@ describe("recoverable editing", () => {
     const op = makeOperation("shorten", [trip], [{ ...trip, end: "2030-01-02", detachedItemIds: [] }], owner);
     expect(deniedWriteConflict(op, [{ ...trip, revision: trip.revision + 1 }]).reason).toBe("concurrent");
     expect(deniedWriteConflict(op, [trip]).reason).toBe("policy");
+  });
+  it("keeps a denied write pending when its verification read only fails transiently", () => {
+    const unavailable = Object.assign(new Error("network unavailable"), { code: "unavailable" });
+    expect(deniedWriteReadFailure(unavailable)).toBe(unavailable);
+    const denied = Object.assign(new Error("read denied"), { code: "permission-denied" });
+    expect((deniedWriteReadFailure(denied) as ConflictError).reason).toBe("policy");
+  });
+  it("retries a transient cloud failure without discarding the local operation", async () => {
+    const owner = crypto.randomUUID();
+    let attempts = 0;
+    const remote: Remote = {
+      watch: () => () => {},
+      read: async () => [],
+      commit: async () => {
+        if (++attempts === 1) throw Object.assign(new Error("temporarily unavailable"), { code: "unavailable" });
+      },
+    };
+    const store = new PlannerStore(owner, remote);
+    await store.init();
+    navigator.onLine = false;
+    try {
+      await store.edit("offline draft", [blankTrip(owner)]);
+      navigator.onLine = true;
+      await store.flush();
+      expect((await readSnapshot(owner)).pending).toHaveLength(1);
+      expect(store.snapshot.conflicts).toHaveLength(0);
+      await store.flush();
+      expect((await readSnapshot(owner)).pending).toHaveLength(0);
+      expect(attempts).toBe(2);
+    } finally {
+      navigator.onLine = true;
+      await store.clear();
+    }
   });
   it("undoes a detached candidate move without resurrecting an out-of-range day", async () => {
     const owner = crypto.randomUUID();
