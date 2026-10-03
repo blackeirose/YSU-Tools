@@ -205,6 +205,12 @@ export function checkBase(records: RecordData[], op: Operation) {
       (c.before?.revision ?? 0),
   );
 }
+/** A rules denial can be a concurrent revision race, not a durable policy error. */
+export function deniedWriteConflict(op: Operation, latest: RecordData[]) {
+  return checkBase(latest, op)
+    ? new ConflictError(latest, "policy")
+    : new ConflictError(latest, "concurrent");
+}
 export class PlannerStore {
   snapshot = empty();
   status = "載入中";
