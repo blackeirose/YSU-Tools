@@ -78,4 +78,26 @@ describe("Gemini paid boundary", () => {
     };
     expect((await geminiHandler(request("explore"), env, http as typeof fetch)).status).toBe(502);
   });
+  it("returns a bounded dated draft for explicit confirmation and rejects a prose-only draft", async () => {
+    const payloads = [
+      { kind: "draft", message: "兩日草案", draftItems: [
+        { day: "2030-01-01", name: "淺草寺", period: "上午" },
+        { day: "2030-01-02", name: "上野公園", time: "09:00" },
+      ] },
+      { kind: "draft", message: "請直接加入" },
+    ];
+    const http = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("accounts:lookup")) return owner();
+      if (url.includes("/records/")) return trip();
+      if (url.includes("/aiUsage/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/")) return new Response("", { status: 404 });
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify(payloads.shift()) }] } }] });
+    };
+    const valid = await geminiHandler(request(), env, http as typeof fetch);
+    expect(valid.status).toBe(200);
+    expect((await valid.json()).action.draftItems).toHaveLength(2);
+    const invalid = await geminiHandler(request(), env, http as typeof fetch);
+    expect(invalid.status).toBe(502);
+  });
 });
