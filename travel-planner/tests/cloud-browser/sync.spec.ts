@@ -311,6 +311,7 @@ test("emulator: independent same-user contexts synchronize both directions and p
     ).toBeVisible();
     // Choosing local after a competing offline/online edit is explicit and syncs.
     await first.setOffline(true);
+    await editing(a);
     await a
       .getByRole("article", { name: "B to A", exact: true })
       .getByRole("button", { name: "時間／備註" })
@@ -330,6 +331,7 @@ test("emulator: independent same-user contexts synchronize both directions and p
     await expect(
       a.getByText("離線 · 修改待同步", { exact: true }),
     ).toBeVisible();
+    await editing(b);
     await b
       .getByRole("article", { name: "B to A", exact: true })
       .getByRole("button", { name: "時間／備註" })
