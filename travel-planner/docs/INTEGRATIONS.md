@@ -1,12 +1,14 @@
 # 外部服務與資料保護
 
-## Firebase：已實作 adapter；尚未啟用／實際驗證
+## Firebase：隔離 Preview 已啟用；正式 v1 尚未開放
+
+Owner 已授權既有個人 Firebase 專案的最小 Planner 範圍。合併規則保留原有 bytes，經完整 emulator／獨立 review 後已發布並讀回相同 hash。最終精確 Preview domain 已加入，原5個domain保留，被取代的試用domain已移除。真實 Owner Google 登入、雲端 CRUD／刷新、兩個 Edge origins 雙向同步 PASS；獨立 browser contexts 僅 emulator PASS，實體裝置及真實雲端 offline 尚 UNVERIFIED。詳見 VALIDATION.md。
 
 將 `.env.example` 複製為 git 忽略的 `.env.local`，只填獲授權的獨立 Firebase web 公開設定。Google Auth 必須已啟用、網域授權和費用條件已確認；不由本任務自動開通。Firebase web API key 是公開 client configuration；任何真正秘密都不能放 VITE_*。不將 UMS project 當作可任意使用的共用後端。
 
 Google 使用 popup 回登入頁，路由維持 `/travel-planner/trips/{uuid}/day/{date}`。Firebase 預設 auth helper 是 project 的 `https://<auth-domain>/__/auth/handler`，由 Firebase 管理，不在共享站新增 `/__/auth` catchall，也不擅自代理它。啟用前查核 OAuth authorized origin／redirect 設定與當前官方要求；正式域與隔離 preview 各別驗證。Auth 切換／登出清理本機帳號資料、pending、conflicts、UI selection；不快取私人 API。未同步時登出提供完整備份、重試或明確捨棄，避免暗中遺失。
 
-Namespace 固定為 `travelPlanner/v1/users/{uid}/records/{uuid}`。規則只允許 UID owner 讀寫，驗 ownerId/id/kind/revision/tombstone。不同 user、未登入與 physical delete 拒絕。`firestore.rules` 是獨立候選規則，若使用既有 project，必須在已授權的合併審查中保留全部兄弟規則，不能直接全檔部署。
+本次 namespace 為 `travelPlanner/preview-v1/users/{uid}/records/{uuid}`，只供合成試用；正式 `v1` 尚未開放。設定由 `VITE_FIREBASE_NAMESPACE` 指定，本機 queue identity 同時包含 project、namespace、UID。預覽規則重用既有 verified-Google Owner policy，限制 ownerId/id/kind/revision/tombstone，拒絕未登入、其他 user 及 physical delete。`firestore.rules` 是獨立 emulator 規則，不能直接部署取代既有專案整份規則；使用已核對最新 baseline 的 additive merge。
 
 同步按 record transaction CAS，500 筆 Firebase transaction 限制內，本工具單次匯入最多 450 records；大檔不會靜默部分匯入。離線操作、原始 before、最新 local after、conflict remote 持久化。跨日移動／排序／刪除以同一 operation 原子提交。衝突關聯操作合併保留 earliest base/latest intent。Resolve 重新讀取遠端，讀取失敗不丟 conflict；保留本機也重新 CAS，若遠端再次變更仍提示衝突。Undo 先驗原 after 仍等於目前資料，拒絕覆寫 intervening edit。每次不是覆寫整份雲端旅程。
 
@@ -23,7 +25,7 @@ pnpm test:rules
 VITE_USE_EMULATORS=true pnpm dev --port 4174
 ```
 
-Windows 用既有 shell 的環境變數語法。`firebase.json` 只綁 127.0.0.1，無 hosting/deploy 指令。規則測試已備妥，未執行不能列 PASS。後續使用兩個獨立 browser context 同 emulator 帳號雙向編輯、離線後另一端移日／排序／刪除、重連選 local/remote、登出／不同 user 測試。`tests/cloud-browser` 提供專用流程，不能用本機 demo 雙分頁取代跨裝置證據。
+Windows 用既有 shell 的環境變數語法。`firebase.json` 只綁 127.0.0.1，無 hosting/deploy 指令。已透過手動 GitHub Actions 的 demo project 執行，最終 run 37079696570 PASS：兩個獨立 browser contexts 同帳號雙向編輯、離線後另一端移日／排序／刪除、重連選 local/remote、登出／其他 user。`tests/cloud-browser` 是專用流程，不能用本機 demo 雙分頁取代跨裝置證據。
 
 ## AI：介面與 server boundary 已完成；未啟用
 

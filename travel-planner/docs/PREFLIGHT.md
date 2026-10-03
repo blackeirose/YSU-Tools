@@ -35,3 +35,7 @@ Existing personal Firebase rules were read through its normal console session an
 The missing local JVM is resolved for validation through the explicitly authorized manual GitHub Actions demo emulator, not a machine install. Active runtime permissions explicitly report approvals_reviewer=auto_review. Sandbox Git ownership/network errors are technical boundary requests, not missing Owner scope. GitHub connector remains authenticated; Netlify browser login/CLI authentication is separate. See APPROVALS.md.
 
 Current browser runtime connects to Edge; previous Chrome binding is unavailable. Firebase's existing Google session works in Edge. No browser profile was reset, no credential store inspected and no company policy changed.
+
+## Final continuation outcome (supersedes earlier pending-service notes)
+
+Owner completed official Netlify login/CLI authorization. Effective auto_review remained active; no global policy or managed-device settings changed. Fresh site API shows no linked Git/CD. Final isolated draft 6ac045607f1d78183c46e201 is ready and passed complete-host checks; production remains 6abf52a7be775989aeaab09d. Only its exact Firebase domain is newly authorized; original five domains and sibling rule bytes remain. Real Owner OAuth/cloud CRUD and bidirectional Edge dual-origin sync passed. Independent-browser/device live sync, actual cloud offline, WebKit and physical iPhone remain UNVERIFIED. Source 4cb7fdf71f7c5557f726f079ebc2104dc0b8430a; see HANDOFF.md and VALIDATION.md for retained evidence. No additional production authority is implied.

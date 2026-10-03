@@ -1,41 +1,44 @@
-# Travel Planner V1 — 接續交付（2026-10-02）
+# Travel Planner V1 — 隔離試用交付
 
-**核心與 emulator 同步可驗收；已產生完整本機共享站 candidate，但持久 Netlify Preview 與真實 Owner OAuth 尚未啟用。沒有 production deploy。**
+**持久 Preview 已可試用，真實 Firebase 登入與雙向讀寫已驗證。沒有 production deploy。**
 
-- 產品 [PR #1](https://github.com/blackeirose/YSU-Tools/pull/1)，branch `feature/travel-planner-v1`；已驗證程式碼／candidate source `c97589fe24ead39765530a9968d4e4fc6aac3bfb`。
-- 發布 authority [PR #21](https://github.com/blackeirose/social-capture-tool/pull/21)，branch `feature/travel-planner-preview`，程式碼 `ac8754680150dc4ac36f43cebd56009aa21c1688`，以最新 accepted `b551947` 為基準。不是過時 main。
-- Core main `57a69136b7473718dfcf26311ae801f033696f05`。正式路徑固定 `https://tools.ycsu.cc/travel-planner/`。
-- 完整本機 candidate：`C:/Users/YSU/Codex_Tower/integration-transfer/planner-candidate-c97589fe`；322 static files，manifest SHA256 `4d18c3395f9a8c3c258863f09ea5c0a1bab23ecfa64763c496b04531b23c2013`。不是已部署 Preview。
-- 307 個既有 static bytes 與 6 個 function ZIP 全部核對正式 baseline 雜湊。來源保留在私有 release `ca-space-recovery-2026-10-01`，本機副本在 `integration-transfer/planner-retained-baseline`；不靠臨時 ZIP 作唯一成果。
+- [開啟隔離 Preview](https://6ac045607f1d78183c46e201--ycsu-tools-router.netlify.app/travel-planner/)：使用既有 Owner Google 帳號登入，或選明確標示的本機模式。只供合成測試資料。
+- 產品 [PR #1](https://github.com/blackeirose/YSU-Tools/pull/1)，branch `feature/travel-planner-v1`；Preview source `4cb7fdf71f7c5557f726f079ebc2104dc0b8430a`。
+- 發布 authority [PR #21](https://github.com/blackeirose/social-capture-tool/pull/21)，branch `feature/travel-planner-preview`；candidate authority `61ef93988580b8cde0d608d8cecb3eaaa367eb7e`，基於 accepted `b551947`。
+- Core main `57a69136b7473718dfcf26311ae801f033696f05`。正式目標仍為 `https://tools.ycsu.cc/travel-planner/`，本輪沒有發布到此路徑。後續文件 commit 不改變 Preview 成品。
 
-## 實際狀態
+## 可用操作
 
-| 範圍 | 已完成／界線 |
+旅程新增／編輯／複製／封存、最少名稱新增地點、多日並排行程與真實可縮放地圖、候選搜尋／加入／替換、拖曳與手機移日／排序、Undo、固定預約保護的彈性延後、待辦與提醒中心、ICS VALARM、JSON 預覽匯入／匯出、列印、離線下載與衝突恢復。東京及京都／大阪／名古屋示範均為合成資料。
+
+## 真實狀態
+
+| 範圍 | 結果與界線 |
 |---|---|
-| 核心 | 多日行程、真實地圖、候選替換、移動排序 Undo、固定預約保護、待辦、ICS、JSON、列印、合成東京與跨年多城市示範 |
-| 同步 | Firebase Auth／Firestore adapter；兩個獨立 context 的雙向、refresh/relogin、離線重載重連、跨日／排序／刪除 Undo、雙向衝突選擇均在 emulator PASS |
-| 資料保護 | stale draft 拒絕覆寫；網路同步不占本機編輯鎖；session loss 原子保存 recovery；project＋namespace＋UID 分開本機 queue |
-| Firebase 真實專案 | 已找到適合的既有個人 project；private `preview-v1` 合併規則已通過完整 emulator 與獨立 review。規則已發布且刷新讀回 hash 相符；authorized host 尚未新增，正式 v1 不可存取 |
-| 離線 | Chrome local／emulator 讀寫、重載與重連 PASS；無離線底圖；記憶體 session recovery 必須留在該分頁，強制關閉可能失去它，有警示及原帳號備份 |
-| AI | 未啟用。普通 Maps 搜尋可用。現有兄弟 keys 不借用；本 candidate 不新增 AI function |
-| 提醒 | 提醒中心、前景提醒、ICS VALARM 可用；背景 Web Push 未啟用 |
-| Preview | 完整本機 candidate 已組成；Netlify draft 尚無 URL，不能從手機跨網路試用 |
-| iPhone | 真機安裝、Safari 離線、鎖屏通知 UNVERIFIED；Chrome 390px 不等於 iPhone |
+| 雲端同步 | 真實 Google 登入、全新 Preview origin 從 Firestore 讀回旅程、新增旅程／地點、反向新增、跨日移動、Undo、刷新保留均 PASS。同一 Edge 的兩個不同 origin，各自獨立本機資料庫；不是兩個獨立 browser contexts 或實體裝置。 |
+| 存取控制 | 既有個人 Firebase 專案，僅 owner-only preview-v1；原規則 bytes 保留，發布讀回 hash 相同。只新增最終精確 Preview domain，已移除被取代 draft domain。正式 v1 尚未開放。 |
+| 離線／衝突 | 本機及 emulator 讀寫、reload、重連、跨日／排序／刪除衝突與雙向版本選擇 PASS；真實雲端離線重連 UNVERIFIED。無離線底圖。意外 session loss 的 recovery 留原分頁記憶體，關閉前依警示備份。 |
+| AI | 尚未啟用；Maps 搜尋可用。UI、server adapter、驗證及錯誤處理完成，未借用兄弟 key，未部署 AI function。 |
+| 提醒 | 提醒中心、前景提醒、穩定 UID／VALARM 的 ICS 可用；行事曆匯入為快照。背景 Web Push 未啟用，無授權 scheduler。 |
+| 手機／PWA | 實際查看 390px／1440px；scope 限 /travel-planner/。WebKit、實體 iPhone 安裝、Safari 離線、鎖屏推播 UNVERIFIED。 |
 
-## 已驗證
+## 驗證與隔離
 
-27 unit tests、16 本機 Chrome 流程（1440／390）、typecheck／build PASS。Public emulator [run 37063922214](https://github.com/blackeirose/YSU-Tools/actions/runs/37063922214) PASS，含 owner/anonymous/other-user 與 trusted-Google preview 規則及兩個獨立 contexts。Private authority [run 37064250499](https://github.com/blackeirose/social-capture-tool/actions/runs/37064250499) 完整合併 rules PASS，authority 66 PASS／1 既有 skip。獨立 reviewer 已複核資料遺失與 traffic-policy 修正 PASS（程式碼審查，非 live acceptance）。
+Typecheck／build、27 unit tests、18 本機 Chrome 流程 PASS。Public emulator [run 37079696570](https://github.com/blackeirose/YSU-Tools/actions/runs/37079696570) PASS：兩項 rules tests、兩個獨立 contexts 雙向／權限／離線衝突。共享完整規則私有 [run 37064250499](https://github.com/blackeirose/social-capture-tool/actions/runs/37064250499) PASS。Authority 本機 69 tests：68 PASS／1 既有 skip。獨立 reviewer 風險審查 PASS。
 
-## 剩餘最少 Owner 介入
+最終 draft 的 322 static files、6 exact function archives、routes／modes／traffic policy／cleanup cron 驗證 PASS；307 個原有檔案受保護，僅共享 root headers／redirects 作已核准 append。18組遠端 probes 含兄弟工具、Planner 有／無尾斜線、deep routes、assets／PWA、API／missing-asset 404。正式 deploy 仍為 `6abf52a7be775989aeaab09d`。沒有整站部署 YSU-Tools，沒有使用 Supabase。
 
-1. **在 TOWER 完成既有 Netlify 帳號的正常 CLI 登入／授權**。CLI account config 不存在、管理頁目前登出；connector 只有不適用本任務的直接 deploy 操作，不能代替完整 draft upload。不要在聊天貼 token。之後由 agent 查 live traffic policy、重新核對 baseline、建立 draft、驗證完整站與精確 preview host。
-2. **Firebase 最小合併規則已依既有授權完成**，無須再核准同一動作。取得 draft ID 後只加入其精確 Preview host；不使用網域 wildcard，不改兄弟存取。完整差異／rollback 在私有 authority PR #21。
-3. Preview 建立後，若 Google 要求本人驗證，再於原生登入畫面完成。agent 繼續 live OAuth、獨立 contexts、雙向／離線及兄弟 probes；不要求 Owner 代跑可自動完成的 QA。
+Immutable candidate：`C:/Users/YSU/Codex_Tower/integration-transfer/planner-candidate-4cb7`；manifest SHA256 `4e28fc44c9ac4c2eb706d8a686bd19a0ac20e000fa954e3ce16bfd43db87218e`。可重建程式、鎖檔、整合程式、receipts 在兩個 PR；兄弟 artifacts 在既有私有 release。詳見 [VALIDATION](VALIDATION.md)、[發布與回復](RELEASE_INTEGRATION.md)、[獨立 review](INDEPENDENT_REVIEW.md)。
 
-AI／Push 可後補：AI 需 Planner 專用服務／模型與測試額度、server key、owner、project/namespace 及持久 rate limit；既有安全設定入口接收秘密。Push 需授權 scheduler／subscription backend。本輪不以兩者阻擋同步 Preview。
+[最終桌機](evidence/preview-final-desktop.png)／[手機](evidence/preview-final-mobile.png) 是 Preview 的本機模式；[雲端畫面](evidence/preview-cloud.png) 顯示實際同步。
+
+## 剩餘最少 Owner 事項
+
+1. 在另一台裝置／瀏覽器開啟上方 Preview，以既有 Owner 帳號登入試用。若 Google 要求 2FA，由本人完成；不必重做 TOWER Netlify CLI 登入。實體 iPhone 安裝／Safari 離線需在裝置上驗證。
+2. 若要啟用 AI，另指定 Planner 專用服務／模型與額度，秘密經既有安全設定入口寫入，不貼聊天。若要背景 Push，另指定授權 scheduler／subscription backend。這兩項不阻擋目前試用。
 
 ## 正式發布與回復
 
-目前正式站仍是 `6abf52a7be775989aeaab09d`，僅新增已授權 Preview rules；未改兄弟規則、DNS、計費、正式資料、MAIN／Tracker。這份 candidate 是 synthetic preview，authority 明確禁止 promotion。正式版要另建 `v1` 資料／來源相符的完整 candidate、fresh review／live acceptance，最後才另請 production 授權。
+本 draft 是 synthetic preview，publisher 禁止 promotion。正式版需另建 v1 owner rules／設定、完成真實跨裝置與離線 acceptance、fresh baseline／完整站 gates，最後另取得 production 授權。DNS、計費、正式資料、MAIN／Tracker 均未變更。
 
-Firestore 回復使用「修改前當下再次讀取」的規則基準；若其他工具期間有更新，重新合併，不能蓋回旧整份規則。產品回復只重建前一 Planner component，搭配最新兄弟 artifacts/functions，禁止歷史整站 restore。
+回復只替換 Planner component 並搭配**當下最新**兄弟 artifacts/functions，不能歷史整站 restore。Firestore 回復先重讀最新規則，保留期間其他核准更新，只移除 Planner fragment；不得蓋回舊整份規則。Preview domain 也只移除該精確 host。

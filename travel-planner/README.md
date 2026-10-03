@@ -2,6 +2,8 @@
 
 可操作的繁體中文私人旅行規劃工具。預設是「本機示範，不跨裝置同步」；Firebase、AI 和背景推播各自需要獲授權的設定。正式目標為 `/travel-planner/`，目前沒有正式部署。
 
+[隔離 Preview](https://6ac045607f1d78183c46e201--ycsu-tools-router.netlify.app/travel-planner/) 已啟用專用 Firebase preview 範圍，可用既有 Owner Google 帳號試用合成資料。真實雙 origin 同步通過，實體跨裝置及雲端離線驗證仍待完成；詳見 [交接](docs/HANDOFF.md)。AI／背景推播仍未啟用。
+
 ## 本機執行
 
 需要既有 Node 22.12+ 與 pnpm。所有指令在此目錄執行，不需要系統管理員權限：
