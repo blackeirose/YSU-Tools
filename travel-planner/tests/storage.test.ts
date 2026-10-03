@@ -9,6 +9,7 @@ import {
   readSnapshot,
   persist,
   productionTripViolation,
+  undoUpdates,
 } from "../src/storage";
 import type { RecordData } from "../src/model";
 import type { Remote, Operation } from "../src/storage";
@@ -41,6 +42,42 @@ beforeAll(() => {
   });
 });
 describe("recoverable editing", () => {
+  it("undoes a detached candidate move without resurrecting an out-of-range day", async () => {
+    const owner = crypto.randomUUID();
+    const trip = { ...blankTrip(owner), start: "2030-01-01", end: "2030-01-02", detachedItemIds: ["placeholder"] };
+    const place = blankPlace(owner, trip.id, "old stop");
+    const old = { ...blankItem(owner, trip, place.id, "2030-01-03"), status: "done" as const };
+    const oldTrip = { ...trip, detachedItemIds: [old.id] };
+    const rows: RecordData[] = [oldTrip, place, old];
+    const move = makeOperation("move detached", rows, [{ ...old, day: "2030-01-02", status: "planned" }], owner);
+    const moved = applyOperation(rows, move);
+    const inverse = makeOperation("undo", moved, undoUpdates(move, moved), owner);
+    const restored = applyOperation(moved, inverse);
+    expect(restored.find((row) => row.id === old.id)).toMatchObject({ day: null, status: "candidate",
+      candidateOrigin: { day: "2030-01-03", status: "done" } });
+    expect(restored.find((row) => row.id === oldTrip.id)).toMatchObject({ detachedItemIds: [] });
+  });
+  for (const change of ["edit", "delete"] as const) {
+    it(`restores a detached candidate after ${change} without an invalid cloud day`, () => {
+      const owner = crypto.randomUUID();
+      const trip = { ...blankTrip(owner), start: "2030-01-01", end: "2030-01-02" };
+      const place = blankPlace(owner, trip.id, "preserved stop");
+      const old = { ...blankItem(owner, trip, place.id, "2030-01-03"),
+        timeMode: "fixed" as const, time: "23:00", departureZone: "Asia/Tokyo",
+        arrivalDay: "2030-01-04", arrivalTime: "02:00", arrivalZone: "Asia/Tokyo" };
+      const guardedTrip = { ...trip, detachedItemIds: [old.id] };
+      const rows: RecordData[] = [guardedTrip, place, old];
+      const edited = { ...old, day: null, status: "candidate" as const,
+        notes: "changed", deleted: change === "delete" };
+      const op = makeOperation(change, rows, [edited], owner);
+      const current = applyOperation(rows, op);
+      const inverse = makeOperation("undo", current, undoUpdates(op, current), owner);
+      const restored = applyOperation(current, inverse).find((row) => row.id === old.id);
+      expect(restored).toMatchObject({ day: null, status: "candidate", deleted: false,
+        timeMode: "fixed", time: "23:00", arrivalDay: "2030-01-04", arrivalTime: "02:00",
+        candidateOrigin: { day: "2030-01-03" } });
+    });
+  }
   it("production policy rejects Trip tombstone but permits a safe range Undo", async () => {
     const owner = crypto.randomUUID();
     const original = { ...blankTrip(owner), start: "2030-01-01", end: "2030-01-03" };
