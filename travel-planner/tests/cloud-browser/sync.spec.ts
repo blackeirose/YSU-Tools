@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 async function login(page: Page, email: string) {
   await page.goto("http://127.0.0.1:4174/travel-planner/");
   await page
@@ -101,7 +102,7 @@ test("R7 emulator: offline new item versus trip shortening conflicts in both com
     await second.setOffline(false);
     await expect(b.locator(".conflict")).toBeVisible({ timeout: 45000 });
     await b.getByRole("button", { name: "保留本機版本並重新同步" }).click();
-    await expect(b.getByRole("alert")).toContainText("其他裝置已有安排");
+    await expect(b.locator(".error.banner")).toContainText("其他裝置已有安排");
     await expect(b.locator(".conflict")).toBeVisible();
     await b.getByRole("button", { name: /使用遠端版本/ }).click();
     await expect(b.getByRole("article", { name: "Move into Jan3" })).toBeVisible();
@@ -205,14 +206,27 @@ test("emulator: independent same-user contexts synchronize both directions and p
     await expect(a.locator(".conflict")).toBeVisible({ timeout: 45000 });
     const backup = a.waitForEvent("download");
     await a.getByRole("button", { name: "下載兩份備份" }).click();
-    expect((await backup).suggestedFilename()).toBe("travel-conflict.json");
+    const saved = await backup;
+    expect(saved.suggestedFilename()).toBe("travel-conflict.json");
+    expect(await readFile((await saved.path())!, "utf8")).toContain("Offline new record");
     await a.getByRole("button", { name: /使用遠端版本/ }).click();
     await expect(a.locator(".conflict")).toHaveCount(0);
     await expect(
       a.getByRole("article", { name: "A to B", exact: true }),
     ).toHaveCount(0);
+    // Choosing remote explicitly discards the whole dependent local batch;
+    // its new stop remains recoverable from the downloaded conflict backup.
     await expect(
       b.getByRole("article", { name: "Offline new record", exact: true }),
+    ).toHaveCount(0);
+    // A separate offline creation without a competing edit must still sync.
+    await expect(a.getByText("已同步", { exact: true })).toBeVisible();
+    await a.getByLabel("旅行日期", { exact: true }).selectOption("2030-01-01");
+    await first.setOffline(true);
+    await quick(a, "Offline independent record");
+    await first.setOffline(false);
+    await expect(
+      b.getByRole("article", { name: "Offline independent record", exact: true }),
     ).toBeVisible({ timeout: 45000 });
     await b
       .getByRole("article", { name: "B to A", exact: true })
