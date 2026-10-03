@@ -1,5 +1,7 @@
 # Travel Planner V1 — 隔離試用交付
 
+> **Current release, 2026-10-02 PDT:** [Travel Planner is now live at tools.ycsu.cc/travel-planner/](PRODUCTION_RELEASE_REPORT_2026-10-02.md), deploy `6ac0989e1e8fabf48ee75360`. Production cloud login/sync and physical iPhone remain unverified. The Preview-only and “no production deploy” statements below are historical checkpoints, not the current release state.
+
 **最新 R1–R9 修復版隔離 Preview 可用本機合成資料試用；此新 origin 的 Google 雲端登入尚未驗證／授權。沒有 production deploy。**
 
 - [最新修復版 Preview](https://6ac08433dbc4b56d7f3160d1--ycsu-tools-router.netlify.app/travel-planner/)：deploy `6ac08433dbc4b56d7f3160d1`，產品 source `380ae4aa56c5266f590a5ecf299f6ea0b4cc9986`，發布 authority source `d9ddbd37fcdad555549e93467bf822855b99a694`。從「使用本機模式」載入合成東京／跨年示範，可測移日／Undo、提醒與 ICS、深層網址刷新、備份並離開。遠端 Chrome 桌機與 390px 模擬手機已實測；實體 iPhone 未測。

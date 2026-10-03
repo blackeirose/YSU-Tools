@@ -1,5 +1,9 @@
 # YSU Travel Planner
 
+## Current production checkpoint — 2026-10-02 PDT
+
+Owner-authorized complete-host production release is live at <https://tools.ycsu.cc/travel-planner/> on Netlify deploy `6ac0989e1e8fabf48ee75360`; product runtime source is `47a78f8d7fe45d65ca7d99ee757e16b65238093f`. Owner-only Firestore `travelPlanner/v1` rules were published and read back. Shared sibling files and six Functions passed complete-host acceptance. Production Google login and real cloud write/read remain unverified in this task; the browser popup stayed in progress. Tracker/MAIN registration was blocked by platform auto-review and has not been written. AI and background Push remain disabled. See [the current release record](docs/PRODUCTION_RELEASE_REPORT_2026-10-02.md); the 21:41 checkpoint below is historical.
+
 ## Current release checkpoint — 2026-10-02 21:41 PDT
 
 Owner has authorized a production release at `/travel-planner/` followed by Tracker and MAIN updates. Publication has **not** occurred in this continuation. The newest repair Preview is `6ac08433dbc4b56d7f3160d1` (product `380ae4aa56c5266f590a5ecf299f6ea0b4cc9986`); its exact hostname is **not** Firebase-authorized, so local synthetic trial works but cloud login remains unverified. Earlier OAuth success below belongs only to draft `6ac045607f1d78183c46e201` and must not be used as acceptance of the repair Preview.

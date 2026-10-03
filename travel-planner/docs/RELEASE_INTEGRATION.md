@@ -1,5 +1,7 @@
 # /travel-planner/ 隔離 Preview 整合
 
+> **Current production release:** [2026-10-02 release record](PRODUCTION_RELEASE_REPORT_2026-10-02.md), Netlify deploy `6ac0989e1e8fabf48ee75360`. This document below describes the earlier Preview integration and its historical production hold.
+
 來源 `blackeirose/YSU-Tools/travel-planner`；正式目標 `https://tools.ycsu.cc/travel-planner/`。不得整站部署此repo或dist。
 
 唯一authority：`blackeirose/social-capture-tool/scripts/shared_host_release.py`，Netlify site `b23018a8-efe1-4086-b7ea-1d9018b2cf40`（ycsu-tools-router）。[PR #21](https://github.com/blackeirose/social-capture-tool/pull/21) 基於accepted `b551947`／live `6abf52a7be775989aeaab09d`，不是舊main的22-file contract。Fresh API確認未連Git/CD，feature push不觸發production。

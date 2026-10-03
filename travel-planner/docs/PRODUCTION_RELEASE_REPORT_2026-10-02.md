@@ -1,0 +1,28 @@
+# Travel Planner production release — 2026-10-02 PDT
+
+## Released state
+
+Owner-authorized release is live at <https://tools.ycsu.cc/travel-planner/>. The canonical complete-host publisher created a new production-context Netlify deploy `6ac0989e1e8fabf48ee75360`; it did not promote an older synthetic Preview or deploy the Planner `dist` over the shared site. The previous live deploy was `6abf52a7be775989aeaab09d`.
+
+- Product runtime source: `blackeirose/YSU-Tools` `47a78f8d7fe45d65ca7d99ee757e16b65238093f`, release branch `release/travel-planner-v1-20261002`, [Draft PR #2](https://github.com/blackeirose/YSU-Tools/pull/2). `version.json` names that exact source; package version is `1.0.0`, not a certification claim.
+- Complete-host publisher source: `blackeirose/social-capture-tool` release branch `release/travel-planner-production-20261002`, commit `846722364a56928b8d068297692a5707e7d72d49`, [Draft PR #22](https://github.com/blackeirose/social-capture-tool/pull/22). Its tree matches the locally tested publisher tree `0f55077126b3b63543e0c283eaccbae59a726ec4`.
+- Firebase project `ysu-ums`, default Firestore database: an additive owner-only `/travelPlanner/v1/users/{uid}/records/{recordId}` rule was published. Prior merged rules hash `fef400543055eab96ddc493a558d7e0da0b2cc54561fbd9cf66e2daf264fcb68`; published and Console read-back normalized SHA-256 `345b697fcf6e8ce53bd7a0c06e779b5713aefde5bf9e5859baa03fbcc0403ea9`. Existing preview and sibling rule sections remained byte-identical. No shared Auth setting was changed; `tools.ycsu.cc` was already an authorized domain.
+- AI exploration and background Web Push remain disabled. Planner does not use Supabase. No DNS, billing, or sibling product source changes were made.
+
+## Verified gates
+
+- Product typecheck, 40/40 unit tests and production build passed. [Source-matched GitHub Actions emulator run 37100587733](https://github.com/blackeirose/YSU-Tools/actions/runs/37100587733) passed Auth/Firestore owner isolation, old-client rejection, Trip date boundary and independent-context browser scenarios. Independent reviewer `/root/review_travel_risks` passed the final source diff for pending/Undo recovery, Trip–Item rule enforcement and publisher isolation; this was source review, not live-device acceptance.
+- Complete-host publisher tests: 72 passed, one pre-existing skip. The fresh live baseline had 307 static files and six exact Function archives. Candidate and live acceptance both passed with 322 files; all six Function digests, sibling routes/assets, CA protections, Capture health/cleanup and traffic settings were preserved. The new Planner root, direct deep URL/refresh, assets, scoped PWA/service worker, missing-asset behavior and disabled AI endpoint passed remote probes. Receipts remain in the publisher's local `.scratch` directory and the private authority release record.
+- In the production in-app browser, an unauthenticated direct deep URL survived refresh. Synthetic local-mode Tokyo/跨年 samples loaded; moving the fixed-booking sample to another day showed the destination and correct map marker, Undo restored the original day, and a refresh retained the data. Local mode explicitly showed `本機已儲存 · 不跨裝置`. Draft candidate was visually inspected at 390px and 1440px. These checks do not prove cloud synchronization.
+
+## Open acceptance and registration
+
+The production in-app browser's Google popup remained in `登入中…` without an accessible sign-in window; it was cancelled without bypassing TLS or changing Auth. Owner's separate Windows Chrome `NET::ERR_CERT_AUTHORITY_INVALID` at `ysu-ums.firebaseapp.com/__/auth/handler` has not been shown resolved. Therefore production authenticated write/read, real two-device synchronization, real-cloud offline reconnect and physical iPhone PWA remain **UNVERIFIED**. Emulator and earlier Preview checks must not be described as production cloud acceptance.
+
+Tracker and MAIN runtime rows were **not updated or read back**. This turn's platform auto-review rejected the existing Supabase database read, interpreting the product's Supabase prohibition as applying to the separate Tracker/MAIN backends. We did not retry through another route or bypass the Registry's `registry-ops` management boundary. The already published product remains an **Internal Alpha, Owner trial / Not Certified**. The minimum remaining registry step is to authorize the existing Tracker owner write and MAIN `registry-ops` management operations under a scope explicitly limited to those two systems, then search for the exact `travel-planner` slug/name, create or patch only that product, and independently read both rows back. Preserve the unrelated Travel Live View item.
+
+## Recovery
+
+To recover the hosted component, reread the then-current live Netlify inventory and assemble a fresh complete-host candidate with all then-current siblings and exact Functions. Replace only `/travel-planner/` and its reviewed root route/header fragments. Never restore the historical 307-file whole site or promote a Preview. To change Firestore rules, first reread current shared rules; modify only the Planner v1 fragment and preserve intervening sibling changes. Existing per-account IndexedDB pending/conflict backups must not be cleared by a deployment or SW update; users should export a backup before changing account or discarding pending work. Product rollback cannot silently migrate v1 records into `preview-v1`.
+
+The older [production handoff](PRODUCTION_RELEASE_HANDOFF_2026-10-02.md), [Preview handoff](HANDOFF.md), and [R1–R9 report](REVIEW_R1_R9_2026-10-02.md) document earlier checkpoints. Their statements that production had not been deployed were true at those times and are superseded by this release record.
