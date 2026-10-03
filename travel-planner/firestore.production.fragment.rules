@@ -1,0 +1,70 @@
+    // Planner production only. The existing preview and sibling matches remain
+    // byte-for-byte unchanged when this fragment is appended to the live rules.
+    match /travelPlanner/v1/users/{uid}/records/{recordId} {
+      function plannerOwner() {
+        return request.auth != null && request.auth.uid == uid && trustedGoogle();
+      }
+      function plannerValid() {
+        return request.resource.data.ownerId == uid
+          && request.resource.data.id == recordId
+          && request.resource.data.kind in ['trip','place','item','task','reminder']
+          && request.resource.data.revision is int
+          && request.resource.data.deleted is bool
+          && request.resource.data.updatedAt is string
+          && request.resource.data.size() <= 40;
+      }
+      function tripPath(tripId) {
+        return /databases/$(database)/documents/travelPlanner/v1/users/$(uid)/records/$(tripId);
+      }
+      function validItemDependency() {
+        let tripId = request.resource.data.tripId;
+        let path = tripPath(tripId);
+        let after = getAfter(path).data;
+        return existsAfter(path)
+          && after.id == tripId && after.ownerId == uid
+          && after.kind == 'trip' && after.deleted == false
+          && (request.resource.data.day == null
+            || (request.resource.data.day >= after.start
+              && request.resource.data.day <= after.end))
+          // An existing Trip must change in the same atomic write. Old clients
+          // that write only the Item are rejected, including after reconnect.
+          && ((!exists(path) && after.revision == 1)
+            || (exists(path) && after.revision == get(path).data.revision + 1));
+      }
+      function validTripRange() {
+        return request.resource.data.deleted == false
+          && request.resource.data.start is string
+          && request.resource.data.end is string
+          && request.resource.data.start <= request.resource.data.end;
+      }
+      function tripUpdateSafe() {
+        return resource.data.deleted == false && validTripRange()
+          // Firestore rules cannot query every sibling Item. Until a dedicated
+          // server transaction exists, fail closed on shortening either edge.
+          && request.resource.data.start <= resource.data.start
+          && request.resource.data.end >= resource.data.end;
+      }
+      function safeRecordCreate() {
+        return request.resource.data.kind == 'trip'
+          ? validTripRange()
+          : (request.resource.data.kind == 'item'
+              ? validItemDependency()
+              : true);
+      }
+      function safeRecordUpdate() {
+        return request.resource.data.kind == 'trip'
+          ? tripUpdateSafe()
+          : (request.resource.data.kind == 'item'
+              ? (request.resource.data.tripId == resource.data.tripId
+                  && validItemDependency())
+              : true);
+      }
+      allow read: if plannerOwner();
+      allow create: if plannerOwner() && plannerValid()
+        && request.resource.data.revision == 1 && safeRecordCreate();
+      allow update: if plannerOwner() && resource.data.ownerId == uid
+        && plannerValid() && request.resource.data.kind == resource.data.kind
+        && request.resource.data.revision == resource.data.revision + 1
+        && safeRecordUpdate();
+      allow delete: if false;
+    }

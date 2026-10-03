@@ -14,10 +14,13 @@ jobs:
   emulator-acceptance:
     if: >-
       github.repository == 'blackeirose/YSU-Tools' &&
-      ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/feature/travel-planner-v1') ||
+      ((github.event_name == 'workflow_dispatch' &&
+        (github.ref == 'refs/heads/feature/travel-planner-v1' ||
+         github.ref == 'refs/heads/release/travel-planner-v1-20261002')) ||
       (github.event.label.name == 'travel-planner-emulator-test' &&
        github.event.pull_request.head.repo.full_name == github.repository &&
-       github.event.pull_request.head.ref == 'feature/travel-planner-v1'))
+       (github.event.pull_request.head.ref == 'feature/travel-planner-v1' ||
+        github.event.pull_request.head.ref == 'release/travel-planner-v1-20261002')))
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     defaults:

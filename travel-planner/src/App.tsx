@@ -9,6 +9,7 @@ import {
   watchAuth,
   storageScope,
   previewCloud,
+  namespace,
   login,
   logout,
   cloudRemote,
@@ -433,6 +434,10 @@ export default function App() {
     chooseTrip(copies.find((r) => r.kind === "trip")!.id);
   }
   async function saveTrip(t: Trip) {
+    const previous = records.find((record) => record.id === t.id);
+    if (configured && !demo && namespace === "v1" && previous?.kind === "trip" &&
+      (t.start > previous.start || t.end < previous.end))
+      throw new Error("正式雲端版目前無法縮短旅程日期；請先保留原日期。此限制可避免舊裝置將安排留在範圍外。");
     const outside = records.filter(
       (i) =>
         i.kind === "item" &&
