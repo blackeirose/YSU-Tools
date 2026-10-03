@@ -143,11 +143,11 @@ test("R7 emulator: offline new item versus trip shortening conflicts in both com
     await second.setOffline(false);
     await expect(b.locator(".conflict")).toBeVisible({ timeout: 45000 });
     await b.getByRole("button", { name: "保留本機版本並重新同步" }).click();
-    await expect(b.locator(".error.banner")).toContainText("其他裝置已有安排");
-    await expect(b.locator(".conflict")).toBeVisible();
-    await b.getByRole("button", { name: /使用遠端版本/ }).click();
-    await expect(b.getByRole("article", { name: "Move into Jan3" })).toBeVisible();
-    await expect(b.getByLabel("旅行日期", { exact: true })).toContainText("2030-01-03");
+    await expect(b.locator(".conflict")).toHaveCount(0);
+    await expect(b.getByText("已同步", { exact: true })).toBeVisible();
+    await b.getByRole("button", { name: /候選/ }).first().click();
+    await expect(b.getByRole("article", { name: "Move into Jan3" })).toContainText("因旅程日期縮短移入待定");
+    await expect(b.getByLabel("旅行日期", { exact: true })).not.toContainText("2030-01-03");
   } finally {
     await Promise.allSettled([first.close(), second.close()]);
   }
@@ -182,6 +182,8 @@ test("emulator: independent same-user contexts synchronize both directions and p
     await expect(
       a.getByRole("article", { name: "B to A", exact: true }),
     ).toBeVisible();
+    await editing(a);
+    await editing(b);
     // A long-lived draft must not silently overwrite B's already-delivered edit.
     await a
       .getByRole("article", { name: "A to B", exact: true })
