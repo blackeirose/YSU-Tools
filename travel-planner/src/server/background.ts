@@ -91,8 +91,11 @@ export async function startBackground(req: Request, env: Env, http: Http = fetch
     return json(202, { state: "running", city: previous.data.city });
   if (previous?.data.attempts && previous.data.attempts >= 2)
     return json(409, { error: "背景已重試兩次；原行程仍可使用，請聯絡維護者" });
+  // The first panel may already be stored. A retry must use the same city for
+  // both panels even when the first-day itinerary has changed meanwhile.
+  const renderingCity = previous?.data.city ?? city;
   const job: Job = { state: "running", attempts: (previous?.data.attempts ?? 0) + 1,
-    city, startedAt: now.toISOString(), updatedAt: now.toISOString(), styleVersion: BACKGROUND_STYLE_VERSION };
+    city: renderingCity, startedAt: now.toISOString(), updatedAt: now.toISOString(), styleVersion: BACKGROUND_STYLE_VERSION };
   const write = await store.setJSON(`${key}/job`, job, previous ? { onlyIfMatch: previous.etag } : { onlyIfNew: true });
   if (!write.modified) return json(202, { state: "running" });
   // Reserve before any paid call. A failure keeps the reservation conservative.
@@ -106,11 +109,11 @@ export async function startBackground(req: Request, env: Env, http: Http = fetch
     // preserved byte-for-byte; the lower relief uses it only as reference.
     const existingTop = await store.getWithMetadata(`${key}/top`, { type: "arrayBuffer", consistency: "strong" });
     const top = existingTop ? { data: new Uint8Array(existingTop.data), mime: String(existingTop.metadata?.mime ?? "image/jpeg") }
-      : await generate(http, env, photoPrompt(city));
+      : await generate(http, env, photoPrompt(renderingCity));
     if (!existingTop) await store.set(`${key}/top`, Uint8Array.from(top.data).buffer, { metadata: { mime: top.mime }, onlyIfNew: true });
     const existingLower = await store.getWithMetadata(`${key}/lower`, { type: "arrayBuffer", consistency: "strong" });
     if (!existingLower) {
-      const lower = await generate(http, env, reliefPrompt(city), top);
+      const lower = await generate(http, env, reliefPrompt(renderingCity), top);
       await store.set(`${key}/lower`, Uint8Array.from(lower.data).buffer, { metadata: { mime: lower.mime }, onlyIfNew: true });
     }
     const complete: Job = { ...job, state: "ready", updatedAt: new Date().toISOString(), model: "gemini-3.1-flash-lite-image" };
