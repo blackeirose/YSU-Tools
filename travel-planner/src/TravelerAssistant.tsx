@@ -3,10 +3,11 @@ import { Modal } from "./Forms";
 import type { AssistantAction } from "./server/gemini";
 
 type Result = { action?: AssistantAction; transcript?: string; quota?: { used: number; limit: number }; error?: string };
-export function TravelerAssistant({ tripId, selectedDay, city, selectedItem, token, onAction, onClose }: {
+export function TravelerAssistant({ tripId, selectedDay, city, selectedItem, token, onAction, onDraft, onClose }: {
   tripId: string; selectedDay: string; city: string; selectedItem?: { id: string; name: string };
   token: () => Promise<string>;
   onAction: (action: AssistantAction, requestId: string) => Promise<string>;
+  onDraft: (action: AssistantAction) => Promise<string>;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
@@ -16,6 +17,7 @@ export function TravelerAssistant({ tripId, selectedDay, city, selectedItem, tok
   const [result, setResult] = useState("");
   const [transcript, setTranscript] = useState("");
   const [usage, setUsage] = useState("");
+  const [draft, setDraft] = useState<AssistantAction | null>(null);
   const recorder = useRef<MediaRecorder | null>(null);
   const stream = useRef<MediaStream | null>(null);
   const inFlight = useRef(false);
@@ -24,7 +26,7 @@ export function TravelerAssistant({ tripId, selectedDay, city, selectedItem, tok
   const stopMedia = () => { stream.current?.getTracks().forEach((track) => track.stop()); stream.current = null; recorder.current = null; setRecording(false); };
   const submit = async (audio?: { mime: "audio/webm" | "audio/mp4" | "audio/wav"; base64: string }) => {
     if (inFlight.current) return;
-    inFlight.current = true; setBusy(true); setError(""); setResult("");
+    inFlight.current = true; setBusy(true); setError(""); setResult(""); setDraft(null);
     const requestId = crypto.randomUUID();
     try {
       const currentController = new AbortController(); controller.current = currentController;
@@ -40,11 +42,25 @@ export function TravelerAssistant({ tripId, selectedDay, city, selectedItem, tok
       if (!response.ok || !data.action) throw new Error(data.error || "Gemini 沒有回傳可用結果");
       setTranscript(data.transcript ?? "");
       if (data.quota) setUsage(`今日助手 ${data.quota.used}／${data.quota.limit} 次`);
+      if (data.action.kind === "draft") {
+        setDraft(data.action);
+        setResult("請逐項核對日期與名稱，確認後才會一次加入；地點、營業與預約尚未查證。");
+        return;
+      }
       const message = await onAction(data.action, requestId);
       setResult(message || data.action.message);
       if (["add", "move", "edit_time", "candidate", "undo"].includes(data.action.kind)) setQuery("");
     } catch (e) { if (!cancelled.current) setError(e instanceof Error ? e.message : "助手暫時無法使用；輸入仍保留"); }
     finally { controller.current = null; inFlight.current = false; if (!cancelled.current) setBusy(false); }
+  };
+  const confirmDraft = async () => {
+    if (!draft || inFlight.current) return;
+    inFlight.current = true; setBusy(true); setError("");
+    try {
+      const message = await onDraft(draft);
+      if (!cancelled.current) { setResult(message); setDraft(null); setQuery(""); }
+    } catch (e) { if (!cancelled.current) setError(e instanceof Error ? e.message : "草案未加入；預覽仍保留"); }
+    finally { inFlight.current = false; if (!cancelled.current) setBusy(false); }
   };
   const startRecording = async () => {
     if (recorder.current) { recorder.current.stop(); return; }
@@ -84,6 +100,15 @@ export function TravelerAssistant({ tripId, selectedDay, city, selectedItem, tok
       <button type="button" disabled={busy} aria-label={recording ? "停止錄音並送出" : "開始錄音"} onClick={() => void startRecording()}>{recording ? "停止並送出" : "🎙 點擊錄音"}</button></div>
     <p className="hint">畫面日期：{selectedDay} · 地區：{city || "未指定"}。離線時請使用手動操作；助手不會在恢復連線後自動送出。</p>
     {transcript && <p>辨識內容：{transcript}</p>}
+    {draft?.draftItems && <section aria-label="旅伴草案預覽" className="import-preview">
+      {draft.draftItems.map((row, index) => <article className="import-row" key={`${row.day}-${index}`}>
+        <strong>{row.day} · {row.name}</strong>
+        <p>{row.time ?? row.period ?? "依順序"}{row.notes ? ` · ${row.notes}` : ""}</p>
+      </article>)}
+      <p className="hint">確認後會以一次操作加入 {draft.draftItems.length} 項，並保留復原。草案不代表真實訂位或已定位。</p>
+      <div className="actions"><button className="primary" disabled={busy} onClick={() => void confirmDraft()}>確認並加入整份草案</button>
+        <button disabled={busy} onClick={() => setDraft(null)}>放棄草案</button></div>
+    </section>}
     {result && <p role="status" className="notice">{result}</p>}
     {usage && <p className="hint">{usage}；用量預留後即使服務失敗也計入，避免超額。</p>}
     {error && <p role="alert" className="error">{error}</p>}
