@@ -2,7 +2,7 @@
 
 ## Current production checkpoint — 2026-10-02 PDT
 
-Owner-authorized complete-host production release is live at <https://tools.ycsu.cc/travel-planner/> on Netlify deploy `6ac0989e1e8fabf48ee75360`; product runtime source is `47a78f8d7fe45d65ca7d99ee757e16b65238093f`. Owner-only Firestore `travelPlanner/v1` rules were published and read back. Shared sibling files and six Functions passed complete-host acceptance. Production Google login and real cloud write/read remain unverified in this task; the browser popup stayed in progress. Tracker/MAIN registration was blocked by platform auto-review and has not been written. AI and background Push remain disabled. See [the current release record](docs/PRODUCTION_RELEASE_REPORT_2026-10-02.md); the 21:41 checkpoint below is historical.
+Owner-authorized complete-host production release is live at <https://tools.ycsu.cc/travel-planner/> on Netlify deploy `6ac0989e1e8fabf48ee75360`; product runtime source is `47a78f8d7fe45d65ca7d99ee757e16b65238093f`. Owner-only Firestore `travelPlanner/v1` rules were published and read back. Shared sibling files and six Functions passed complete-host acceptance. Production Google login and real cloud write/read remain unverified in this task; the browser popup stayed in progress. The Owner clarified that the Supabase ban applies only to Planner. Tracker/MAIN public duplicate checks now pass, but registration awaits the Tracker Owner OTP session and MAIN's existing `registry-ops` management credential; no runtime row has been written. AI and background Push remain disabled. See [the current release record](docs/PRODUCTION_RELEASE_REPORT_2026-10-02.md); the 21:41 checkpoint below is historical.
 
 ## Current release checkpoint — 2026-10-02 21:41 PDT
 
