@@ -1,0 +1,12 @@
+{
+  "scope": "isolated Firebase Auth/Firestore emulators; synthetic data only",
+  "project": "demo-ysu-travel-planner",
+  "source": "4cb7fdf71f7c5557f726f079ebc2104dc0b8430a",
+  "checks": [
+    "rules PASS",
+    "independent browser contexts PASS"
+  ],
+  "started": "2026-10-02T23:54:58.202Z",
+  "status": "PASS",
+  "finished": "2026-10-02T23:55:13.331Z"
+}

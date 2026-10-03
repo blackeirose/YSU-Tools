@@ -1,0 +1,61 @@
+name: Travel Planner manual emulator acceptance
+on:
+  workflow_dispatch:
+  # A newly added workflow cannot be dispatched before it exists on the default
+  # branch. Explicitly applying this PR label is the manual feature-branch trigger.
+  pull_request:
+    types: [labeled]
+permissions:
+  contents: read
+concurrency:
+  group: travel-planner-emulators-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+jobs:
+  emulator-acceptance:
+    if: >-
+      github.repository == 'blackeirose/YSU-Tools' &&
+      ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/feature/travel-planner-v1') ||
+      (github.event.label.name == 'travel-planner-emulator-test' &&
+       github.event.pull_request.head.repo.full_name == github.repository &&
+       github.event.pull_request.head.ref == 'feature/travel-planner-v1'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: travel-planner
+    env:
+      CI: "true"
+      FIREBASE_CLI_DISABLE_MOTD: "true"
+      GCLOUD_PROJECT: demo-ysu-travel-planner
+      VITE_USE_EMULATORS: "true"
+      TESTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "11.19.0"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm run typecheck && pnpm test && pnpm run build
+      - name: Auth, rules and two independent browsers (demo project only)
+        run: pnpm dlx firebase-tools@15.32.1 emulators:exec --only auth,firestore --project demo-ysu-travel-planner 'node scripts/emulator-acceptance.mjs'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: planner-emulator-evidence-${{ github.run_id }}
+          retention-days: 14
+          path: |
+            travel-planner/test-results/
+            travel-planner/playwright-report/
+            travel-planner/artifacts/emulator-acceptance.json
+          if-no-files-found: ignore
