@@ -60,7 +60,7 @@ function httpFor(options: { owner?: string; city?: boolean; cityName?: string; i
       const query = new URL(target).searchParams.get("q") ?? "";
       const name = ["大阪城", "東京塔", "淺草寺", "東京車站"].find((candidate) => query.includes(candidate)) ?? "";
       return Response.json({ features: [{ geometry: { coordinates: [139.7, 35.6] }, properties: {
-        name, city: "港區", state: name === "大阪城" ? "大阪" : "東京", country: "日本",
+        name, city: "Minato", state: name === "大阪城" ? "大阪" : "Tokyo", country: "日本",
         osm_type: "N", osm_id: 100 + locations, osm_value: "attraction",
       } }] });
     }
@@ -115,8 +115,8 @@ describe("owner-only persistent background generation", () => {
     const status = await (await readBackground(statusRequest, env, fake.http, provided)).json();
     expect(status.state).toBe("ready");
     expect(status.landmarks).toHaveLength(3);
-    expect(status.landmarks[0]).toEqual({ name: "東京塔", sourceUrl: "https://example.org/tokyo-0",
-      sourceTitle: "東京・東京塔", locationSourceUrl: "https://www.openstreetmap.org/node/101" });
+    expect(status.landmarks[0]).toEqual({ name: "東京塔", sourceUrl: "https://www.openstreetmap.org/node/101",
+      sourceTitle: "OpenStreetMap / Photon", locationSourceUrl: "https://www.openstreetmap.org/node/101" });
     const image = await readBackground(new Request(`${statusRequest.url}&part=top`, { headers: statusRequest.headers }), env, fake.http, provided);
     expect(image.headers.get("Cache-Control")).toBe("private, no-store");
     expect((await image.arrayBuffer()).byteLength).toBe(1200);
@@ -154,16 +154,20 @@ describe("owner-only persistent background generation", () => {
     expect(await status.json()).toMatchObject({ state: "ready", city: "東京" });
     expect(changed.counts()).toEqual({ images: 0, quota: 0, landmarks: 0 });
   });
-  it("fails closed before image generation when landmark URLs are not grounded", async () => {
+  it("uses independent place-specific OSM citations when search URLs are not grounded", async () => {
     const store = new MemoryStore(), fake = httpFor({ unsourced: true });
     const provided = store as unknown as ReturnType<typeof backgroundStore>;
-    expect((await startBackground(request(), env, fake.http, provided)).status).toBe(502);
-    expect(fake.counts()).toEqual({ images: 0, quota: 1, landmarks: 1 });
+    expect((await startBackground(request(), env, fake.http, provided)).status).toBe(200);
+    expect(fake.counts()).toEqual({ images: 2, quota: 1, landmarks: 1 });
+    const status = await readBackground(new Request(`https://tools.ycsu.cc/travel-planner/api/background/status?tripId=${tripId}`,
+      { headers: { Authorization: "Bearer owner" } }), env, fake.http, provided);
+    expect((await status.json()).landmarks[0]).toMatchObject({
+      sourceUrl: "https://www.openstreetmap.org/node/101", sourceTitle: "OpenStreetMap / Photon" });
   });
-  it("rejects a grounded page title for a landmark in a different city", async () => {
+  it("does not treat a search title as location proof when OSM verifies the city", async () => {
     const store = new MemoryStore(), fake = httpFor({ wrongCity: true });
-    expect((await startBackground(request(), env, fake.http, store as unknown as ReturnType<typeof backgroundStore>)).status).toBe(502);
-    expect(fake.counts()).toEqual({ images: 0, quota: 1, landmarks: 1 });
+    expect((await startBackground(request(), env, fake.http, store as unknown as ReturnType<typeof backgroundStore>)).status).toBe(200);
+    expect(fake.counts()).toEqual({ images: 2, quota: 1, landmarks: 1 });
   });
   it("rejects a title mentioning Tokyo and Osaka Castle when the independent place is in Osaka", async () => {
     const store = new MemoryStore(), fake = httpFor({ crossCityTitle: true });

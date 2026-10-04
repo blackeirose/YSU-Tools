@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { blankPlace } from "../src/model";
-import { fillPlaceFromPhoton, parsePhoton, searchPhoton } from "../src/place-search";
+import { fillPlaceFromPhoton, parsePhoton, placeInCity, searchPhoton } from "../src/place-search";
 
 const raw = { features: [{
   geometry: { coordinates: [139.8814172, 35.6326586] },
@@ -37,5 +37,14 @@ describe("Photon place results", () => {
     }));
     expect(parsePhoton({ features: [...hotels, ...parks] }, "2030-01-01T00:00:00Z", "DISNEY").slice(0, 2).map((x) => x.name))
       .toEqual(["Tokyo DisneySea", "Tokyo Disneyland"]);
+  });
+  it("checks the requested city rather than accepting a prefecture or substring", () => {
+    const make = (city: string, state: string) => parsePhoton({ features: [{ geometry: { coordinates: [139, 35] },
+      properties: { name: "Synthetic landmark", city, state, osm_type: "N", osm_id: 42, osm_value: "attraction" } }] })[0];
+    expect(placeInCity(make("Sakai", "Osaka"), "大阪")).toBe(false);
+    expect(placeInCity(make("New York", "New York"), "York")).toBe(false);
+    expect(placeInCity(make("Osaka", "Osaka"), "大阪")).toBe(true);
+    expect(placeInCity(make("Minato", "Tokyo"), "東京")).toBe(true);
+    expect(placeInCity(make("Urayasu", "Chiba"), "東京")).toBe(false);
   });
 });

@@ -3,6 +3,9 @@ import type { Place } from "./model";
 export type PhotonPlace = {
   name: string;
   city: string;
+  localityCity: string;
+  county: string;
+  state: string;
   administrativeArea: string;
   address: string;
   category: Place["category"];
@@ -12,6 +15,22 @@ export type PhotonPlace = {
   osmUrl: string;
   mapsUrl: string;
 };
+const cityKey = (value: string) => value.normalize("NFKD").toLocaleLowerCase()
+  .replace(/\p{M}/gu, "").replace(/[^\p{L}\p{N}]/gu, "");
+const cityNames: Record<string, string[]> = { 東京: ["東京", "Tokyo"], 大阪: ["大阪", "Osaka"],
+  京都: ["京都", "Kyoto"], 名古屋: ["名古屋", "Nagoya"] };
+const tokyoWards = new Set(["adachi", "arakawa", "bunkyo", "chiyoda", "chuo", "edogawa",
+  "itabashi", "katsushika", "kita", "koto", "meguro", "minato", "nakano", "nerima",
+  "ota", "setagaya", "shibuya", "shinagawa", "shinjuku", "suginami", "sumida", "taito", "toshima"]);
+/** Require the city itself, not a broad state/county substring (York != New York). */
+export function placeInCity(place: PhotonPlace, requestedCity: string): boolean {
+  const aliases = (cityNames[requestedCity] ?? [requestedCity]).map(cityKey);
+  const local = cityKey(place.localityCity);
+  if (local && aliases.includes(local)) return true;
+  if (local) return aliases.includes("tokyo") && cityKey(place.state) === "tokyo" &&
+    tokyoWards.has(local.replace(/(?:city|ward)$/u, ""));
+  return aliases.includes(cityKey(place.county));
+}
 type Feature = {
   geometry?: { coordinates?: unknown };
   properties?: Record<string, unknown>;
@@ -49,7 +68,10 @@ export function parsePhoton(input: unknown, checkedAt = new Date().toISOString()
     if (Math.abs(lat) > 90 || Math.abs(lng) > 180 || (lat === 0 && lng === 0)) return [];
     const type = ({ N: "node", W: "way", R: "relation" } as Record<string, string>)[String(p.osm_type ?? "")];
     if (!type || !/^\d+$/.test(String(p.osm_id ?? ""))) return [];
-    const city = String(p.city ?? p.county ?? p.state ?? "").slice(0, 200);
+    const localityCity = String(p.city ?? "").slice(0, 200);
+    const county = String(p.county ?? "").slice(0, 200);
+    const state = String(p.state ?? "").slice(0, 200);
+    const city = localityCity || county || state;
     const administrativeArea = [p.city, p.county, p.state].filter((x) => typeof x === "string").join(" · ").slice(0, 300);
     const identity = `${p.name.toLocaleLowerCase()}|${city.toLocaleLowerCase()}|${p.osm_value ?? ""}`;
     if (seen.has(identity)) return [];
@@ -57,7 +79,7 @@ export function parsePhoton(input: unknown, checkedAt = new Date().toISOString()
     const address = [p.street, p.housenumber, p.postcode, city, p.country].filter((x) => typeof x === "string" && x.trim()).join(" · ").slice(0, 2000);
     const osmUrl = `https://www.openstreetmap.org/${type}/${p.osm_id}`;
     return [{
-      name: p.name.trim().slice(0, 200), city, administrativeArea, address,
+      name: p.name.trim().slice(0, 200), city, localityCity, county, state, administrativeArea, address,
       category: category(p.osm_value), lat, lng,
       osmUrl, source: `OpenStreetMap / Photon · ${osmUrl} · ${checkedAt}`,
       mapsUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lat},${lng}`)}`,

@@ -91,6 +91,27 @@ describe("Gemini paid boundary", () => {
     expect(providerKey).toBe("planner-only-key");
     expect((await response.json()).provider).toBe("google-direct");
   });
+  it("constrains live assistant JSON to the action contract while retaining server validation", async () => {
+    let generationConfig: Record<string, unknown> | undefined;
+    const http = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("accounts:lookup")) return owner();
+      if (url.includes("/records/")) return trip();
+      if (url.includes("/aiRequests/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/")) return new Response("", { status: 404 });
+      generationConfig = (JSON.parse(String(init?.body)) as { generationConfig: Record<string, unknown> }).generationConfig;
+      return Response.json({ candidates: [{ content: { parts: [{ text: '{"kind":"add","name":"測試地點"}' }] } }] });
+    };
+    const result = await geminiHandler(request(), env, http as typeof fetch);
+    expect(result.status).toBe(502); // An invalid provider response still cannot mutate a trip.
+    expect(generationConfig?.responseMimeType).toBe("application/json");
+    expect(generationConfig?.responseJsonSchema).toMatchObject({
+      type: "object", required: ["kind", "message"],
+      properties: { kind: { enum: expect.arrayContaining(["add", "clarify"]) },
+        draftItems: { items: { required: ["day", "name"] } } },
+    });
+  });
   it("rejects invalid identity and trip ownership before reserving cost", async () => {
     let calls = 0;
     const denied = async () => { calls++; return Response.json({ users: [{ localId: "other" }] }); };
@@ -226,6 +247,38 @@ describe("Gemini paid boundary", () => {
         groundingMetadata: { groundingChunks: [{ web: { uri: "https://real.test/" } }] } }] });
     };
     expect((await geminiHandler(request("explore"), env, http as typeof fetch)).status).toBe(502);
+  });
+  it("replaces ungrounded model URLs with independently verified OSM place sources", async () => {
+    const names = ["Tokyo Tower", "Sensoji", "Tokyo Skytree"];
+    const cards = names.map((name, index) => ({ name, originalName: name, location: "東京", reason: "可考慮參觀",
+      sourceUrls: ["https://unverified.example/"], pending: index === 0 ? ["一", "二", "三", "四", "五"] : [] }));
+    const http = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("accounts:lookup")) return owner();
+      if (url.includes("/records/")) return trip();
+      if (url.includes("/aiRequests/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/")) return new Response("", { status: 404 });
+      if (url.startsWith("https://photon.komoot.io/api/")) {
+        const query = new URL(url).searchParams.get("q") ?? "";
+        const index = names.findIndex((name) => query.includes(name));
+        return Response.json({ features: index < 0 ? [] : [{ geometry: { coordinates: [139.7, 35.6] },
+          properties: { name: names[index], city: "Tokyo", country: "Japan", osm_type: "N",
+            osm_id: index + 100, osm_value: "attraction" } }] });
+      }
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ suggestions: cards }) }] },
+        groundingMetadata: { groundingChunks: [{ web: { uri: "https://grounded.example/" } }] } }] });
+    };
+    const response = await geminiHandler(new Request("https://preview.test/travel-planner/api/ai", { method: "POST",
+      headers: { Authorization: "Bearer synthetic-token" }, body: JSON.stringify({ mode: "explore", tripId: crypto.randomUUID(),
+        requestId: crypto.randomUUID(), query: "東京景點", city: "Tokyo" }) }), env, http as typeof fetch);
+    expect(response.status).toBe(200);
+    const result = await response.json();
+    expect(result.suggestions).toHaveLength(3);
+    expect(result.suggestions.map((card: { sourceUrls: string[] }) => card.sourceUrls[0])).toEqual([
+      "https://www.openstreetmap.org/node/100", "https://www.openstreetmap.org/node/101", "https://www.openstreetmap.org/node/102"]);
+    expect(result.suggestions[0].pending).toContain("推薦理由與適合度尚未由地點來源獨立確認");
+    expect(result.suggestions[0].reason).toContain("理由未由地點來源證實");
   });
   it("returns a bounded dated draft for explicit confirmation and rejects a prose-only draft", async () => {
     const payloads = [
