@@ -1,5 +1,9 @@
 # Decisions
 
+## Updated release decision — 2026-10-03 17:35 PDT
+
+Use draft `6ac19dbe1e7f0157bfeef08e` / product `5f68efc` for synthetic Owner review. Two independent source reviews closed the paid-request replay, fixed-booking assistant mutation and fixed-zone disclosure findings for Preview scope. The new immutable request reservation rule is applied only to `travelPlanner/preview-v1`; production `v1` has no corresponding rule. Paid AI in production must remain disabled until a separately reviewed `v1` rule and real authenticated acceptance pass. Do not promote this draft, modify siblings, clear offline pending data or change MAIN/Tracker. Production Netlify deploy remains `6ac0989e1e8fabf48ee75360`.
+
 ## Release decision — 2026-10-03
 
 The new complete-host Preview is a synthetic `deploy-preview` at `6ac1921df800e63bc4e905cb`. Its Firebase hostname authorization and `preview-v1` Owner rules are confined to this Planner test scope. Product and publisher CI, independent source reviews and protected-host validation pass, but TOWER's normal Google popup did not complete. Anonymous Planner Function 401s verify entry/auth rejection, **not** real Gemini execution. The Owner's conditional production authorization has not become an unconditional promotion: retain the current `6ac0989e1e8fabf48ee75360` production deploy until authenticated cloud, paid assistant/vision/background and data recovery gates are verified. Continue to keep Planner free of Supabase and leave sibling tools, DNS, MAIN and Tracker unchanged for this upgrade.
