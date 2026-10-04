@@ -70,6 +70,17 @@ test("a new Honolulu trip assigns its first city and IANA zone across its days",
   await expect(page.locator(".active-city")).toContainText("Pacific/Honolulu");
 });
 
+test("a blank trip does not warn about the previously selected trip's itinerary", async ({ page }) => {
+  await page.goto("/travel-planner/");
+  await page.getByRole("button", { name: "載入示範", exact: true }).click();
+  if ((page.viewportSize()?.width ?? 1440) < 700)
+    await page.locator("details.trip-operations > summary").click();
+  await page.getByRole("button", { name: "新增旅程", exact: true }).filter({ visible: true }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText(/範圍外安排/)).toHaveCount(0);
+  await dialog.getByRole("button", { name: "取消" }).click();
+});
+
 test("correcting a day city leaves the fixed booking in its saved departure zone and shows the difference", async ({ page }) => {
   await page.goto("/travel-planner/");
   await expect(page.getByText("本機已儲存 · 不跨裝置")).toBeVisible();

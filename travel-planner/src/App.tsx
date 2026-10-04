@@ -1921,7 +1921,7 @@ export default function App() {
       {editor?.type === "trip" && (
         <TripForm
           trip={editor.value}
-          items={items}
+          items={trip?.id === editor.value.id ? items : []}
           onClose={() => se(null)}
           onSave={saveTrip}
         />

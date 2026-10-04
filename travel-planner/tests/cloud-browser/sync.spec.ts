@@ -40,6 +40,7 @@ async function createRangeTrip(page: Page, name: string) {
   await dialog.getByLabel("旅程名稱").fill(name);
   await dialog.getByLabel("開始日期").fill("2030-01-01");
   await dialog.getByLabel("結束日期").fill("2030-01-03");
+  await dialog.getByLabel("城市", { exact: true }).fill("東京");
   await dialog.getByRole("button", { name: "儲存旅程" }).click();
   await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
   await expect(page.getByText("已同步", { exact: true })).toBeVisible();
@@ -172,7 +173,9 @@ test("emulator: independent same-user contexts synchronize both directions and p
     await dialog.getByLabel("旅程名稱").fill("Emulator private trip");
     await dialog.getByLabel("開始日期").fill("2030-01-01");
     await dialog.getByLabel("結束日期").fill("2030-01-03");
+    await dialog.getByLabel("城市", { exact: true }).fill("東京");
     await dialog.getByRole("button", { name: "儲存旅程" }).click();
+    await expect(a.getByText("已同步", { exact: true })).toBeVisible();
     await editing(a);
     await quick(a, "A to B");
     await expect(a.getByText("已同步", { exact: true })).toBeVisible();

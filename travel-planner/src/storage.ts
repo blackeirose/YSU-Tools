@@ -55,6 +55,14 @@ export const canonical = (value: unknown): string =>
         )
       : part,
   );
+/** Firestore rejects `undefined`, including nested optional fields that Zod
+ * preserves. Serialize only the outgoing copy so old IndexedDB operations can
+ * still be retried without rewriting or discarding their source data. */
+export function firestoreRecord(record: RecordData): RecordData {
+  const wire = JSON.parse(JSON.stringify(record)) as RecordData;
+  recordSchema.parse(wire);
+  return wire;
+}
 export function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB, 1);

@@ -26,7 +26,7 @@ import {
 } from "firebase/firestore";
 import type { RecordData } from "./model";
 import { recordSchema } from "./model";
-import { ConflictError, canonical, deniedWriteConflict, deniedWriteReadFailure, isTripVersionTouch, productionTripViolation, unguardedItemChange } from "./storage";
+import { ConflictError, canonical, deniedWriteConflict, deniedWriteReadFailure, firestoreRecord, isTripVersionTouch, productionTripViolation, unguardedItemChange } from "./storage";
 import type { Operation, Remote } from "./storage";
 import { cloudScope } from "./cloud-config";
 const env = import.meta.env;
@@ -199,7 +199,7 @@ export function cloudRemote(owner: string): Remote {
           if (after.ownerId !== owner) throw new Error("帳號不符");
           if (isTripVersionTouch(change))
             tx.update(refs[i], { revision: after.revision, updatedAt: after.updatedAt });
-          else tx.set(refs[i], after);
+          else tx.set(refs[i], firestoreRecord(after));
         }
         });
       } catch (error) {

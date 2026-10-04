@@ -12,6 +12,7 @@ import {
   persist,
   productionTripViolation,
   undoUpdates,
+  firestoreRecord,
 } from "../src/storage";
 import type { RecordData } from "../src/model";
 import type { Remote, Operation } from "../src/storage";
@@ -44,6 +45,18 @@ beforeAll(() => {
   });
 });
 describe("recoverable editing", () => {
+  it("serializes a new city's optional fields for Firestore without losing queued source data", () => {
+    const owner = crypto.randomUUID();
+    const trip = { ...blankTrip(owner), start: "2030-10-03", end: "2030-10-05",
+      dayCities: { "2030-10-03": { name: "東京", timezone: "Asia/Tokyo", lat: null, lng: null,
+        region: undefined, source: undefined } } };
+    const queued = makeOperation("新增旅程", [], [trip], owner);
+    const cloud = firestoreRecord(queued.changes[0].after);
+    expect(cloud).toEqual({ ...queued.changes[0].after,
+      dayCities: { "2030-10-03": { name: "東京", timezone: "Asia/Tokyo", lat: null, lng: null } } });
+    expect(queued.changes[0].after).toHaveProperty("dayCities.2030-10-03.region", undefined);
+    expect(JSON.stringify(cloud)).toBe(JSON.stringify(queued.changes[0].after));
+  });
   it("classifies a rules denial after a concurrent Trip revision as recoverable", () => {
     const owner = crypto.randomUUID();
     const trip = { ...blankTrip(owner), start: "2030-01-01", end: "2030-01-03" };
