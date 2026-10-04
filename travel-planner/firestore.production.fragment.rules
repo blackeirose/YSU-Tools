@@ -112,3 +112,18 @@
               && request.resource.data.backgroundCount == resource.data.backgroundCount + 1));
       allow delete: if false;
     }
+    // Immutable Planner-only request IDs prevent replayed paid inference.
+    match /travelPlanner/v1/users/{uid}/aiRequests/{requestId} {
+      function aiOwner() {
+        return request.auth != null && request.auth.uid == uid && trustedGoogle();
+      }
+      allow get: if aiOwner();
+      allow list: if false;
+      allow create: if aiOwner()
+        && request.resource.data.keys().hasOnly(['ownerId','requestId','mode'])
+        && request.resource.data.keys().hasAll(['ownerId','requestId','mode'])
+        && request.resource.data.ownerId == uid
+        && request.resource.data.requestId == requestId
+        && request.resource.data.mode in ['assist','explore','vision'];
+      allow update, delete: if false;
+    }
