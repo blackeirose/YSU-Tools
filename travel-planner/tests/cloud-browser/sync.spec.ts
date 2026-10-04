@@ -127,7 +127,9 @@ test("cloud deep link survives a stale same-origin trip cache until the server c
     await reopened.getByRole("button", { name: "編輯旅程" }).click();
     dialog = reopened.getByRole("dialog");
     await dialog.getByLabel("結束日期").fill("2030-01-02");
+    await dialog.getByLabel("結束日期").press("Tab");
     await dialog.getByRole("button", { name: "儲存旅程" }).click();
+    await expect(reopened.getByText(/2030-01-01 — 2030-01-02/)).toBeVisible();
     await expect(reopened.getByText("離線 · 修改待同步", { exact: true })).toBeVisible();
     await reopened.close();
     await operations(a);
