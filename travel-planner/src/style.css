@@ -790,6 +790,17 @@ details .actions {
   z-index: 800;
   box-shadow: 0 8px 20px #0002;
 }
+@media (min-width: 701px) {
+  /* The toolbar wraps at intermediate desktop widths. Give the open menu its
+     own row so a right-aligned popover cannot extend past the left viewport. */
+  .date-toolbar .toolbar-more[open] { flex-basis: 100%; }
+  .date-toolbar .toolbar-more[open] > summary { width: max-content; }
+  .date-toolbar .toolbar-more[open] > .actions {
+    left: 0;
+    right: auto;
+    width: min(250px, calc(100vw - 32px));
+  }
+}
 .print-only {
   display: none;
 }
@@ -1135,3 +1146,4 @@ details .actions {
     font-size: 16px;
   }
 }
+
