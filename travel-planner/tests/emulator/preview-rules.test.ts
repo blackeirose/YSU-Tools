@@ -107,11 +107,17 @@ it("preview guards Trip/Item dependencies and reserves paid calls within its own
   invalidUndo.set(itemRef, { ...item, day: "2030-01-03", revision: 4 });
   await assertFails(invalidUndo.commit());
   const usagePath = "travelPlanner/preview-v1/users/owner/aiUsage/2030-01-01";
-  const usage = { ownerId: "owner", day: "2030-01-01", assistCount: 1, exploreCount: 0, visionCount: 0, backgroundCount: 0 };
+  const usage = { ownerId: "owner", day: "2030-01-01", assistCount: 1, exploreCount: 0, visionCount: 0, backgroundCount: 0,
+    reservedMicrousd: 20000 };
   await assertFails(setDoc(doc(other, usagePath), usage));
   await assertSucceeds(setDoc(doc(owner, usagePath), usage));
   await assertFails(setDoc(doc(owner, usagePath), { ...usage, assistCount: 0 }));
-  await assertSucceeds(setDoc(doc(owner, usagePath), { ...usage, assistCount: 2 }));
+  await assertSucceeds(setDoc(doc(owner, usagePath), { ...usage, assistCount: 2, reservedMicrousd: 40000 }));
+  const legacyPath = "travelPlanner/preview-v1/users/owner/aiUsage/2030-01-02";
+  const legacy = { ownerId: "owner", day: "2030-01-02", assistCount: 1, exploreCount: 0, visionCount: 0, backgroundCount: 0 };
+  await env.withSecurityRulesDisabled(async (context) => setDoc(doc(context.firestore(), legacyPath), legacy));
+  await assertFails(setDoc(doc(owner, legacyPath), { ...legacy, assistCount: 2, reservedMicrousd: 20000 }));
+  await assertSucceeds(setDoc(doc(owner, legacyPath), { ...legacy, assistCount: 2, reservedMicrousd: 40000 }));
   const requestId = crypto.randomUUID();
   const requestPath = `travelPlanner/preview-v1/users/owner/aiRequests/${requestId}`;
   const receipt = { ownerId: "owner", requestId, mode: "assist" };

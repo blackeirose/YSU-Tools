@@ -25,8 +25,9 @@ class MemoryStore {
     return { modified: true, etag };
   }
 }
-function httpFor(options: { owner?: string; city?: boolean; cityName?: string; integerCoordinates?: boolean; failSecond?: boolean } = {}) {
-  let images = 0, quota = 0;
+function httpFor(options: { owner?: string; city?: boolean; cityName?: string; integerCoordinates?: boolean; failSecond?: boolean;
+  unsourced?: boolean; wrongCity?: boolean; crossCityTitle?: boolean } = {}) {
+  let images = 0, quota = 0, landmarks = 0, locations = 0;
   const prompts: string[] = [];
   const http = (async (url: string | URL | Request, init?: RequestInit) => {
     const target = String(url);
@@ -45,6 +46,24 @@ function httpFor(options: { owner?: string; city?: boolean; cityName?: string; i
       if (init?.method === "PATCH") { quota++; return Response.json({}); }
       return new Response("", { status: 404 });
     }
+    if (target.includes("/v1beta/models/gemini-3.1-flash-lite:generateContent")) {
+      landmarks++;
+      const names = [options.crossCityTitle ? "大阪城" : "東京塔", "淺草寺", "東京車站"];
+      const entries = names.map((name, index) => ({ name, sourceUrl: `https://example.org/tokyo-${index}`,
+        sourceTitle: `${options.wrongCity ? "大阪" : "東京"}・${name}` }));
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ landmarks: entries }) }] },
+        groundingMetadata: { groundingChunks: entries.map((entry) => ({ web: {
+          uri: options.unsourced ? "https://other.example/" : entry.sourceUrl, title: entry.sourceTitle } })) } }] });
+    }
+    if (target.startsWith("https://photon.komoot.io/api/")) {
+      locations++;
+      const query = new URL(target).searchParams.get("q") ?? "";
+      const name = ["大阪城", "東京塔", "淺草寺", "東京車站"].find((candidate) => query.includes(candidate)) ?? "";
+      return Response.json({ features: [{ geometry: { coordinates: [139.7, 35.6] }, properties: {
+        name, city: "港區", state: name === "大阪城" ? "大阪" : "東京", country: "日本",
+        osm_type: "N", osm_id: 100 + locations, osm_value: "attraction",
+      } }] });
+    }
     if (target.includes("/v1beta/models/gemini-3.1-flash-lite-image:generateContent")) {
       const body = JSON.parse(String(init?.body)) as { contents: { parts: { text?: string }[] }[]; generationConfig: { responseModalities: string[]; responseFormat: { image: { aspectRatio: string; imageSize: string } } } };
       expect(body.generationConfig).toEqual({ responseModalities: ["IMAGE"], responseFormat: { image: { aspectRatio: "3:2", imageSize: "1K" } } });
@@ -56,7 +75,7 @@ function httpFor(options: { owner?: string; city?: boolean; cityName?: string; i
     }
     throw new Error(`Unexpected outbound request: ${target}`);
   }) as typeof fetch;
-  return { http, counts: () => ({ images, quota }), prompts };
+  return { http, counts: () => ({ images, quota, landmarks }), locations: () => locations, prompts };
 }
 
 describe("owner-only persistent background generation", () => {
@@ -77,21 +96,27 @@ describe("owner-only persistent background generation", () => {
     const store = new MemoryStore();
     const fake = httpFor({ owner: "other" });
     expect((await startBackground(request(), env, fake.http, store as unknown as ReturnType<typeof backgroundStore>)).status).toBe(403);
-    expect(fake.counts()).toEqual({ images: 0, quota: 0 });
+    expect(fake.counts()).toEqual({ images: 0, quota: 0, landmarks: 0 });
     const noCity = httpFor({ city: false });
     expect((await startBackground(request(), env, noCity.http, store as unknown as ReturnType<typeof backgroundStore>)).status).toBe(409);
-    expect(noCity.counts()).toEqual({ images: 0, quota: 0 });
+    expect(noCity.counts()).toEqual({ images: 0, quota: 0, landmarks: 0 });
   });
   it("persists both panels, reads them privately and does not regenerate on duplicate start", async () => {
     const store = new MemoryStore(), fake = httpFor();
     const provided = store as unknown as ReturnType<typeof backgroundStore>;
     expect((await startBackground(request(), env, fake.http, provided)).status).toBe(200);
-    expect(fake.counts()).toEqual({ images: 2, quota: 1 });
+    expect(fake.counts()).toEqual({ images: 2, quota: 1, landmarks: 1 });
     expect((await startBackground(request(), env, fake.http, provided)).status).toBe(200);
-    expect(fake.counts()).toEqual({ images: 2, quota: 1 });
+    expect(fake.counts()).toEqual({ images: 2, quota: 1, landmarks: 1 });
+    expect(fake.prompts[0]).toContain("東京塔");
+    expect(fake.locations()).toBe(3);
     const statusRequest = new Request(`https://tools.ycsu.cc/travel-planner/api/background/status?tripId=${tripId}`,
       { headers: { Authorization: "Bearer owner" } });
-    expect((await (await readBackground(statusRequest, env, fake.http, provided)).json()).state).toBe("ready");
+    const status = await (await readBackground(statusRequest, env, fake.http, provided)).json();
+    expect(status.state).toBe("ready");
+    expect(status.landmarks).toHaveLength(3);
+    expect(status.landmarks[0]).toEqual({ name: "東京塔", sourceUrl: "https://example.org/tokyo-0",
+      sourceTitle: "東京・東京塔", locationSourceUrl: "https://www.openstreetmap.org/node/101" });
     const image = await readBackground(new Request(`${statusRequest.url}&part=top`, { headers: statusRequest.headers }), env, fake.http, provided);
     expect(image.headers.get("Cache-Control")).toBe("private, no-store");
     expect((await image.arrayBuffer()).byteLength).toBe(1200);
@@ -101,7 +126,7 @@ describe("owner-only persistent background generation", () => {
     const provided = store as unknown as ReturnType<typeof backgroundStore>;
     expect((await startBackground(request(), env, fake.http, provided)).status).toBe(502);
     expect((await startBackground(request(), env, fake.http, provided)).status).toBe(200);
-    expect(fake.counts()).toEqual({ images: 3, quota: 2 });
+    expect(fake.counts()).toEqual({ images: 3, quota: 2, landmarks: 1 });
   });
   it("a failed lower panel keeps the original city after the first-day city changes", async () => {
     const store = new MemoryStore(), tokyo = httpFor({ failSecond: true });
@@ -127,6 +152,23 @@ describe("owner-only persistent background generation", () => {
     const status = await readBackground(statusRequest, env, changed.http, provided);
     expect(status.status).toBe(200);
     expect(await status.json()).toMatchObject({ state: "ready", city: "東京" });
-    expect(changed.counts()).toEqual({ images: 0, quota: 0 });
+    expect(changed.counts()).toEqual({ images: 0, quota: 0, landmarks: 0 });
+  });
+  it("fails closed before image generation when landmark URLs are not grounded", async () => {
+    const store = new MemoryStore(), fake = httpFor({ unsourced: true });
+    const provided = store as unknown as ReturnType<typeof backgroundStore>;
+    expect((await startBackground(request(), env, fake.http, provided)).status).toBe(502);
+    expect(fake.counts()).toEqual({ images: 0, quota: 1, landmarks: 1 });
+  });
+  it("rejects a grounded page title for a landmark in a different city", async () => {
+    const store = new MemoryStore(), fake = httpFor({ wrongCity: true });
+    expect((await startBackground(request(), env, fake.http, store as unknown as ReturnType<typeof backgroundStore>)).status).toBe(502);
+    expect(fake.counts()).toEqual({ images: 0, quota: 1, landmarks: 1 });
+  });
+  it("rejects a title mentioning Tokyo and Osaka Castle when the independent place is in Osaka", async () => {
+    const store = new MemoryStore(), fake = httpFor({ crossCityTitle: true });
+    expect((await startBackground(request(), env, fake.http, store as unknown as ReturnType<typeof backgroundStore>)).status).toBe(502);
+    expect(fake.counts()).toEqual({ images: 0, quota: 1, landmarks: 1 });
+    expect(fake.locations()).toBe(1);
   });
 });

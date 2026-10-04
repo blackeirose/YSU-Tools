@@ -15,6 +15,8 @@ for (const [width, height] of [[1440, 900], [1366, 768], [390, 844], [320, 700]]
       scroll: document.documentElement.scrollWidth,
       workTop: document.querySelector(".workspace")?.getBoundingClientRect().top,
       workHeight: document.querySelector(".workspace")?.getBoundingClientRect().height,
+      nextTop: document.querySelector(".next-stop")?.getBoundingClientRect().top,
+      nextBottom: document.querySelector(".next-stop")?.getBoundingClientRect().bottom,
     }));
     expect(metrics.scroll).toBeLessThanOrEqual(metrics.viewport + 1);
     if (width >= 1366) {
@@ -24,6 +26,9 @@ for (const [width, height] of [[1440, 900], [1366, 768], [390, 844], [320, 700]]
       await expect(page.locator(".workspace")).toHaveClass(/no-map/);
       await page.getByRole("button", { name: "顯示地圖" }).click();
       await expect(page.locator(".workspace")).not.toHaveClass(/no-map/);
+    } else {
+      expect(metrics.nextTop).toBeLessThan(height * 0.55);
+      expect(metrics.nextBottom).toBeLessThan(height * 0.75);
     }
     const dismiss = page.getByRole("button", { name: "關閉訊息" });
     if (await dismiss.isVisible()) await dismiss.click();

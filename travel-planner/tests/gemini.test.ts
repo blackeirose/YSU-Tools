@@ -19,7 +19,8 @@ const request = (mode = "assist", requestId = crypto.randomUUID(), query = "下�
 });
 const owner = () => Response.json({ users: [{ localId: "owner" }] });
 const trip = () => Response.json({ fields: { ownerId: { stringValue: "owner" }, kind: { stringValue: "trip" },
-  name: { stringValue: "合成旅程" } } });
+  name: { stringValue: "合成旅程" }, start: { stringValue: "2030-01-01" }, end: { stringValue: "2030-01-10" },
+  timezone: { stringValue: "Asia/Tokyo" } } });
 
 describe("Gemini paid boundary", () => {
   it("charges and calls the provider once for concurrent/replayed request IDs, even with a changed payload", async () => {
@@ -64,6 +65,31 @@ describe("Gemini paid boundary", () => {
     expect(gatewayReady((key) => key === "GEMINI_API_KEY" ? "sibling-key" : env(key))).toBe(true);
     expect(gatewayReady((key) => key === "NETLIFY_AI_GATEWAY_URL" ? "http://gateway.test" : env(key))).toBe(false);
     expect(gatewayReady((key) => key === "NETLIFY_AI_GATEWAY_KEY" ? undefined : env(key))).toBe(false);
+    expect(gatewayReady((key) => ({ ...vars, TRAVEL_PLANNER_GEMINI_PROVIDER: "google-direct",
+      TRAVEL_PLANNER_GOOGLE_GEMINI_API_KEY: "planner-only-key", NETLIFY_AI_GATEWAY_KEY: "" } as Record<string, string>)[key])).toBe(true);
+    expect(gatewayReady((key) => ({ ...vars, TRAVEL_PLANNER_GEMINI_PROVIDER: "google-direct",
+      TRAVEL_PLANNER_GOOGLE_GEMINI_API_KEY: "", GEMINI_API_KEY: "sibling-key" } as Record<string, string>)[key])).toBe(false);
+  });
+  it("uses a Planner-scoped Google API credential only when explicitly selected", async () => {
+    const directEnv = (key: string) => ({ ...vars, TRAVEL_PLANNER_GEMINI_PROVIDER: "google-direct",
+      TRAVEL_PLANNER_GOOGLE_GEMINI_API_KEY: "planner-only-key", NETLIFY_AI_GATEWAY_KEY: "", GEMINI_API_KEY: "sibling-key" } as Record<string, string>)[key];
+    let endpoint = "", providerKey = "";
+    const http = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("accounts:lookup")) return owner();
+      if (url.includes("/records/")) return trip();
+      if (url.includes("/aiRequests/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/")) return new Response("", { status: 404 });
+      endpoint = url;
+      providerKey = (init?.headers as Record<string, string>)?.["x-goog-api-key"];
+      return Response.json({ candidates: [{ content: { parts: [{ text: '{"kind":"clarify","message":"請確認"}' }] } }] });
+    };
+    const response = await geminiHandler(request(), directEnv, http as typeof fetch);
+    expect(response.status).toBe(200);
+    expect(endpoint).toBe("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent");
+    expect(providerKey).toBe("planner-only-key");
+    expect((await response.json()).provider).toBe("google-direct");
   });
   it("rejects invalid identity and trip ownership before reserving cost", async () => {
     let calls = 0;
@@ -98,11 +124,93 @@ describe("Gemini paid boundary", () => {
   });
   it("stops at the daily count and does not call Gemini", async () => {
     let count = 0;
-    const http = async () => { count++; return Response.json({ fields: { assistCount: { integerValue: "10" },
+    const http = async () => { count++; return Response.json({ fields: { assistCount: { integerValue: "40" },
       exploreCount: { integerValue: "0" }, visionCount: { integerValue: "0" }, backgroundCount: { integerValue: "0" } }, updateTime: "2030-01-01T00:00:00Z" }); };
     await expect(reserveQuota(http as typeof fetch, "https://firestore.test/users/owner", "token", "owner", "assist"))
       .rejects.toThrow("quota-exhausted");
     expect(count).toBe(1);
+  });
+  it("reserves a shared US$1 daily ceiling before a paid call, including legacy counts", async () => {
+    let writes = 0;
+    const http = async (_input: string | URL | Request, init?: RequestInit) => {
+      if (init?.method === "PATCH") { writes++; return Response.json({}); }
+      return Response.json({ fields: { assistCount: { integerValue: "10" }, exploreCount: { integerValue: "1" },
+        visionCount: { integerValue: "3" }, backgroundCount: { integerValue: "2" } }, updateTime: "2030-01-01T00:00:00Z" });
+    };
+    await expect(reserveQuota(http as typeof fetch, "https://firestore.test/users/owner", "token", "owner", "explore"))
+      .rejects.toThrow("quota-exhausted");
+    expect(writes).toBe(0);
+  });
+  it("uses Firestore update-time CAS so two concurrent paid calls cannot spend the last slot twice", async () => {
+    let version = 1;
+    let fields = { ownerId: { stringValue: "owner" }, day: { stringValue: "2030-01-01" },
+      assistCount: { integerValue: "0" }, exploreCount: { integerValue: "0" },
+      visionCount: { integerValue: "0" }, backgroundCount: { integerValue: "0" },
+      reservedMicrousd: { integerValue: "900000" } };
+    const http = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (init?.method !== "PATCH") return Response.json({ fields, updateTime: `v${version}` });
+      if (!url.includes(`currentDocument.updateTime=v${version}`)) return new Response("", { status: 412 });
+      fields = JSON.parse(String(init.body)).fields;
+      version++;
+      return Response.json({});
+    };
+    const results = await Promise.allSettled([0, 1].map(() => reserveQuota(http as typeof fetch,
+      "https://firestore.test/users/owner", "token", "owner", "vision", new Date("2030-01-01T12:00:00Z"))));
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((result) => result.status === "rejected")).toHaveLength(1);
+    expect(fields.reservedMicrousd.integerValue).toBe("970000");
+  });
+  it("uses the trusted local date and refuses a historical trip's 'today' before reserving cost", async () => {
+    let paid = 0;
+    const http = async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("accounts:lookup")) return owner();
+      if (url.includes("/records/")) return trip();
+      paid++;
+      throw new Error("should not reserve or infer");
+    };
+    const response = await geminiHandler(request("assist", crypto.randomUUID(), "今天加入午餐"), env,
+      http as typeof fetch, new Date("2026-10-03T12:00:00Z"));
+    expect(response.status).toBe(200);
+    expect((await response.json()).action).toMatchObject({ kind: "clarify" });
+    expect(paid).toBe(0);
+  });
+  it("clarifies unsupported relative days before paid calls", async () => {
+    let paid = 0;
+    const http = async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("accounts:lookup")) return owner();
+      if (url.includes("/records/")) return trip();
+      paid++;
+      throw new Error("should not reserve or infer");
+    };
+    const response = await geminiHandler(request("assist", crypto.randomUUID(), "後天移到下午"), env,
+      http as typeof fetch, new Date("2030-01-01T12:00:00Z"));
+    expect(response.status).toBe(200);
+    expect((await response.json()).action.kind).toBe("clarify");
+    expect(paid).toBe(0);
+  });
+  it("refuses a model action that silently uses the selected date instead of destination today", async () => {
+    const body = { mode: "assist", tripId: crypto.randomUUID(), requestId: crypto.randomUUID(),
+      query: "今天加入午餐", selectedDay: "2030-01-02" };
+    let clock: unknown;
+    const http = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("accounts:lookup")) return owner();
+      if (url.includes("/records/")) return trip();
+      if (url.includes("/aiRequests/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/")) return new Response("", { status: 404 });
+      clock = JSON.parse(String(init?.body)).contents[0].parts[0];
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ kind: "add", name: "午餐",
+        day: "2030-01-02", message: "加入" }) }] } }] });
+    };
+    const response = await geminiHandler(new Request("https://preview.test/travel-planner/api/ai", { method: "POST",
+      headers: { Authorization: "Bearer synthetic-token" }, body: JSON.stringify(body) }), env,
+    http as typeof fetch, new Date("2030-01-01T02:00:00Z"));
+    expect(response.status).toBe(502);
+    expect(JSON.stringify(clock)).toContain("destinationLocalDate");
   });
   it("rejects model-supplied unsourced exploration cards", async () => {
     const cards = Array.from({ length: 3 }, () => ({ name: "X", originalName: "X", location: "?", reason: "?",

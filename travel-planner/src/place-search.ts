@@ -3,11 +3,13 @@ import type { Place } from "./model";
 export type PhotonPlace = {
   name: string;
   city: string;
+  administrativeArea: string;
   address: string;
   category: Place["category"];
   lat: number;
   lng: number;
   source: string;
+  osmUrl: string;
   mapsUrl: string;
 };
 type Feature = {
@@ -48,14 +50,16 @@ export function parsePhoton(input: unknown, checkedAt = new Date().toISOString()
     const type = ({ N: "node", W: "way", R: "relation" } as Record<string, string>)[String(p.osm_type ?? "")];
     if (!type || !/^\d+$/.test(String(p.osm_id ?? ""))) return [];
     const city = String(p.city ?? p.county ?? p.state ?? "").slice(0, 200);
+    const administrativeArea = [p.city, p.county, p.state].filter((x) => typeof x === "string").join(" · ").slice(0, 300);
     const identity = `${p.name.toLocaleLowerCase()}|${city.toLocaleLowerCase()}|${p.osm_value ?? ""}`;
     if (seen.has(identity)) return [];
     seen.add(identity);
     const address = [p.street, p.housenumber, p.postcode, city, p.country].filter((x) => typeof x === "string" && x.trim()).join(" · ").slice(0, 2000);
+    const osmUrl = `https://www.openstreetmap.org/${type}/${p.osm_id}`;
     return [{
-      name: p.name.trim().slice(0, 200), city, address,
+      name: p.name.trim().slice(0, 200), city, administrativeArea, address,
       category: category(p.osm_value), lat, lng,
-      source: `OpenStreetMap / Photon · https://www.openstreetmap.org/${type}/${p.osm_id} · ${checkedAt}`,
+      osmUrl, source: `OpenStreetMap / Photon · ${osmUrl} · ${checkedAt}`,
       mapsUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lat},${lng}`)}`,
     }];
   }).slice(0, 5);

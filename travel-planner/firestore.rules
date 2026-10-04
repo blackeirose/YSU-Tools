@@ -63,18 +63,26 @@ service cloud.firestore {
     }
     match /travelPlanner/preview-v1/users/{uid}/aiUsage/{day} {
       function owner() { return request.auth != null && request.auth.uid == uid; }
-      function valid() { return request.resource.data.keys().hasOnly(['ownerId','day','assistCount','exploreCount','visionCount','backgroundCount'])
-        && request.resource.data.keys().hasAll(['ownerId','day','assistCount','exploreCount','visionCount','backgroundCount'])
+      function reserveFor(data) { return data.assistCount * 20000 + data.exploreCount * 140000
+        + data.visionCount * 70000 + data.backgroundCount * 220000; }
+      function valid() { return request.resource.data.keys().hasOnly(['ownerId','day','assistCount','exploreCount','visionCount','backgroundCount','reservedMicrousd'])
+        && request.resource.data.keys().hasAll(['ownerId','day','assistCount','exploreCount','visionCount','backgroundCount','reservedMicrousd'])
         && request.resource.data.ownerId == uid && request.resource.data.day == day
-        && request.resource.data.assistCount is int && request.resource.data.assistCount >= 0 && request.resource.data.assistCount <= 10
-        && request.resource.data.exploreCount is int && request.resource.data.exploreCount >= 0 && request.resource.data.exploreCount <= 1
-        && request.resource.data.visionCount is int && request.resource.data.visionCount >= 0 && request.resource.data.visionCount <= 3
-        && request.resource.data.backgroundCount is int && request.resource.data.backgroundCount >= 0 && request.resource.data.backgroundCount <= 2; }
+        && request.resource.data.assistCount is int && request.resource.data.assistCount >= 0 && request.resource.data.assistCount <= 40
+        && request.resource.data.exploreCount is int && request.resource.data.exploreCount >= 0 && request.resource.data.exploreCount <= 7
+        && request.resource.data.visionCount is int && request.resource.data.visionCount >= 0 && request.resource.data.visionCount <= 8
+        && request.resource.data.backgroundCount is int && request.resource.data.backgroundCount >= 0 && request.resource.data.backgroundCount <= 2
+        && request.resource.data.reservedMicrousd is int
+        && request.resource.data.reservedMicrousd >= reserveFor(request.resource.data)
+        && request.resource.data.reservedMicrousd <= 1000000; }
       allow get: if owner();
       allow list: if false;
       allow create: if owner() && valid()
-        && request.resource.data.assistCount + request.resource.data.exploreCount + request.resource.data.visionCount + request.resource.data.backgroundCount == 1;
+        && request.resource.data.assistCount + request.resource.data.exploreCount + request.resource.data.visionCount + request.resource.data.backgroundCount == 1
+        && request.resource.data.reservedMicrousd == reserveFor(request.resource.data);
       allow update: if owner() && resource.data.ownerId == uid && valid()
+        && request.resource.data.reservedMicrousd == resource.data.get('reservedMicrousd', reserveFor(resource.data))
+          + reserveFor(request.resource.data) - reserveFor(resource.data)
         && ((request.resource.data.assistCount == resource.data.assistCount + 1
           && request.resource.data.exploreCount == resource.data.exploreCount
           && request.resource.data.visionCount == resource.data.visionCount

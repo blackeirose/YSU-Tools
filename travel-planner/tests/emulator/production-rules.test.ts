@@ -34,7 +34,8 @@ describe("production v1 server enforcement", () => {
     const other = env.authenticatedContext("other", { ...claims, email: "other@example.test" }).firestore();
     const path = "travelPlanner/v1/users/owner/aiUsage/2030-01-01";
     const ref = doc(owner, path);
-    const first = { ownerId: "owner", day: "2030-01-01", assistCount: 1, exploreCount: 0, visionCount: 0, backgroundCount: 0 };
+    const first = { ownerId: "owner", day: "2030-01-01", assistCount: 1, exploreCount: 0, visionCount: 0, backgroundCount: 0,
+      reservedMicrousd: 20000 };
     await assertFails(getDoc(doc(other, path)));
     await assertFails(setDoc(doc(other, path), first));
     await assertFails(setDoc(ref, { ...first, assistCount: 0 }));
@@ -42,10 +43,22 @@ describe("production v1 server enforcement", () => {
     await assertFails(setDoc(ref, { ...first, assistCount: 0 }));
     await assertFails(setDoc(ref, { ...first, assistCount: 3 }));
     await assertFails(setDoc(ref, { ...first, ownerId: "other", assistCount: 2 }));
-    await assertSucceeds(setDoc(ref, { ...first, assistCount: 2 }));
-    await assertSucceeds(setDoc(ref, { ...first, assistCount: 2, exploreCount: 1 }));
-    await assertSucceeds(setDoc(ref, { ...first, assistCount: 2, exploreCount: 1, backgroundCount: 1 }));
-    await assertFails(setDoc(ref, { ...first, assistCount: 2, exploreCount: 2 }));
+    await assertSucceeds(setDoc(ref, { ...first, assistCount: 2, reservedMicrousd: 40000 }));
+    await assertSucceeds(setDoc(ref, { ...first, assistCount: 2, exploreCount: 1, reservedMicrousd: 180000 }));
+    await assertSucceeds(setDoc(ref, { ...first, assistCount: 2, exploreCount: 1, backgroundCount: 1, reservedMicrousd: 400000 }));
+    await assertFails(setDoc(ref, { ...first, assistCount: 2, exploreCount: 2, reservedMicrousd: 400000 }));
+    await assertFails(setDoc(ref, { ...first, assistCount: 2, exploreCount: 2, backgroundCount: 1, reservedMicrousd: 1100000 }));
+    const legacyPath = "travelPlanner/v1/users/owner/aiUsage/2030-01-02";
+    await env.withSecurityRulesDisabled(async (context) => setDoc(doc(context.firestore(), legacyPath),
+      { ownerId: "owner", day: "2030-01-02", assistCount: 10, exploreCount: 1, visionCount: 3, backgroundCount: 2 }));
+    await assertFails(setDoc(doc(owner, legacyPath), { ownerId: "owner", day: "2030-01-02",
+      assistCount: 10, exploreCount: 2, visionCount: 3, backgroundCount: 2, reservedMicrousd: 1130000 }));
+    const migratable = "travelPlanner/v1/users/owner/aiUsage/2030-01-03";
+    const old = { ownerId: "owner", day: "2030-01-03", assistCount: 1, exploreCount: 0, visionCount: 0, backgroundCount: 0 };
+    await env.withSecurityRulesDisabled(async (context) => setDoc(doc(context.firestore(), migratable), old));
+    await assertFails(setDoc(doc(owner, migratable), { ...old, assistCount: 2, reservedMicrousd: 20000 }));
+    await assertSucceeds(setDoc(doc(owner, migratable), { ...old, assistCount: 2, reservedMicrousd: 40000 }));
+    await assertFails(setDoc(doc(owner, migratable), { ...old, assistCount: 3, reservedMicrousd: 40000 }));
     await assertFails(deleteDoc(ref));
     const requestId = crypto.randomUUID();
     const requestPath = `travelPlanner/v1/users/owner/aiRequests/${requestId}`;

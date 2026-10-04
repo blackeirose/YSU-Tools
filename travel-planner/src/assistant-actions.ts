@@ -17,6 +17,13 @@ export function assertAssistantMutationAllowed(item: Item, action: AssistantActi
     throw new Error("固定預約不可由旅伴自動移日、移到待定或改時；請核對真實預約後手動編輯");
 }
 
+/** A relative-date time edit or candidate change may only touch the item on
+ * the day that the server validated. A move uses day as its destination. */
+export function assertAssistantTargetDay(item: Item, action: AssistantAction): void {
+  if (["edit_time", "candidate"].includes(action.kind) && action.day && item.day !== action.day)
+    throw new Error(`旅伴指令指定 ${action.day}，但所選安排位於 ${item.day ?? "待定"}；請重新選取安排並確認日期`);
+}
+
 export async function assistantItemId(fingerprint: string, latitude: number, longitude: number): Promise<string> {
   const bytes = new Uint8Array(await crypto.subtle.digest("SHA-256",
     new TextEncoder().encode(`travel-planner-assistant-v1:${fingerprint}:${latitude}:${longitude}`)));

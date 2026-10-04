@@ -49,7 +49,7 @@ import { PlaceSearch } from "./PlaceSearch";
 import { ImportFlow } from "./ImportFlow";
 import { TravelerAssistant } from "./TravelerAssistant";
 import { TripBackground } from "./TripBackground";
-import { assistantActionAlreadyApplied, assistantDraftIds, assistantItemId, assertAssistantDraftTrip, assertAssistantMutationAllowed } from "./assistant-actions";
+import { assistantActionAlreadyApplied, assistantDraftIds, assistantItemId, assertAssistantDraftTrip, assertAssistantMutationAllowed, assertAssistantTargetDay } from "./assistant-actions";
 import type { AssistantAction } from "./server/gemini";
 import { fillPlaceFromPhoton, searchPhoton } from "./place-search";
 import type { PhotonPlace } from "./place-search";
@@ -682,6 +682,7 @@ export default function App() {
     }
     const item = items.find((row) => row.id === action.itemId);
     if (!item) throw new Error("找不到要修改的行程；請先選取卡片再重試");
+    assertAssistantTargetDay(item, action);
     const fingerprint = actionFingerprint(action);
     if (assistantActionAlreadyApplied(item, action))
       return "這項變更已在目前行程中，未重複寫入；原復原紀錄仍保留。";
@@ -1350,7 +1351,7 @@ export default function App() {
                   }}
                 />
                 <section className="date-toolbar">
-                  <label>
+                  <label className="date-select">
                     旅行日期
                     <select
                       aria-label="旅行日期"
@@ -1391,7 +1392,7 @@ export default function App() {
                   <button className="desktop-only-button" aria-expanded={mapVisible} onClick={() => smapVisible((value) => !value)}>{mapVisible ? "收合地圖" : "顯示地圖"}</button>
                   <button className="desktop-only-button" aria-pressed={tab === "candidates"} onClick={() => sb(tab === "candidates" ? "today" : "candidates")}>候選 ({items.filter((item) => item.status === "candidate").length})</button>
                   <button className="desktop-only-button" aria-pressed={tab === "tasks"} onClick={() => sb(tab === "tasks" ? "today" : "tasks")}>待辦</button>
-                  <button className="primary" disabled={demo || !user} onClick={() => sas(true)}>旅伴助手</button>
+                  <button className="primary assistant-entry" disabled={demo || !user} onClick={() => sas(true)}>旅伴助手</button>
                   <details className="menu toolbar-more"><summary>更多</summary><div className="actions">
                     <button onClick={() => srem(true)}>提醒中心</button>
                     <button onClick={() => sx(true)}>探索地點</button>

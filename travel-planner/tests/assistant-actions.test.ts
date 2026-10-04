@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assistantActionAlreadyApplied, assistantDraftIds, assistantItemId, assertAssistantDraftTrip, assertAssistantMutationAllowed } from "../src/assistant-actions";
+import { assistantActionAlreadyApplied, assistantDraftIds, assistantItemId, assertAssistantDraftTrip, assertAssistantMutationAllowed, assertAssistantTargetDay } from "../src/assistant-actions";
 import { blankItem, blankTrip } from "../src/model";
 
 describe("assistant action replay", () => {
@@ -31,6 +31,12 @@ describe("assistant action replay", () => {
     expect(() => assertAssistantMutationAllowed(fixed, { kind: "candidate", message: "" })).toThrow("固定預約");
     expect(() => assertAssistantMutationAllowed(fixed, { kind: "edit_time", message: "", time: "14:00" })).toThrow("固定預約");
     expect(() => assertAssistantMutationAllowed(item, { kind: "move", message: "", day: "2030-01-02" })).not.toThrow();
+  });
+  it("does not change a different day's item when a relative-date action passed server validation", () => {
+    expect(() => assertAssistantTargetDay(item, { kind: "edit_time", message: "明天改時", day: "2030-01-02", time: "09:00" })).toThrow("2030-01-02");
+    expect(() => assertAssistantTargetDay(item, { kind: "candidate", message: "明天待定", day: "2030-01-02" })).toThrow("2030-01-02");
+    expect(() => assertAssistantTargetDay(item, { kind: "move", message: "移去明天", day: "2030-01-02" })).not.toThrow();
+    expect(() => assertAssistantTargetDay(item, { kind: "edit_time", message: "今天改時", day: "2030-01-01", time: "09:00" })).not.toThrow();
   });
   it("binds a confirmed draft to its originating trip and reuses IDs only after an Undo tombstone", async () => {
     expect(() => assertAssistantDraftTrip(trip.id, crypto.randomUUID())).toThrow("旅程已切換");

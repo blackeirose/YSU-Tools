@@ -834,6 +834,29 @@ details .actions {
   }
 }
 @media (max-width: 700px) {
+  /* Keep the current stop in the first viewport; low-frequency trip management
+     remains in the accessible disclosure above the day selector. */
+  .app-header { align-items: center; padding: 9px 14px; min-height: 62px; }
+  .app-header .eyebrow { display: none; }
+  .app-header h1 { font-size: 19px; margin: 0; }
+  .header-actions .sync { max-width: 120px; line-height: 1.2; }
+  .trip-overview { margin-bottom: 0; }
+  .trip-toolbar { margin: 0; }
+  .trip-toolbar > label:first-child { font-size: 0; min-width: 0; }
+  .trip-toolbar > label:first-child select { min-height: 44px; font-size: 16px; }
+  .trip-summary { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 3px; }
+  .trip-summary h2 { font-size: 18px; margin: 0; line-height: 1.25; }
+  .trip-summary p:not(.demo-label) { display: none; }
+  .trip-summary .demo-label { margin: 0; font-size: 11px; }
+  .trip-operations { flex: 0 0 auto; }
+  .trip-operations > summary { white-space: nowrap; }
+  .date-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: end; gap: 5px; margin: 0 0 5px; }
+  .date-toolbar .date-select { min-width: 0; }
+  .date-toolbar .date-select select { min-height: 44px; }
+  .date-toolbar .active-city, .date-toolbar > button:not(.assistant-entry) { display: none; }
+  .date-toolbar .assistant-entry { white-space: nowrap; padding-inline: 8px; }
+  .date-toolbar .toolbar-more > summary { white-space: nowrap; padding-inline: 8px; }
+  .next-stop { margin-bottom: 6px; }
   .trip-toolbar.has-trip > button,
   .trip-toolbar.has-trip > label.check { display: none; }
   .mobile-trip-create { display: flex; flex-wrap: wrap; gap: 7px; width: 100%; }
@@ -1036,6 +1059,35 @@ details .actions {
   .saved-result span {
     min-width: 100%;
   }
+  .app-header { align-items: center; padding: 9px 14px; min-height: 62px; }
+  .app-header h1 { font-size: 19px; }
+  .trip-toolbar { margin-bottom: 0; }
+  .trip-toolbar > label:first-child { min-width: 0; }
+  .trip-summary { flex-direction: row; gap: 8px; margin-bottom: 3px; }
+  .trip-summary { flex-wrap: wrap; }
+  .trip-summary > div:first-child { min-width: 0; flex: 1 1 160px; }
+  .trip-operations { min-width: 0; max-width: 100%; }
+  .trip-operations[open] { flex-basis: 100%; }
+  .trip-operations > .actions { max-width: 100%; min-width: 0; }
+  .trip-summary h2 { font-size: 18px; }
+  .date-toolbar { gap: 5px; margin-bottom: 5px; }
+  .date-toolbar { position: relative; }
+  .date-toolbar .date-select { min-width: 0; }
+  .date-toolbar .toolbar-more { min-width: 0; }
+  .date-toolbar .toolbar-more[open] > .actions {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    left: auto;
+    width: min(250px, calc(100vw - 32px));
+    z-index: 800;
+  }
+  .status-toast { pointer-events: none; }
+  .status-toast button { pointer-events: auto; }
+  dialog:not(.drawer) { max-width: calc(100vw - 28px); overflow-x: hidden; overflow-y: auto; }
+  dialog .fields { grid-template-columns: minmax(0, 1fr); }
+  dialog input, dialog select, dialog textarea { max-width: 100%; min-width: 0; }
+  dialog .city-assignment { min-width: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   * {
