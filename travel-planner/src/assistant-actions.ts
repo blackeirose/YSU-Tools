@@ -11,6 +11,12 @@ export function assistantActionAlreadyApplied(item: Item, action: AssistantActio
   return false;
 }
 
+/** AI must not move or unset a real fixed booking without a human editing it. */
+export function assertAssistantMutationAllowed(item: Item, action: AssistantAction): void {
+  if (item.timeMode === "fixed" && ["move", "candidate", "edit_time"].includes(action.kind))
+    throw new Error("固定預約不可由旅伴自動移日、移到待定或改時；請核對真實預約後手動編輯");
+}
+
 export async function assistantItemId(fingerprint: string, latitude: number, longitude: number): Promise<string> {
   const bytes = new Uint8Array(await crypto.subtle.digest("SHA-256",
     new TextEncoder().encode(`travel-planner-assistant-v1:${fingerprint}:${latitude}:${longitude}`)));
