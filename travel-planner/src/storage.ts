@@ -676,6 +676,15 @@ export class PlannerStore {
     this.close();
     await lock(this.cacheKey, () => persist(this.cacheKey, null));
   }
+  async closeForAuthChange(): Promise<Snapshot | null> {
+    this.close();
+    return lock(this.cacheKey, async () => {
+      const current = await readSnapshot(this.cacheKey);
+      if (current.pending.length || current.conflicts.length) return current;
+      await persist(this.cacheKey, null);
+      return null;
+    });
+  }
   async clearWithRecovery(): Promise<Snapshot | null> {
     this.close();
     return lock(this.cacheKey, async () => {

@@ -4,10 +4,17 @@ import { readFile } from "node:fs/promises";
 
 async function demo(page: Page) {
   await page.goto("/travel-planner/");
-  await page.getByRole("button", { name: "使用本機模式", exact: true }).click();
+  await enterLocalMode(page);
   await expect(page.getByText("本機已儲存 · 不跨裝置")).toBeVisible();
   await page.getByRole("button", { name: "載入示範", exact: true }).click();
   await expect(page.getByRole("heading", { name: "東京 · 合成示範", exact: true })).toBeVisible();
+}
+async function enterLocalMode(page: Page) {
+  // A production-configured Preview offers an explicit choice; the standalone
+  // no-Firebase build starts in local mode immediately.
+  const button = page.getByRole("button", { name: "使用本機模式", exact: true });
+  if (await button.count()) await button.click();
+  await expect(page.getByText("本機已儲存 · 不跨裝置")).toBeVisible();
 }
 
 async function operations(page: Page) {
@@ -57,7 +64,7 @@ test("R2 mouse and keyboard open card date selector, move, undo and refresh", as
 test("R2 single-day trip explains why its move control has no other date", async ({ page }, info) => {
   test.skip(info.project.name !== "desktop", "Desktop inline control; mobile uses the detail drawer");
   await page.goto("/travel-planner/");
-  await page.getByRole("button", { name: "使用本機模式", exact: true }).click();
+  await enterLocalMode(page);
   await page.getByRole("button", { name: "新增旅程", exact: true }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("旅程名稱").fill("One-day synthetic");
@@ -159,7 +166,7 @@ test("R3 another tab toggles a reminder while an older task editor saves only no
   const other = await context.newPage();
   try {
     await other.goto("/travel-planner/");
-    await other.getByRole("button", { name: "使用本機模式", exact: true }).click();
+    await enterLocalMode(other);
     await expect(other.getByRole("heading", { name: "東京 · 合成示範" })).toBeVisible();
     const task = page.locator("article.task").filter({ hasText: "Concurrent reminder synthetic" });
     await task.getByRole("button", { name: "編輯", exact: true }).click();

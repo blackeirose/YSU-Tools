@@ -53,6 +53,7 @@ import { assistantActionAlreadyApplied, assistantDraftIds, assistantItemId, asse
 import type { AssistantAction } from "./server/gemini";
 import { fillPlaceFromPhoton, searchPhoton } from "./place-search";
 import type { PhotonPlace } from "./place-search";
+import { nextRoutePath } from "./navigation";
 import "./style.css";
 type Tab = "today" | "map" | "candidates" | "tasks";
 type Editor =
@@ -204,10 +205,11 @@ export default function App() {
       try {
         if (old) {
           if (old.owner !== "local-demo") {
-            // External logout/session loss must not silently discard pending work.
-            // Private disk cache is cleared; recovery stays only in this tab's memory
-            // and can be restored/exported only after the same UID authenticates.
-            const saved = await old.clearWithRecovery();
+            // A transient auth-null or account switch must not erase edits that
+            // are still pending. The cache is UID-scoped and stays inaccessible
+            // until that same account signs in again. Explicit logout below
+            // requires a backup/decision and then clears the private cache.
+            const saved = await old.closeForAuthChange();
             if (saved) recovery.current.set(old.owner, saved);
           } else old.close();
         }
@@ -226,13 +228,11 @@ export default function App() {
           if (!cancelled) redraw((n) => n + 1);
         });
         try {
-          const saved = !demo && recovery.current.get(user!);
-          if (saved) {
-            await current.restoreAfterSessionLoss(saved);
-            recovery.current.delete(user!);
-            sn("已取回此分頁暫存的未同步修改，正在重新核對雲端版本。");
-          }
           await current.init();
+          if (!demo && recovery.current.has(user!)) {
+            recovery.current.delete(user!);
+            sn("已從此裝置取回未同步修改，正在重新核對雲端版本。");
+          }
           if (cancelled) {
             current.close();
             return;
@@ -294,14 +294,20 @@ export default function App() {
     try { localStorage.setItem("travel-planner-map-visible", String(mapVisible)); }
     catch { /* storage may be unavailable */ }
   }, [mapVisible]);
+  // A server snapshot can arrive while a local Trip edit is pending or in
+  // conflict. Its date range is not authoritative for this tab's deep link.
+  const tripRangePending = !!trip && !!store && [
+    ...store.snapshot.pending,
+    ...store.snapshot.conflicts.map((conflict) => conflict.operation),
+  ].some((operation) => operation.changes.some((change) => change.id === trip.id));
+  const remoteReady = !!store?.isRemoteReady() && !tripRangePending;
+  const hasRemote = !!store?.remote;
   useEffect(() => {
-    if (trip && activeDay)
-      window.history.replaceState(
-        null,
-        "",
-        `/travel-planner/trips/${trip.id}/day/${activeDay}`,
-      );
-  }, [trip?.id, activeDay]);
+    const next = nextRoutePath({ currentPath: window.location.pathname,
+      tripId: trip?.id ?? null, activeDay, remote: hasRemote, remoteReady,
+      explicitSelection: !!tripId || !!day });
+    if (next) window.history.replaceState(null, "", next);
+  }, [trip?.id, activeDay, hasRemote, remoteReady, tripId, day]);
   useEffect(() => {
     const pop = () => {
       const path = window.location.pathname.match(
@@ -1028,7 +1034,7 @@ export default function App() {
           token={async () => { if (!auth?.currentUser) throw new Error("登入已失效"); return auth.currentUser.getIdToken(); }} />}
         {recovery.current.size > 0 && (
           <div className="error banner" role="alert">
-            登入狀態已變更。有未同步修改暫存在此分頁，請先不要重新整理或關閉；重新登入原帳號即可復原。其他帳號無法存取這份暫存。
+            登入狀態已變更。未同步修改保留在此裝置的原帳號專用儲存中；請以原帳號登入並完成同步。其他帳號無法在應用程式中讀取這份資料。若要清除，請先以原帳號登入並匯出備份。
             {user && recovery.current.has(user) && (
               <button
                 onClick={() =>

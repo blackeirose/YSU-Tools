@@ -83,6 +83,66 @@ test("configured Preview local mode survives a deep-link reload and clears on si
     await expect(page.getByRole("heading", { name: "東京 · 合成示範" })).toHaveCount(0);
   } finally { await context.close(); }
 });
+test("cloud deep link survives a stale same-origin trip cache until the server confirms the new date", async ({ browser }) => {
+  const writer = await browser.newContext(), stale = await browser.newContext();
+  const a = await writer.newPage(), b = await stale.newPage();
+  const email = `route-${crypto.randomUUID()}@example.test`;
+  try {
+    await login(a, email);
+    await a.getByRole("button", { name: "新增旅程", exact: true }).click();
+    let dialog = a.getByRole("dialog");
+    await dialog.getByLabel("旅程名稱").fill("Stale deep-link synthetic trip");
+    await dialog.getByLabel("開始日期").fill("2030-01-01");
+    await dialog.getByLabel("結束日期").fill("2030-01-02");
+    await dialog.getByLabel("城市", { exact: true }).fill("東京");
+    await dialog.getByRole("button", { name: "儲存旅程" }).click();
+    await expect(a.getByText("已同步", { exact: true })).toBeVisible();
+    const tripId = a.url().match(/\/trips\/([0-9a-f-]{36})\/day\//)?.[1];
+    expect(tripId).toBeTruthy();
+
+    await login(b, email);
+    await expect(b.getByRole("heading", { name: "Stale deep-link synthetic trip" })).toBeVisible();
+    await b.close(); // Preserve IndexedDB/Auth, but stop this context receiving the extension.
+
+    await operations(a);
+    await a.getByRole("button", { name: "編輯旅程" }).click();
+    dialog = a.getByRole("dialog");
+    await dialog.getByLabel("結束日期").fill("2030-01-03");
+    await dialog.getByRole("button", { name: "儲存旅程" }).click();
+    await expect(a.getByText("已同步", { exact: true })).toBeVisible();
+
+    const reopened = await stale.newPage();
+    const deep = `http://127.0.0.1:4174/travel-planner/trips/${tripId}/day/2030-01-03`;
+    await reopened.goto(deep);
+    await expect(reopened.getByText("已同步", { exact: true })).toBeVisible();
+    await expect(reopened.getByLabel("旅行日期", { exact: true })).toHaveValue("2030-01-03");
+    expect(reopened.url()).toBe(deep);
+
+    // A local pending Trip edit can block merging the newer server range.
+    // Keep the requested deep link visible until the user resolves the
+    // conflict, instead of silently replacing it with the old cached day.
+    await stale.setOffline(true);
+    await operations(reopened);
+    await reopened.getByRole("button", { name: "編輯旅程" }).click();
+    dialog = reopened.getByRole("dialog");
+    await dialog.getByLabel("結束日期").fill("2030-01-02");
+    await dialog.getByRole("button", { name: "儲存旅程" }).click();
+    await expect(reopened.getByText("離線 · 修改待同步", { exact: true })).toBeVisible();
+    await reopened.close();
+    await operations(a);
+    await a.getByRole("button", { name: "編輯旅程" }).click();
+    dialog = a.getByRole("dialog");
+    await dialog.getByLabel("結束日期").fill("2030-01-04");
+    await dialog.getByRole("button", { name: "儲存旅程" }).click();
+    await expect(a.getByText("已同步", { exact: true })).toBeVisible();
+    await stale.setOffline(false);
+    const conflictPage = await stale.newPage();
+    const conflictDeep = `http://127.0.0.1:4174/travel-planner/trips/${tripId}/day/2030-01-04`;
+    await conflictPage.goto(conflictDeep);
+    await expect(conflictPage.locator(".conflict")).toBeVisible({ timeout: 45000 });
+    expect(conflictPage.url()).toBe(conflictDeep);
+  } finally { await Promise.allSettled([writer.close(), stale.close()]); }
+});
 test("R1 emulator: login errors stay in dialog, cancellation and retry recover", async ({ browser }) => {
   const context = await browser.newContext();
   const page = await context.newPage();

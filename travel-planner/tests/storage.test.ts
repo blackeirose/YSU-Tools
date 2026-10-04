@@ -97,6 +97,27 @@ describe("recoverable editing", () => {
       await store.clear();
     }
   });
+  it("keeps an offline queue across unexpected auth loss and reload, but explicit logout clears it", async () => {
+    const owner = crypto.randomUUID(), other = crypto.randomUUID();
+    const remote: Remote = { watch: () => () => {}, read: async () => [], commit: async () => {} };
+    const first = new PlannerStore(owner, remote, "auth-recovery-test");
+    navigator.onLine = false;
+    try {
+      await first.init();
+      await first.edit("offline synthetic trip", [blankTrip(owner)]);
+      expect((await first.closeForAuthChange())?.pending).toHaveLength(1);
+      const differentAccount = new PlannerStore(other, remote, "auth-recovery-test");
+      await differentAccount.init();
+      expect(differentAccount.snapshot.records).toHaveLength(0);
+      await differentAccount.clear();
+      const resumed = new PlannerStore(owner, remote, "auth-recovery-test");
+      await resumed.init();
+      expect(resumed.snapshot.pending).toHaveLength(1);
+      expect(resumed.snapshot.records).toHaveLength(1);
+      await resumed.clear();
+      expect((await readSnapshot(`auth-recovery-test:${owner}`)).pending).toHaveLength(0);
+    } finally { navigator.onLine = true; }
+  });
   it("undoes a detached candidate move without resurrecting an out-of-range day", async () => {
     const owner = crypto.randomUUID();
     const trip = { ...blankTrip(owner), start: "2030-01-01", end: "2030-01-02", detachedItemIds: ["placeholder"] };

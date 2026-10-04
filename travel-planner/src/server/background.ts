@@ -9,11 +9,13 @@ type Env = (name: string) => string | undefined;
 type Http = typeof fetch;
 type Landmark = { name: string; sourceUrl: string; sourceTitle: string; locationSourceUrl: string };
 type Job = { state: "running" | "ready" | "failed"; attempts: number; city: string; startedAt: string;
-  updatedAt: string; error?: string; model?: string; styleVersion?: string; landmarks?: Landmark[] };
+  updatedAt: string; error?: string; model?: string; styleVersion?: string; landmarks?: Landmark[];
+  attemptAccountingVersion?: 2 };
 const json = (code: number, body: unknown) => new Response(JSON.stringify(body), { status: code,
   headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
 const input = z.object({ tripId: z.string().uuid() });
 const STORE = "travel-planner-background-v1";
+const QUOTA_ERROR = "今日用量已滿或無法安全預留";
 export const backgroundStore = (env: Env) => env("TRAVEL_PLANNER_FIREBASE_NAMESPACE") === "preview-v1"
   ? getDeployStore({ name: STORE, consistency: "strong" })
   : getStore({ name: STORE, consistency: "strong" });
@@ -154,12 +156,16 @@ export async function startBackground(req: Request, env: Env, http: Http = fetch
     originalCityRetained: city !== previous.data.city });
   if (previous?.data.state === "running" && now.getTime() - Date.parse(previous.data.startedAt) < 20 * 60_000)
     return json(202, { state: "running", city: previous.data.city });
-  if (previous?.data.attempts && previous.data.attempts >= 2)
+  // Older jobs counted a quota refusal as a generation attempt. It made two
+  // zero-provider-call refusals permanently exhaust a trip's retry allowance.
+  const paidAttempts = Math.max(0, (previous?.data.attempts ?? 0) -
+    (previous?.data.error === QUOTA_ERROR && previous.data.attemptAccountingVersion !== 2 ? 1 : 0));
+  if (paidAttempts >= 2)
     return json(409, { error: "背景已重試兩次；原行程仍可使用，請聯絡維護者" });
   // The first panel may already be stored. A retry must use the same city for
   // both panels even when the first-day itinerary has changed meanwhile.
   const renderingCity = previous?.data.city ?? city;
-  let job: Job = { state: "running", attempts: (previous?.data.attempts ?? 0) + 1,
+  let job: Job = { state: "running", attempts: paidAttempts + 1, attemptAccountingVersion: 2,
     city: renderingCity, startedAt: now.toISOString(), updatedAt: now.toISOString(), styleVersion: BACKGROUND_STYLE_VERSION,
     landmarks: previous?.data.landmarks };
   const write = await store.setJSON(`${key}/job`, job, previous ? { onlyIfMatch: previous.etag } : { onlyIfNew: true });
@@ -168,7 +174,8 @@ export async function startBackground(req: Request, env: Env, http: Http = fetch
   // Reserve before any paid call. A failure keeps the reservation conservative.
   try { await reserveQuota(http, base, token, uid, "background", now); }
   catch {
-    await store.setJSON(`${key}/job`, { ...job, state: "failed", error: "今日用量已滿或無法安全預留" }, { onlyIfMatch: jobEtag });
+    await store.setJSON(`${key}/job`, { ...job, state: "failed", attempts: paidAttempts,
+      error: QUOTA_ERROR }, { onlyIfMatch: jobEtag });
     return json(429, { error: "今日用量已滿或無法安全預留；未呼叫 Gemini" });
   }
   try {

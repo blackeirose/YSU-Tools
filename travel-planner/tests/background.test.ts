@@ -136,6 +136,30 @@ describe("owner-only persistent background generation", () => {
     expect((await startBackground(request(), env, fake.http, provided)).status).toBe(200);
     expect(fake.counts()).toEqual({ images: 3, quota: 2, landmarks: 1 });
   });
+  it("quota refusals make no paid call and do not exhaust background retries, including an old job", async () => {
+    const store = new MemoryStore(), fake = httpFor();
+    const provided = store as unknown as ReturnType<typeof backgroundStore>;
+    const exhausted = (async (url: string | URL | Request, init?: RequestInit) => {
+      if (String(url).includes("/aiUsage/") && init?.method !== "PATCH")
+        return Response.json({ fields: { reservedMicrousd: { integerValue: "990000" } },
+          updateTime: "2030-01-01T00:00:00Z" });
+      return fake.http(url, init);
+    }) as typeof fetch;
+    expect((await startBackground(request(), env, exhausted, provided)).status).toBe(429);
+    expect((await startBackground(request(), env, exhausted, provided)).status).toBe(429);
+    expect(fake.counts()).toEqual({ images: 0, quota: 0, landmarks: 0 });
+    const key = `preview-v1/owner/${tripId}/job`;
+    expect((store.values.get(key)?.data as { attempts: number }).attempts).toBe(0);
+    expect((await startBackground(request(), env, fake.http, provided)).status).toBe(200);
+    expect(fake.counts()).toEqual({ images: 2, quota: 1, landmarks: 1 });
+
+    const old = new MemoryStore(), oldProvided = old as unknown as ReturnType<typeof backgroundStore>;
+    await old.setJSON(key, { state: "failed", attempts: 2, city: "東京", startedAt: "2030-01-01T00:00:00Z",
+      updatedAt: "2030-01-01T00:00:00Z", error: "今日用量已滿或無法安全預留" });
+    const resumed = httpFor();
+    expect((await startBackground(request(), env, resumed.http, oldProvided)).status).toBe(200);
+    expect(resumed.counts()).toEqual({ images: 2, quota: 1, landmarks: 1 });
+  });
   it("a failed lower panel keeps the original city after the first-day city changes", async () => {
     const store = new MemoryStore(), tokyo = httpFor({ failSecond: true });
     const provided = store as unknown as ReturnType<typeof backgroundStore>;
