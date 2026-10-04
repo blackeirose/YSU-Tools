@@ -1,6 +1,6 @@
 # Travel Planner UX / Gemini upgrade — release gate report
 
-## Latest disposition — 2026-10-04 00:00 PDT
+## Prior disposition — 2026-10-04 00:00 PDT
 
 The [current complete-host Preview](https://6ac1f354869e054bf09986c9--ycsu-tools-router.netlify.app/travel-planner/) still runs exact product runtime `d6e3a6e73d871ae2590cc6de7c33177cd8eda8d3`. Product [CI 37182864577](https://github.com/blackeirose/YSU-Tools/actions/runs/37182864577) and publisher [CI 37184360443](https://github.com/blackeirose/social-capture-tool/actions/runs/37184360443) passed. In the Owner cloud Preview's synthetic trip, cross-day move/Undo/reload and date-shrink-to-visible-candidate/Undo/reload retained the original arrangements; independent Chrome/IAB add/edit synchronization also passed. Production was reread as `6ac0989e1e8fabf48ee75360` after these checks, with no upgrade deployment.
 
@@ -58,4 +58,11 @@ The user authorized one production release **only after** all necessary gates pa
 ## Recovery and compatibility
 
 The previous production deploy ID is an identification reference, not a safe whole-site rollback ZIP. Rebuild against the then-current complete sibling baseline, changing only Planner bytes and reviewed Planner function/rule fragments. JSON export includes new optional fields and can be used before accepting new data changes. Old IndexedDB pending/conflicts and Firestore records must not be reset or cleared. If a new client finds an older queued operation, retain a recoverable copy and explicitly resolve it; never silently drop or replay it over newer detached candidate/trip-date state. A rollback to the old UI after new date-shrink metadata is written needs compatibility review before promotion.
+
+
+## Latest disposition — 2026-10-04 00:45 PDT
+
+The newest [isolated complete-host Preview](https://6ac201713f7da5f9d3f390d5--ycsu-tools-router.netlify.app/travel-planner/) is Netlify `6ac201713f7da5f9d3f390d5`, exact product runtime `4b1c67b5e1fa8e28ed99fb0276fdeb1bf82af458`; the branch later gained only browser-test setup commit `8a10020d3c4bf2ec38a2b323c296ce774c94ddb8`. [Publisher integration CI 37185745756](https://github.com/blackeirose/social-capture-tool/actions/runs/37185745756) passed against runtime `4b1c67b`. The canonical full-site draft validated 326 static files and nine Functions, including six unchanged sibling archives, routes/traffic/schedule, Planner PWA scope and anonymous API 401. Production baseline was checked before and after as `6ac0989e1e8fabf48ee75360`; **no production deployment**.
+
+A new browser regression exposed that the 1280px wrapped More popover placed Reminder Center offscreen. Scoped CSS fixed it; exact-runtime browser pointer click opened the reminder dialog. 390/320px local synthetic screens showed the first card without horizontal overflow; direct deep URL refresh retained local data. Exact-source 102 unit tests passed. The focused browser suite recorded 14 PASS plus two concurrent-tab PASS after explicitly entering local mode in the fresh second tab. These are local-mode/browser checks, not cloud sync. This exact Preview hostname is absent from Firebase Authorized Domains pending its narrow addition, so Owner sign-in and real cloud offline/reconnect on this host remain UNVERIFIED. Paid Explore/audio/vision/background/Blob and true 200% zoom/physical iPhone also remain unaccepted. Conservative US$1/day reservation is exhausted; do not bypass it. Full Gate **NOT PASS**. Previous `d6e3a6e` cloud findings remain valid historical evidence only.
 
