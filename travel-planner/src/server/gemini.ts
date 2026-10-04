@@ -249,21 +249,32 @@ export async function geminiHandler(req: Request, env: Env, http: typeof fetch =
       if (!city) return reply(502, { error: "建議來源無法核對，本次未提供建議", quota });
       const verified: typeof cards = [];
       const seen = new Set<string>();
+      let lookupFailed = false;
       for (const card of cards) {
-        const name = card.originalName || card.name;
-        let matches;
-        try { matches = await searchPhoton(name, city, false, http); }
-        catch { return reply(502, { error: "地點來源暫時無法查證，請使用普通 Maps 搜尋", quota }); }
-        const expected = placeKey(name);
-        const place = matches.find((found) => placeKey(found.name) === expected && placeInCity(found, city));
+        // A bilingual card may give the local name as originalName while
+        // Photon serves its English OSM name. Check each supplied name exactly;
+        // neither a loose substring nor a model-provided URL is location proof.
+        const names = [...new Set([card.name, card.originalName].filter(Boolean))];
+        let place: Awaited<ReturnType<typeof searchPhoton>>[number] | undefined;
+        for (const name of names) {
+          let matches;
+          try { matches = await searchPhoton(name, city, true, http); }
+          catch { lookupFailed = true; continue; }
+          place = matches.find((found) => placeKey(found.name) === placeKey(name) && placeInCity(found, city));
+          if (place) break;
+        }
         if (!place || seen.has(place.osmUrl)) continue;
         seen.add(place.osmUrl);
-        verified.push({ ...card, name: place.name, location: place.address || place.administrativeArea,
+        const originalNameVerified = !card.originalName || placeKey(card.originalName) === placeKey(place.name);
+        verified.push({ ...card, name: place.name, originalName: originalNameVerified ? card.originalName : "",
+          location: place.address || place.administrativeArea,
           reason: `AI 提議（理由未由地點來源證實）：${card.reason}`.slice(0, 500),
           sourceUrls: [place.osmUrl], pending: [...new Set([
-            "推薦理由與適合度尚未由地點來源獨立確認", ...card.pending])].slice(0, 5) });
+            "推薦理由與適合度尚未由地點來源獨立確認",
+            ...(!originalNameVerified ? ["原文名稱尚未由地點來源確認"] : []), ...card.pending])].slice(0, 5) });
       }
-      if (verified.length < 3) return reply(502, { error: "建議來源無法核對，本次未提供建議", quota });
+      if (verified.length < 3) return reply(502, { error: lookupFailed
+        ? "地點來源暫時無法查證，請使用普通 Maps 搜尋" : "建議來源無法核對，本次未提供建議", quota });
       cards = verified.slice(0, 5);
     }
     const checkedAt = now.toISOString();

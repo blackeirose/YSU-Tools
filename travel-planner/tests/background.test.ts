@@ -26,7 +26,8 @@ class MemoryStore {
   }
 }
 function httpFor(options: { owner?: string; city?: boolean; cityName?: string; integerCoordinates?: boolean; failSecond?: boolean;
-  unsourced?: boolean; wrongCity?: boolean; crossCityTitle?: boolean; oneInvalidAmongFour?: boolean } = {}) {
+  unsourced?: boolean; wrongCity?: boolean; crossCityTitle?: boolean; oneInvalidAmongFour?: boolean;
+  bilingualLandmark?: boolean } = {}) {
   let images = 0, quota = 0, landmarks = 0, locations = 0;
   const prompts: string[] = [];
   const http = (async (url: string | URL | Request, init?: RequestInit) => {
@@ -52,7 +53,9 @@ function httpFor(options: { owner?: string; city?: boolean; cityName?: string; i
       expect(body.generationConfig.responseJsonSchema.properties.landmarks.maxItems).toBe(8);
       const names = [options.crossCityTitle || options.oneInvalidAmongFour ? "大阪城" : "東京塔",
         "淺草寺", "東京車站", ...(options.oneInvalidAmongFour ? ["東京塔"] : [])];
-      const entries = names.map((name, index) => ({ name, sourceUrl: `https://example.org/tokyo-${index}`,
+      const entries = names.map((name, index) => ({ name,
+        searchName: options.bilingualLandmark && index === 0 ? "Tokyo Tower" : name,
+        sourceUrl: `https://example.org/tokyo-${index}`,
         sourceTitle: `${options.wrongCity ? "大阪" : "東京"}・${name}` }));
       return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ landmarks: entries }) }] },
         groundingMetadata: { groundingChunks: entries.map((entry) => ({ web: {
@@ -61,9 +64,11 @@ function httpFor(options: { owner?: string; city?: boolean; cityName?: string; i
     if (target.startsWith("https://photon.komoot.io/api/")) {
       locations++;
       const query = new URL(target).searchParams.get("q") ?? "";
-      const name = ["大阪城", "東京塔", "淺草寺", "東京車站"].find((candidate) => query.includes(candidate)) ?? "";
+      const name = options.bilingualLandmark && query.includes("Tokyo Tower") ? "Tokyo Tower"
+        : ["大阪城", "東京塔", "淺草寺", "東京車站"].find((candidate) => query.includes(candidate)) ?? "";
+      const served = options.bilingualLandmark && query.includes("東京塔") ? "別的地點" : name;
       return Response.json({ features: [{ geometry: { coordinates: [139.7, 35.6] }, properties: {
-        name, city: "Minato", state: name === "大阪城" ? "大阪" : "Tokyo", country: "日本",
+        name: served, city: "Minato", state: name === "大阪城" ? "大阪" : "Tokyo", country: "日本",
         osm_type: "N", osm_id: 100 + locations, osm_value: "attraction",
       } }] });
     }
@@ -186,5 +191,13 @@ describe("owner-only persistent background generation", () => {
     expect(fake.locations()).toBe(4);
     expect(fake.prompts[0]).not.toContain("大阪城");
     expect(fake.prompts[0]).toContain("東京塔");
+  });
+  it("verifies a bilingual landmark using the model's exact English search name and OSM city", async () => {
+    const store = new MemoryStore(), fake = httpFor({ bilingualLandmark: true });
+    const response = await startBackground(request(), env, fake.http, store as unknown as ReturnType<typeof backgroundStore>);
+    expect(response.status).toBe(200);
+    const status = await readBackground(new Request(`https://tools.ycsu.cc/travel-planner/api/background/status?tripId=${tripId}`,
+      { headers: { Authorization: "Bearer owner" } }), env, fake.http, store as unknown as ReturnType<typeof backgroundStore>);
+    expect((await status.json()).landmarks[0].name).toBe("Tokyo Tower");
   });
 });

@@ -250,7 +250,8 @@ describe("Gemini paid boundary", () => {
   });
   it("replaces ungrounded model URLs with independently verified OSM place sources", async () => {
     const names = ["Tokyo Tower", "Sensoji", "Tokyo Skytree"];
-    const cards = names.map((name, index) => ({ name, originalName: name, location: "東京", reason: "可考慮參觀",
+    const cards = names.map((name, index) => ({ name, originalName: index === 0 ? "大阪城" : name,
+      location: "東京", reason: "可考慮參觀",
       sourceUrls: ["https://unverified.example/"], pending: index === 0 ? ["一", "二", "三", "四", "五"] : [] }));
     const http = async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
@@ -281,6 +282,8 @@ describe("Gemini paid boundary", () => {
     expect(result.suggestions.map((card: { sourceUrls: string[] }) => card.sourceUrls[0])).toEqual([
       "https://www.openstreetmap.org/node/100", "https://www.openstreetmap.org/node/101", "https://www.openstreetmap.org/node/102"]);
     expect(result.suggestions[0].pending).toContain("推薦理由與適合度尚未由地點來源獨立確認");
+    expect(result.suggestions[0].originalName).toBe("");
+    expect(result.suggestions[0].pending).toContain("原文名稱尚未由地點來源確認");
     expect(result.suggestions[0].reason).toContain("理由未由地點來源證實");
   });
   it("returns a bounded dated draft for explicit confirmation and rejects a prose-only draft", async () => {
