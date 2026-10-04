@@ -78,6 +78,20 @@ export async function reserveQuota(http: typeof fetch, base: string, token: stri
   }
   throw new Error("quota-concurrent");
 }
+/** Reserve a stable request ID before any quota or paid provider call.
+ * A repeated/uncertain attempt fails closed; it never launches a second inference.
+ * The record contains no prompt, attachment or model output. */
+export async function reserveAssistantRequest(http: typeof fetch, base: string, token: string,
+  uid: string, requestId: string, mode: "assist" | "explore" | "vision"): Promise<void> {
+  const url = `${base}/aiRequests/${requestId}?currentDocument.exists=false`;
+  const response = await http(url, { method: "PATCH", headers: {
+    Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ fields: { ownerId: { stringValue: uid }, requestId: { stringValue: requestId },
+      mode: { stringValue: mode } } }), signal: AbortSignal.timeout(8000) });
+  if (response.ok) return;
+  if ([409, 412].includes(response.status)) throw new Error("request-duplicate");
+  throw new Error("request-write");
+}
 const safeSource = (url: string) => { try { const parsed = new URL(url); return parsed.protocol === "https:" ? parsed.href : ""; } catch { return ""; } };
 export async function geminiHandler(req: Request, env: Env, http: typeof fetch = fetch): Promise<Response> {
   if (req.method !== "POST") return reply(405, { error: "只接受 POST" });
@@ -110,6 +124,11 @@ export async function geminiHandler(req: Request, env: Env, http: typeof fetch =
       if (record.fields?.ownerId?.stringValue !== ownerId || record.fields?.kind?.stringValue !== "trip" || record.fields?.deleted?.booleanValue)
         return reply(403, { error: "旅程 ownership 不符" });
     }
+    try { await reserveAssistantRequest(http, base, token, ownerId, input.requestId, input.mode); }
+    catch (error) { return reply(error instanceof Error && error.message === "request-duplicate" ? 409 : 503,
+      { error: error instanceof Error && error.message === "request-duplicate"
+        ? "這次請求已送出或結果尚不確定；為避免重複扣費，不會自動重送。請先檢查先前結果，若要重新查詢請明確送出新請求。"
+        : "無法安全建立本次請求，本次沒有呼叫 Gemini" }); }
     let quota: { used: number; limit: number };
     try { quota = await reserveQuota(http, base, token, ownerId, input.mode); }
     catch (error) { return reply(error instanceof Error && error.message === "quota-exhausted" ? 429 : 503,
