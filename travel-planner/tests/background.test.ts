@@ -160,6 +160,19 @@ describe("owner-only persistent background generation", () => {
     expect((await startBackground(request(), env, resumed.http, oldProvided)).status).toBe(200);
     expect(resumed.counts()).toEqual({ images: 2, quota: 1, landmarks: 1 });
   });
+  it("resumes an expired running job from its durable upper panel after a worker crash", async () => {
+    const store = new MemoryStore(), provided = store as unknown as ReturnType<typeof backgroundStore>;
+    const prefix = `preview-v1/owner/${tripId}`;
+    await store.setJSON(`${prefix}/job`, { state: "running", attempts: 1, attemptAccountingVersion: 2,
+      city: "東京", startedAt: "2020-01-01T00:00:00Z", updatedAt: "2020-01-01T00:00:00Z",
+      landmarks: [{ name: "東京塔", sourceUrl: "https://www.openstreetmap.org/node/1",
+        sourceTitle: "OpenStreetMap / Photon", locationSourceUrl: "https://www.openstreetmap.org/node/1" }] });
+    await store.set(`${prefix}/top`, Buffer.alloc(1200, 7).buffer, { metadata: { mime: "image/jpeg" } });
+    const fake = httpFor();
+    expect((await startBackground(request(), env, fake.http, provided)).status).toBe(200);
+    expect(fake.counts()).toEqual({ images: 1, quota: 1, landmarks: 0 });
+    expect((store.values.get(`${prefix}/job`)?.data as { state: string }).state).toBe("ready");
+  });
   it("a failed lower panel keeps the original city after the first-day city changes", async () => {
     const store = new MemoryStore(), tokyo = httpFor({ failSecond: true });
     const provided = store as unknown as ReturnType<typeof backgroundStore>;
