@@ -15,9 +15,20 @@ import {
   validateImport,
 } from "../src/model";
 import { applyOperation, canonical, checkBase, makeOperation } from "../src/storage";
-import { calendar, events } from "../src/calendar";
+import { calendar, events, fixedZoneNotice } from "../src/calendar";
 
 describe("day city and time zone migration", () => {
+  it("shows the original fixed reservation zone after a day-city correction without changing its ICS instant", () => {
+    const trip = { ...blankTrip("owner"), start: "2030-01-01", end: "2030-01-01", timezone: "Asia/Tokyo" };
+    const place = blankPlace("owner", trip.id, "Museum");
+    const fixed = { ...blankItem("owner", trip, place.id, trip.start), timeMode: "fixed" as const,
+      time: "09:00", departureZone: "Asia/Tokyo" };
+    const changed = assignDayCity(trip, trip.start, trip.start, "Los Angeles", "America/Los_Angeles");
+    expect(fixedZoneNotice(fixed, dayCity(changed, trip.start).timezone)).toContain("Asia/Tokyo");
+    expect(fixedZoneNotice(fixed, dayCity(changed, trip.start).timezone)).toContain("America/Los_Angeles");
+    expect(fixedZoneNotice({ ...fixed, timeMode: "flexible" }, dayCity(changed, trip.start).timezone)).toBeNull();
+    expect(calendar([changed, place, fixed], changed)).toContain("DTSTART:20300101T000000Z");
+  });
   it("compares nested daily city values for idempotent cloud acknowledgement", () => {
     expect(canonical({ revision: 2, dayCities: { "2030-01-01": { name: "東京" } } }))
       .not.toBe(canonical({ revision: 2, dayCities: { "2030-01-01": { name: "Honolulu" } } }));
