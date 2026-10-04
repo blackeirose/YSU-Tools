@@ -47,6 +47,13 @@ describe("production v1 server enforcement", () => {
     await assertSucceeds(setDoc(ref, { ...first, assistCount: 2, exploreCount: 1, backgroundCount: 1 }));
     await assertFails(setDoc(ref, { ...first, assistCount: 2, exploreCount: 2 }));
     await assertFails(deleteDoc(ref));
+    const requestId = crypto.randomUUID();
+    const requestPath = `travelPlanner/v1/users/owner/aiRequests/${requestId}`;
+    const receipt = { ownerId: "owner", requestId, mode: "assist" };
+    await assertFails(setDoc(doc(other, requestPath), receipt));
+    await assertSucceeds(setDoc(doc(owner, requestPath), receipt));
+    await assertFails(setDoc(doc(owner, requestPath), { ...receipt, mode: "vision" }));
+    await assertFails(deleteDoc(doc(owner, requestPath)));
   });
   it("rejects anonymous, another user, physical deletion and old Item-only writes", async () => {
     const claims = { email: ownerEmail, email_verified: true, firebase: { sign_in_provider: "google.com" } };
