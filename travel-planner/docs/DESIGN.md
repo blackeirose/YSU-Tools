@@ -1,5 +1,7 @@
 # UI design record
 
+Current Preview is now [draft `6ac19dbe1e7f0157bfeef08e`](https://6ac19dbe1e7f0157bfeef08e--ycsu-tools-router.netlify.app/travel-planner/) from product `5f68efc`; the older draft described below is historical. Actual Preview local-mode checks at 1440×900 and 390×844 show the multiday board, selected-day map markers, fixed booking's original IANA zone, and the mobile Today view. At 320px and 390px, document scroll width does not exceed viewport width. The 1366×768 and all four responsive sizes also passed local Chromium regression. These are synthetic local-mode UI observations, not authenticated cloud or physical iPhone evidence. The mobile first screen still devotes substantial height to trip/date controls; further real-device usability review remains open.
+
 Current remote Preview `6ac1921df800e63bc4e905cb` was checked with synthetic Tokyo data at 390×844 and 1440×900. On mobile, a card detail drawer moved an item from 1/7 to 1/8, showed the destination date and Undo, and refresh retained the restored original state. On desktop, the selected 1/7 board showed two corresponding ordered map markers and no document-width overflow. These are actual Preview local-mode interactions; they do not establish authenticated sync, generated art, 200% zoom or physical iPhone behavior. See [Full Gate](UPGRADE_GATE_2026-10-03.md).
 
 Applied canonical `SMALL_PROJECT_UI_STANDARD.md` version 1.0 at Core main `57a69136b7473718dfcf26311ae801f033696f05`.
