@@ -15,6 +15,20 @@ async function operations(page: Page) {
     await d.locator(":scope > summary").click();
 }
 
+test("wrapped More menu keeps Reminder Center reachable at 1280px", async ({ page }, info) => {
+  test.skip(info.project.name !== "desktop", "The wrapped desktop toolbar is the risk surface");
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await demo(page);
+  await page.locator("details.toolbar-more > summary").click();
+  const reminder = page.getByRole("button", { name: "提醒中心", exact: true });
+  const box = await reminder.boundingBox();
+  expect(box).not.toBeNull();
+  expect(box!.x).toBeGreaterThanOrEqual(0);
+  expect(box!.x + box!.width).toBeLessThanOrEqual(1280);
+  await reminder.click();
+  await expect(page.getByRole("dialog").getByRole("heading", { name: "提醒中心" })).toBeVisible();
+});
+
 test("R2 mouse and keyboard open card date selector, move, undo and refresh", async ({ page }, info) => {
   test.skip(info.project.name !== "desktop", "Mobile move is exercised through the detail drawer in product.spec.ts");
   await demo(page);
@@ -283,3 +297,4 @@ test("R9 map keeps a missing-coordinate first stop in numbering and labels each 
   await expect(page.locator('.map-pin[aria-label="淺草寺 2030-01-08 第 1 站"]')).toBeVisible();
   await expect(page.locator('.map-pin[aria-label*="淺草住宿"]')).toHaveCount(0);
 });
+
