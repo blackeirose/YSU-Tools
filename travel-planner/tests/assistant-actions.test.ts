@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assistantActionAlreadyApplied, assistantDraftIds, assistantItemId, assertAssistantDraftTrip } from "../src/assistant-actions";
+import { assistantActionAlreadyApplied, assistantDraftIds, assistantItemId, assertAssistantDraftTrip, assertAssistantMutationAllowed } from "../src/assistant-actions";
 import { blankItem, blankTrip } from "../src/model";
 
 describe("assistant action replay", () => {
@@ -24,6 +24,13 @@ describe("assistant action replay", () => {
     const timed = { ...item, timeMode: "flexible" as const, time: "09:00" };
     expect(assistantActionAlreadyApplied(timed, { kind: "edit_time", message: "", time: "09:00" })).toBe(true);
     expect(assistantActionAlreadyApplied(timed, { kind: "edit_time", message: "", time: "10:00" })).toBe(false);
+  });
+  it("keeps fixed reservations out of all automatic assistant schedule mutations", () => {
+    const fixed = { ...item, timeMode: "fixed" as const, time: "13:00" };
+    expect(() => assertAssistantMutationAllowed(fixed, { kind: "move", message: "", day: "2030-01-02" })).toThrow("固定預約");
+    expect(() => assertAssistantMutationAllowed(fixed, { kind: "candidate", message: "" })).toThrow("固定預約");
+    expect(() => assertAssistantMutationAllowed(fixed, { kind: "edit_time", message: "", time: "14:00" })).toThrow("固定預約");
+    expect(() => assertAssistantMutationAllowed(item, { kind: "move", message: "", day: "2030-01-02" })).not.toThrow();
   });
   it("binds a confirmed draft to its originating trip and reuses IDs only after an Undo tombstone", async () => {
     expect(() => assertAssistantDraftTrip(trip.id, crypto.randomUUID())).toThrow("旅程已切換");
