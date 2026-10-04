@@ -1,5 +1,12 @@
 # Travel Planner UX / Gemini upgrade — release gate report
 
+## Latest disposition — 2026-10-04 09:50 PDT
+
+Firebase Console now lists the Owner-approved exact hostname `6ac201713f7da5f9d3f390d5--ycsu-tools-router.netlify.app` in Authentication Authorized Domains. This only enabled OAuth redirects for the existing isolated [Preview](https://6ac201713f7da5f9d3f390d5--ycsu-tools-router.netlify.app/travel-planner/); providers and Firestore rules were unchanged. Exact runtime remains `4b1c67b5e1fa8e28ed99fb0276fdeb1bf82af458`. Normal Owner sign-in showed **已同步** independently in Chrome and Codex IAB. IAB initially showed a recoverable connection error; one UI Retry succeeded. A new synthetic trip and Chrome→IAB place addition, IAB→Chrome place addition, and both-context reload retention passed. This is current-source two-browser-context cloud evidence, not a real second device or offline reconnect. A diagnostic `type=date` automation `fill()` did not fire the React change event; keyboard editing did and the form was cancelled, so this does not establish a product defect.
+
+Netlify project readback still reports production current deploy `6ac0989e1e8fabf48ee75360`. **Full Gate NOT PASS; no upgrade production deployment.** Paid Explore/audio/vision/background/Blob, actual cloud offline/reconnect and old pending migration, real 200% browser zoom and physical iPhone are unaccepted or UNVERIFIED. Keep the conservative AI reservation and preserve private offline state. Prior 00:45 sections below are historical.
+
+
 ## Latest disposition — 2026-10-04 00:45 PDT
 
 The newest [isolated complete-host Preview](https://6ac201713f7da5f9d3f390d5--ycsu-tools-router.netlify.app/travel-planner/) is Netlify `6ac201713f7da5f9d3f390d5`, exact product runtime `4b1c67b5e1fa8e28ed99fb0276fdeb1bf82af458`; the branch later gained only browser-test setup commit `8a10020d3c4bf2ec38a2b323c296ce774c94ddb8`. [Publisher integration CI 37185745756](https://github.com/blackeirose/social-capture-tool/actions/runs/37185745756) passed against runtime `4b1c67b`. The canonical full-site draft validated 326 static files and nine Functions, including six unchanged sibling archives, routes/traffic/schedule, Planner PWA scope and anonymous API 401. Production baseline was checked before and after as `6ac0989e1e8fabf48ee75360`; **no production deployment**.
