@@ -97,6 +97,7 @@ test("cloud deep link survives a stale same-origin trip cache until the server c
     await dialog.getByLabel("城市", { exact: true }).fill("東京");
     await dialog.getByRole("button", { name: "儲存旅程" }).click();
     await expect(a.getByText("已同步", { exact: true })).toBeVisible();
+    await expect(a).toHaveURL(/\/travel-planner\/trips\/[0-9a-f-]{36}\/day\/2030-01-01/);
     const tripId = a.url().match(/\/trips\/([0-9a-f-]{36})\/day\//)?.[1];
     expect(tripId).toBeTruthy();
 
