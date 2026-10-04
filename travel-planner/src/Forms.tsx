@@ -179,6 +179,8 @@ export function TripForm({
         <fieldset className="city-assignment">
           <legend>每日城市與時區</legend>
           <p className="hint">舊旅程的多個城市尚未分配日期。可一次設定連續幾天；不確定位置時不會猜座標。</p>
+          {items.some((item) => !item.deleted && item.timeMode === "fixed") &&
+            <p className="notice">修改旅程或每日城市時區不會換算既有固定預約；卡片會保留並標示原預約時區，請核對真實預約與跨時區交通。</p>}
           <div className="fields">
             <label>從哪一天<input type="date" value={cityFrom} min={t.start} max={t.end} onChange={(e) => setCityFrom(e.target.value)} /></label>
             <label>到哪一天<input type="date" value={cityTo} min={t.start} max={t.end} onChange={(e) => setCityTo(e.target.value)} /></label>
