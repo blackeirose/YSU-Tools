@@ -65,6 +65,29 @@ test("a new Honolulu trip assigns its first city and IANA zone across its days",
   await expect(page.locator(".active-city")).toContainText("Pacific/Honolulu");
 });
 
+test("correcting a day city leaves the fixed booking in its saved departure zone and shows the difference", async ({ page }) => {
+  await page.goto("/travel-planner/");
+  await expect(page.getByText("本機已儲存 · 不跨裝置")).toBeVisible();
+  await page.getByRole("button", { name: "載入示範", exact: true }).click();
+  const operations = page.locator("details.trip-operations");
+  await operations.locator(":scope > summary").click();
+  await operations.getByRole("button", { name: "編輯旅程" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("從哪一天").fill("2030-01-07");
+  await dialog.getByLabel("到哪一天").fill("2030-01-07");
+  await dialog.getByLabel("主要城市").fill("Los Angeles");
+  await dialog.getByLabel("目的地時區").last().fill("America/Los_Angeles");
+  await dialog.getByRole("button", { name: "套用到所選日期" }).click();
+  await expect(dialog.getByText(/固定預約.*原預約時區/)).toBeVisible();
+  await dialog.getByRole("button", { name: "儲存旅程" }).click();
+  await expect(dialog).toHaveCount(0);
+  await page.getByLabel("旅行日期", { exact: true }).selectOption("2030-01-07");
+  const museum = page.getByRole("article", { name: "東京國立博物館" });
+  await expect(museum).toContainText("預約時區：Asia/Tokyo；當日主要時區：America/Los_Angeles");
+  await museum.getByRole("button", { name: /東京國立博物館/ }).click();
+  await expect(page.getByRole("dialog")).toContainText("原預約時間未換算");
+});
+
 test("date shrink keeps excluded stops as candidates across reload and expansion", async ({ page }) => {
   await page.goto("/travel-planner/");
   await expect(page.getByText("本機已儲存 · 不跨裝置")).toBeVisible();
