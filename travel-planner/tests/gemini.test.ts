@@ -13,15 +13,43 @@ const vars: Record<string, string> = {
   TRAVEL_PLANNER_FIREBASE_NAMESPACE: "preview-v1",
 };
 const env = (key: string) => vars[key];
-const request = (mode = "assist") => new Request("https://preview.test/travel-planner/api/ai", {
+const request = (mode = "assist", requestId = crypto.randomUUID(), query = "下雨天找室內活動") => new Request("https://preview.test/travel-planner/api/ai", {
   method: "POST", headers: { Authorization: "Bearer synthetic-token", "Content-Type": "application/json" },
-  body: JSON.stringify({ mode, tripId: crypto.randomUUID(), requestId: crypto.randomUUID(), query: "下雨天找室內活動" }),
+  body: JSON.stringify({ mode, tripId: crypto.randomUUID(), requestId, query }),
 });
 const owner = () => Response.json({ users: [{ localId: "owner" }] });
 const trip = () => Response.json({ fields: { ownerId: { stringValue: "owner" }, kind: { stringValue: "trip" },
   name: { stringValue: "合成旅程" } } });
 
 describe("Gemini paid boundary", () => {
+  it("charges and calls the provider once for concurrent/replayed request IDs, even with a changed payload", async () => {
+    const id = crypto.randomUUID();
+    let gatewayCalls = 0, quotaWrites = 0;
+    const reserved = new Set<string>();
+    const http = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("accounts:lookup")) return owner();
+      if (url.includes("/records/")) return trip();
+      if (url.includes("/aiRequests/") && init?.method === "PATCH") {
+        const key = url.split("/aiRequests/")[1].split("?")[0];
+        if (reserved.has(key)) return new Response("", { status: 412 });
+        reserved.add(key);
+        return Response.json({});
+      }
+      if (url.includes("/aiUsage/") && init?.method === "PATCH") { quotaWrites++; return Response.json({}); }
+      if (url.includes("/aiUsage/")) return new Response("", { status: 404 });
+      gatewayCalls++;
+      return Response.json({ candidates: [{ content: { parts: [{ text: '{"kind":"clarify","message":"請確認日期"}' }] } }] });
+    };
+    const responses = await Promise.all([
+      geminiHandler(request("assist", id), env, http as typeof fetch),
+      geminiHandler(request("assist", id), env, http as typeof fetch),
+    ]);
+    expect(responses.map((result) => result.status).sort()).toEqual([200, 409]);
+    expect((await geminiHandler(request("assist", id, "另一個要求"), env, http as typeof fetch)).status).toBe(409);
+    expect(gatewayCalls).toBe(1);
+    expect(quotaWrites).toBe(1);
+  });
   it("returns 401 to anonymous callers even when the Planner gateway is disabled", async () => {
     let calls = 0;
     const http = (async () => { calls++; throw new Error("should not call external services"); }) as typeof fetch;
@@ -54,15 +82,18 @@ describe("Gemini paid boundary", () => {
       calls.push({ url, method });
       if (url.includes("accounts:lookup")) return owner();
       if (url.includes("/records/")) return trip();
+      if (url.includes("/aiRequests/") && method === "PATCH") return Response.json({});
       if (url.includes("/aiUsage/") && method === "GET") return new Response("", { status: 404 });
       if (url.includes("/aiUsage/") && method === "PATCH") return Response.json({});
       return Response.json({ candidates: [{ content: { parts: [{ text: '{"kind":"add","message":"go","name":"X"}' }] } }] });
     };
     const response = await geminiHandler(request(), env, http as typeof fetch);
     expect(response.status).toBe(200);
-    expect(calls.map((call) => call.method)).toEqual(["POST", "GET", "GET", "PATCH", "POST"]);
-    expect(calls[3].url).toContain("currentDocument.exists=false");
-    expect(calls[4].url).toBe("https://gateway.test/v1beta/models/gemini-3.1-flash-lite:generateContent");
+    expect(calls.map((call) => call.method)).toEqual(["POST", "GET", "PATCH", "GET", "PATCH", "POST"]);
+    expect(calls[2].url).toContain("/aiRequests/");
+    expect(calls[2].url).toContain("currentDocument.exists=false");
+    expect(calls[4].url).toContain("currentDocument.exists=false");
+    expect(calls[5].url).toBe("https://gateway.test/v1beta/models/gemini-3.1-flash-lite:generateContent");
     expect(response.headers.get("Cache-Control")).toContain("no-store");
   });
   it("stops at the daily count and does not call Gemini", async () => {
@@ -80,6 +111,7 @@ describe("Gemini paid boundary", () => {
       const url = String(input);
       if (url.includes("accounts:lookup")) return owner();
       if (url.includes("/records/")) return trip();
+      if (url.includes("/aiRequests/") && init?.method === "PATCH") return Response.json({});
       if (url.includes("/aiUsage/") && init?.method === "PATCH") return Response.json({});
       if (url.includes("/aiUsage/")) return new Response("", { status: 404 });
       return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ suggestions: cards }) }] },
@@ -99,6 +131,7 @@ describe("Gemini paid boundary", () => {
       const url = String(input);
       if (url.includes("accounts:lookup")) return owner();
       if (url.includes("/records/")) return trip();
+      if (url.includes("/aiRequests/") && init?.method === "PATCH") return Response.json({});
       if (url.includes("/aiUsage/") && init?.method === "PATCH") return Response.json({});
       if (url.includes("/aiUsage/")) return new Response("", { status: 404 });
       return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify(payloads.shift()) }] } }] });
