@@ -1,5 +1,15 @@
 # Travel Planner UX / Gemini upgrade — Full Gate
 
+## Latest source-matched checkpoint — 2026-10-03 17:35 PDT
+
+- Product `5f68efc8459f471c7862443a4c3c5853d908fa1f` / [Draft PR #3](https://github.com/blackeirose/YSU-Tools/pull/3); [emulator CI 37164213423](https://github.com/blackeirose/YSU-Tools/actions/runs/37164213423) PASS. Publisher `b7d47248953240e14e570fb941390336cfaa80d6` / [Draft PR #23](https://github.com/blackeirose/social-capture-tool/pull/23); [merged-rule CI 37164496703](https://github.com/blackeirose/social-capture-tool/actions/runs/37164496703) PASS. Local 82 unit PASS, Chromium 55 PASS / 9 intentional skips at desktop/mobile, publisher 75 PASS / 1 skip.
+- [Complete-host synthetic Preview](https://6ac19dbe1e7f0157bfeef08e--ycsu-tools-router.netlify.app/travel-planner/) `6ac19dbe1e7f0157bfeef08e` ready; canonical remote validation PASS for 326 static, nine Functions, six exact siblings, routes, schedules, traffic, PWA and anonymous AI/background 401. Baseline and post-draft production deploy `6ac0989e1e8fabf48ee75360` unchanged.
+- Firebase live shared rules were reread before append at `af4473b0...`; only Planner `preview-v1/aiRequests` was appended; console publish/reload/readback equals reviewed full candidate SHA256 `b54ab8328edd8d88c28eb0ba7bf03fd44aff7171c0043231751c07fd676bc9c5`. Only this exact Preview hostname was added to Auth domains.
+- Two independent read-only source reviewers found no remaining P1/P2 in request dedupe, fixed booking mutation guard, stored zone/ICS, and complete-host isolation for **synthetic Preview scope**. They did not independently test live Auth or paid Gemini. The mobile first screen still has substantial trip/date chrome; real-device usability remains open.
+- Real Preview Google popup in TOWER remained pending; affected Chrome's earlier Firebase-handler certificate privacy error has no proven cause. Authenticated Owner dual contexts, cloud offline/reconnect, actual paid Gemini/vision/voice/background and Blob readback remain UNVERIFIED. Confirmed paid upgrade calls: zero. Production `v1` has no `aiRequests` rule; production AI must remain disabled until reviewed/applied and live integration verified. Full Gate **NOT PASS**; Preview permanently ineligible for promotion.
+
+The earlier `42cf4cb` checkpoint below remains as history and is superseded by this section. Keep private IndexedDB pending/conflicts and reassemble only Planner against the then-current complete host for recovery.
+
 Status: ISOLATED PREVIEW READY FOR SYNTHETIC LOCAL TRIAL; FULL GATE NOT PASS. Production remains the 2026-10-02 release.
 
 ## Latest source-matched checkpoint — 2026-10-03
