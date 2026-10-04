@@ -40,7 +40,7 @@ import {
   categories,
 } from "./model";
 import type { RecordData, Trip, Place, Item, Task } from "./model";
-import { calendar, dueReminders, itemTime, taskTime } from "./calendar";
+import { calendar, dueReminders, fixedZoneNotice, itemTime, taskTime } from "./calendar";
 import { demos } from "./demo";
 import { Modal, TripForm, PlaceForm, ItemForm, TaskForm } from "./Forms";
 import type { ReminderDraft } from "./Forms";
@@ -49,7 +49,7 @@ import { PlaceSearch } from "./PlaceSearch";
 import { ImportFlow } from "./ImportFlow";
 import { TravelerAssistant } from "./TravelerAssistant";
 import { TripBackground } from "./TripBackground";
-import { assistantActionAlreadyApplied, assistantDraftIds, assistantItemId, assertAssistantDraftTrip } from "./assistant-actions";
+import { assistantActionAlreadyApplied, assistantDraftIds, assistantItemId, assertAssistantDraftTrip, assertAssistantMutationAllowed } from "./assistant-actions";
 import type { AssistantAction } from "./server/gemini";
 import { fillPlaceFromPhoton, searchPhoton } from "./place-search";
 import type { PhotonPlace } from "./place-search";
@@ -685,6 +685,7 @@ export default function App() {
     const fingerprint = actionFingerprint(action);
     if (assistantActionAlreadyApplied(item, action))
       return "這項變更已在目前行程中，未重複寫入；原復原紀錄仍保留。";
+    assertAssistantMutationAllowed(item, action);
     if (action.kind === "move") {
       if (!action.day || !dateList.includes(action.day)) throw new Error("請指定旅程內的目的日期");
       await move(item, action.day);
@@ -692,7 +693,6 @@ export default function App() {
       await edit(`旅伴移到待定 ${requestId}`, [{ ...item, status: "candidate" }]);
       sn("已移到待定；原日期與預約資訊仍保留，可復原。");
     } else if (action.kind === "edit_time") {
-      if (item.timeMode === "fixed") throw new Error("固定預約不可由旅伴自動改時，請手動確認真實預約後編輯");
       if (!action.time) throw new Error("請提供明確時刻");
       await edit(`旅伴改時間 ${requestId}`, [{ ...item, timeMode: "flexible", time: action.time,
         ...(action.period ? { period: action.period } : {}) }]);
@@ -843,6 +843,8 @@ export default function App() {
           {p.name}
         </button>
         {i.day && <p className="item-date">安排日期：<strong>{i.day}</strong></p>}
+        {i.day && trip && fixedZoneNotice(i, dayCity(trip, i.day).timezone) &&
+          <p className="item-date">{fixedZoneNotice(i, dayCity(trip, i.day).timezone)}</p>}
         {i.candidateOrigin && <p className="item-date">原安排：{i.candidateOrigin.day} · {i.candidateOrigin.reason === "trip-range" ? "因旅程日期縮短移入待定" : "待定"}</p>}
         {(overlapByItem.get(i.id)?.length ?? 0) > 0 && <p className={`overlap-note ${i.timeMode === "fixed" ? "fixed" : ""}`}>
           與 {overlapByItem.get(i.id)!.map((id) => pFor(items.find((row) => row.id === id))?.name ?? "其他安排").join("、")} 時間重疊；可保留為備案。
@@ -1883,6 +1885,8 @@ export default function App() {
       {viewMode === "view" && selectedItem && selectedPlace && trip && (
         <Modal title={selectedPlace.name} onClose={() => si(null)} wide>
           <p className="detail-date">{selectedItem.day ?? "待定"} · {itemTime(selectedItem)} · {selectedItem.status === "candidate" ? "候選" : selectedItem.status === "done" ? "完成" : selectedItem.status === "skipped" ? "跳過" : "已排定"}</p>
+          {selectedItem.day && fixedZoneNotice(selectedItem, dayCity(trip, selectedItem.day).timezone) &&
+            <p className="notice">{fixedZoneNotice(selectedItem, dayCity(trip, selectedItem.day).timezone)}</p>}
           {selectedPlace.originalName && <p>{selectedPlace.originalName}</p>}
           <p>{selectedPlace.address || selectedPlace.city || "地址待補充"}</p>
           {selectedItem.candidateOrigin && <p className="notice">原安排 {selectedItem.candidateOrigin.day}；因縮短旅程移入待定。原時間與內容仍保留。</p>}
