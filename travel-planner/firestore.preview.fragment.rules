@@ -45,6 +45,9 @@
           // remain blocked by validItemDependency().
           && request.resource.data.get('detachedItemIds', []) is list
           && request.resource.data.get('detachedItemIds', []).size() <= 15000
+          // A pre-upgrade whole-Trip writer must not erase a detached marker.
+          && (!resource.data.keys().hasAny(['detachedItemIds'])
+              || request.resource.data.keys().hasAll(['detachedItemIds']))
           && ((request.resource.data.start <= resource.data.start
                 && request.resource.data.end >= resource.data.end)
               || request.resource.data.keys().hasAll(['detachedItemIds']));

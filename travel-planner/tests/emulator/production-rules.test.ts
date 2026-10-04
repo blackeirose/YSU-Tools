@@ -28,6 +28,20 @@ beforeAll(async () => {
 afterAll(async () => env?.cleanup());
 
 describe("production v1 server enforcement", () => {
+  it("rejects an old whole-Trip write that drops detached IDs", async () => {
+    const claims = { email: ownerEmail, email_verified: true, firebase: { sign_in_provider: "google.com" } };
+    const owner = env.authenticatedContext("owner", claims).firestore();
+    const trip = { ...blankTrip("owner"), start: "2030-01-01", end: "2030-01-02", detachedItemIds: [crypto.randomUUID()], revision: 1 };
+    const ref = doc(owner, path("owner", trip.id));
+    await assertSucceeds(setDoc(ref, trip));
+    const oldClient = { ...trip };
+    delete (oldClient as Partial<typeof trip>).detachedItemIds;
+    await assertFails(setDoc(ref, { ...oldClient, name: "legacy rename", revision: 2 }));
+    await assertFails(setDoc(ref, { ...oldClient, end: "2030-01-03", revision: 2 }));
+    await assertSucceeds(setDoc(ref, { ...trip, end: "2030-01-03", revision: 2 }));
+    if (!(await getDoc(ref)).data()?.detachedItemIds?.includes(trip.detachedItemIds[0]))
+      throw new Error("Date extension lost detached item IDs");
+  });
   it("reserves paid Gemini calls monotonically in an Owner-only daily counter", async () => {
     const claims = { email: ownerEmail, email_verified: true, firebase: { sign_in_provider: "google.com" } };
     const owner = env.authenticatedContext("owner", claims).firestore();
