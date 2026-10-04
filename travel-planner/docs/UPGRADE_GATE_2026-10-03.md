@@ -1,6 +1,29 @@
 # Travel Planner UX / Gemini upgrade — Full Gate
 
-## Latest source-matched checkpoint — 2026-10-03 17:35 PDT
+## Current decision — 2026-10-03 23:40 PDT
+
+**Full Gate NOT PASS. Keep production deploy `6ac0989e1e8fabf48ee75360`.** The latest source-matched [isolated complete-host Preview](https://6ac1f354869e054bf09986c9--ycsu-tools-router.netlify.app/travel-planner/) is Netlify `6ac1f354869e054bf09986c9`, product runtime `d6e3a6e73d871ae2590cc6de7c33177cd8eda8d3` on [Draft PR #3](https://github.com/blackeirose/YSU-Tools/pull/3), publisher remote `08ce504428baa9a91c685b8a0d077558c1858c5d` on [Draft PR #23](https://github.com/blackeirose/social-capture-tool/pull/23). [Product source-matched CI 37182864577](https://github.com/blackeirose/YSU-Tools/actions/runs/37182864577) passed typecheck, tests, build and Auth/rules/two-context emulator; publisher local suite passed 75 tests with one existing skip. Complete-host remote validation passed 326 static files, nine Functions with six retained siblings, protected routes, traffic and schedule, scoped PWA, and anonymous AI/background 401. Baseline production was re-read before assembly and remained unchanged after draft validation.
+
+The exact Preview hostname was added to Firebase Authorized Domains and read back. In two independent browser contexts (Chrome and Codex in-app browser), normal Owner Google popup login reached `已同步`: IAB added a synthetic item, Chrome received it; Chrome edited its note, IAB received it, and direct deep-URL refresh retained the item. A prior isolated Preview verified a real Gemini text action with explicit disambiguation and user confirmation. The **current** `d6e3a6e` Preview has not passed paid AI acceptance: earlier Explore returned `建議來源無法核對`, background landmark verification failed, and the present conservative daily reservation limit now refuses further generation. The bilingual name fallback and false-alias protection pass 27 focused tests and independent source review, but live sourced Explore, voice, vision, generated panels, Blob cross-context readback and real cloud offline/reconnect remain **UNVERIFIED**. 390/320px cloud views showed an itinerary without horizontal overflow; true 200% browser zoom and physical iPhone remain **UNVERIFIED**.
+
+The current API provider is Netlify AI Gateway; Google AI Pro credit offset has not been verified. The Planner server reserves a conservative US$1/day estimate before paid inference, which is not a provider bill hard cap. Do not increase that ceiling to turn a failed test green. Production `v1` rules must be freshly compared, applied and read back only after the missing live checks pass. The publisher now rejects a production receipt without a source-matched Full Gate claim, but this receipt is self-reported; an operator must verify the actual evidence and Preview deploy/source independently. Preview receipts remain ineligible for promotion. Preserve the old-origin IndexedDB pending/conflicts; never clear site data or restore a historical whole-site artifact to recover.
+
+| Area | Current disposition |
+|---|---|
+| R1 desktop workspace | Preview board/map and 1440px inspected; PASS within browser scope. |
+| R2 mobile/editing | 390/320px first item visible, no horizontal overflow; actual 200% zoom and physical iPhone UNVERIFIED. |
+| R3 move/date feedback | Earlier live Preview move/Undo and current cross-day card selection passed; no new regression observed. |
+| R4 zones | Source/unit/DST coverage PASS; full live cross-city reservation QA UNVERIFIED. |
+| R5 search/map | Real Photon selection and map link passed on an earlier Preview; latest no-coordinate quick add and deep refresh passed. |
+| R6 Gemini | Real typed action passed on earlier Preview; latest sourced Explore/audio and end-to-end error recovery NOT PASS/UNVERIFIED. |
+| R7 import | Local CSV/PDF and schema tests PASS; real image vision and full cloud rollback UNVERIFIED. |
+| R8 shrink/pending | Emulator/source preservation PASS; real cloud offline reconnect and old-origin pending recovery UNVERIFIED. |
+| R9 overlaps | Local model/browser fixed-time protection PASS; current live overlap QA UNVERIFIED. |
+| R10 background | Source/mock and independent landmark checks PASS; prior real attempt failed, current quota blocks retry; generated Blob NOT PASS. |
+
+The sections below are historical checkpoints; their statements about zero paid calls or unavailable Owner login do not describe this current Preview.
+
+## Historical source-matched checkpoint — 2026-10-03 17:35 PDT
 
 - Product `5f68efc8459f471c7862443a4c3c5853d908fa1f` / [Draft PR #3](https://github.com/blackeirose/YSU-Tools/pull/3); [emulator CI 37164213423](https://github.com/blackeirose/YSU-Tools/actions/runs/37164213423) PASS. Publisher `b7d47248953240e14e570fb941390336cfaa80d6` / [Draft PR #23](https://github.com/blackeirose/social-capture-tool/pull/23); [merged-rule CI 37164496703](https://github.com/blackeirose/social-capture-tool/actions/runs/37164496703) PASS. Local 82 unit PASS, Chromium 55 PASS / 9 intentional skips at desktop/mobile, publisher 75 PASS / 1 skip.
 - [Complete-host synthetic Preview](https://6ac19dbe1e7f0157bfeef08e--ycsu-tools-router.netlify.app/travel-planner/) `6ac19dbe1e7f0157bfeef08e` ready; canonical remote validation PASS for 326 static, nine Functions, six exact siblings, routes, schedules, traffic, PWA and anonymous AI/background 401. Baseline and post-draft production deploy `6ac0989e1e8fabf48ee75360` unchanged.
@@ -12,7 +35,7 @@ The earlier `42cf4cb` checkpoint below remains as history and is superseded by t
 
 Status: ISOLATED PREVIEW READY FOR SYNTHETIC LOCAL TRIAL; FULL GATE NOT PASS. Production remains the 2026-10-02 release.
 
-## Latest source-matched checkpoint — 2026-10-03
+## Historical source-matched checkpoint — 2026-10-03
 
 - Product runtime source: `blackeirose/YSU-Tools` Draft [PR #3](https://github.com/blackeirose/YSU-Tools/pull/3), remote commit `42cf4cbe95cfdcc40f9cec2322f9afa9a8763c66` (same runtime tree as local `f04b2d0`). [CI 37162263860](https://github.com/blackeirose/YSU-Tools/actions/runs/37162263860) PASS: 79 unit tests and source-matched Firebase emulator/browser integration.
 - Publisher source: `blackeirose/social-capture-tool` Draft [PR #23](https://github.com/blackeirose/social-capture-tool/pull/23), remote commit `f438e47de8c83de192ffaef609d19ae4189a3875` (same publisher tree as local `d4f71c2`). [CI 37162294923](https://github.com/blackeirose/social-capture-tool/actions/runs/37162294923) PASS: merged rules and 75 publisher tests.
@@ -67,3 +90,4 @@ Local checkpoint on 2026-10-03: `pnpm typecheck` PASS, `pnpm build` PASS (169 tr
 - Add failing tests around each changed data invariant before repair. Local typecheck/build/unit/browser, source-matched emulator CI for rules, isolated Preview and independent reviewer are required.
 - Re-read live complete-host baseline and all Function ZIPs before a candidate. A new Planner Function changes only reviewed Planner manifest/route contracts; all current sibling files, routes, Function modes, traffic rules and schedules remain protected.
 - Preserve an exact new source/deploy receipt and then perform limited synthetic production smoke only after the release gates pass. Rollback must reassemble the **then-current** full host and retain private offline pending/conflict data.
+
