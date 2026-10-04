@@ -1,5 +1,10 @@
 # Decisions
 
+## Release decision — 2026-10-04 15:50 PDT
+
+Keep PR #3 and the new complete-host draft `6ac2d52a8b3b09627e4a347b` isolated. Production is independently observed at `6ac2c370d1409615f07878bd` and contains a newer sibling UMS release; no older baseline may replace it. Runtime source `5e9880d` passed CI and narrow independent synthetic Preview review, and the currently deployed shared rules hash matches the reviewed preview-v1 merge. The Full Gate is NOT PASS until exact-host Auth, live cloud offline/conflicts, paid AI modalities/Blob, attributable budget evidence and source-matched review pass. Conservative US$0.94 quota reservation is not a bill. Conditional release authorization does not waive the Gate. No production promotion, shared-policy widening, paid cap reset or MAIN/Tracker update is permitted.
+
+
 ## Updated release decision — 2026-10-03 17:35 PDT
 
 Use draft `6ac19dbe1e7f0157bfeef08e` / product `5f68efc` for synthetic Owner review. Two independent source reviews closed the paid-request replay, fixed-booking assistant mutation and fixed-zone disclosure findings for Preview scope. The new immutable request reservation rule is applied only to `travelPlanner/preview-v1`; production `v1` has no corresponding rule. Paid AI in production must remain disabled until a separately reviewed `v1` rule and real authenticated acceptance pass. Do not promote this draft, modify siblings, clear offline pending data or change MAIN/Tracker. Production Netlify deploy remains `6ac0989e1e8fabf48ee75360`.
