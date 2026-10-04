@@ -159,6 +159,13 @@ export function itemTime(i: Item) {
       ? i.period
       : `${i.time ?? "未設定"}${i.timeMode === "fixed" ? " · 固定預約" : " · 大約"}`;
 }
+/** The booking keeps its original IANA zone even when the trip/day city changes. */
+export function fixedZoneNotice(i: Item, dayZone: string): string | null {
+  if (i.timeMode !== "fixed") return null;
+  return i.departureZone === dayZone
+    ? `預約時區：${i.departureZone}`
+    : `預約時區：${i.departureZone}；當日主要時區：${dayZone}。原預約時間未換算；跨時區交通請依出發地時區核對。`;
+}
 export function taskTime(t: Task) {
   return t.date && t.time
     ? `${t.date} ${t.time} ${t.timezone}`
