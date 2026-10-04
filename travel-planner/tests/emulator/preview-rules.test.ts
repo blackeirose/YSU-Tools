@@ -6,7 +6,7 @@ import {
   assertSucceeds,
 } from "@firebase/rules-unit-testing";
 import type { RulesTestEnvironment } from "@firebase/rules-unit-testing";
-import { doc, getDoc, setDoc, writeBatch } from "firebase/firestore";
+import { doc, getDoc, setDoc, writeBatch, deleteDoc } from "firebase/firestore";
 import { blankItem, blankTrip } from "../../src/model";
 let env: RulesTestEnvironment;
 const exact = process.env.PLANNER_MERGED_RULES;
@@ -112,4 +112,13 @@ it("preview guards Trip/Item dependencies and reserves paid calls within its own
   await assertSucceeds(setDoc(doc(owner, usagePath), usage));
   await assertFails(setDoc(doc(owner, usagePath), { ...usage, assistCount: 0 }));
   await assertSucceeds(setDoc(doc(owner, usagePath), { ...usage, assistCount: 2 }));
+  const requestId = crypto.randomUUID();
+  const requestPath = `travelPlanner/preview-v1/users/owner/aiRequests/${requestId}`;
+  const receipt = { ownerId: "owner", requestId, mode: "assist" };
+  await assertFails(setDoc(doc(other, requestPath), receipt));
+  await assertSucceeds(setDoc(doc(owner, requestPath), receipt));
+  await assertFails(setDoc(doc(owner, requestPath), { ...receipt, mode: "vision" }));
+  await assertFails(deleteDoc(doc(owner, requestPath)));
+  await assertFails(setDoc(doc(owner, `travelPlanner/preview-v1/users/owner/aiRequests/${crypto.randomUUID()}`),
+    { ...receipt, mode: "explore" }));
 });
