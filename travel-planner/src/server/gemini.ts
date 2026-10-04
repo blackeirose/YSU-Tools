@@ -67,6 +67,13 @@ const assistantResponseSchema = {
 const cardSchema = z.object({ name: z.string().min(1).max(200), originalName: z.string().max(200),
   location: z.string().max(300), reason: z.string().max(500), sourceUrls: z.array(z.string().url()).min(1).max(3),
   pending: z.array(z.string().max(200)).max(5) });
+const exploreResponseSchema = { type: "object", properties: { suggestions: { type: "array", minItems: 3,
+  maxItems: 5, items: { type: "object", properties: {
+    name: { type: "string" }, originalName: { type: "string" }, location: { type: "string" },
+    reason: { type: "string" }, sourceUrls: { type: "array", items: { type: "string" } },
+    pending: { type: "array", items: { type: "string" } },
+  }, required: ["name", "originalName", "location", "reason", "sourceUrls", "pending"] } } },
+required: ["suggestions"] } as const;
 const visionSchema = z.object({ rows: z.array(z.object({ dateText: z.string().max(30), name: z.string().min(1).max(200),
   city: z.string().max(200), time: z.string().max(8), candidate: z.boolean(), notes: z.string().max(500),
   uncertain: z.boolean() })).max(100), warnings: z.array(z.string().max(200)).max(20) });
@@ -189,7 +196,8 @@ export async function geminiHandler(req: Request, env: Env, http: typeof fetch =
       ...(input.mode === "explore" ? { tools: [{ googleSearch: {} }] } : {}),
       generationConfig: { responseMimeType: "application/json",
         ...(input.mode === "assist" ? { responseJsonSchema: assistantResponseSchema } : {}),
-        maxOutputTokens: input.mode === "vision" ? 2200 : 1200 } };
+        ...(input.mode === "explore" ? { responseJsonSchema: exploreResponseSchema } : {}),
+        maxOutputTokens: input.mode === "vision" || input.mode === "explore" ? 2200 : 1200 } };
     const response = await http(modelUrl(provider, model),
       { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": provider.key },
         body: JSON.stringify(requestBody), signal: AbortSignal.timeout(45000) });

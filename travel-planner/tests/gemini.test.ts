@@ -266,6 +266,9 @@ describe("Gemini paid boundary", () => {
           properties: { name: names[index], city: "Tokyo", country: "Japan", osm_type: "N",
             osm_id: index + 100, osm_value: "attraction" } }] });
       }
+      const body = JSON.parse(String(init?.body));
+      expect(body.generationConfig.responseJsonSchema.properties.suggestions.minItems).toBe(3);
+      expect(body.generationConfig.responseJsonSchema.properties.suggestions.maxItems).toBe(5);
       return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ suggestions: cards }) }] },
         groundingMetadata: { groundingChunks: [{ web: { uri: "https://grounded.example/" } }] } }] });
     };

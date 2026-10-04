@@ -26,7 +26,7 @@ class MemoryStore {
   }
 }
 function httpFor(options: { owner?: string; city?: boolean; cityName?: string; integerCoordinates?: boolean; failSecond?: boolean;
-  unsourced?: boolean; wrongCity?: boolean; crossCityTitle?: boolean } = {}) {
+  unsourced?: boolean; wrongCity?: boolean; crossCityTitle?: boolean; oneInvalidAmongFour?: boolean } = {}) {
   let images = 0, quota = 0, landmarks = 0, locations = 0;
   const prompts: string[] = [];
   const http = (async (url: string | URL | Request, init?: RequestInit) => {
@@ -48,7 +48,10 @@ function httpFor(options: { owner?: string; city?: boolean; cityName?: string; i
     }
     if (target.includes("/v1beta/models/gemini-3.1-flash-lite:generateContent")) {
       landmarks++;
-      const names = [options.crossCityTitle ? "大阪城" : "東京塔", "淺草寺", "東京車站"];
+      const body = JSON.parse(String(init?.body));
+      expect(body.generationConfig.responseJsonSchema.properties.landmarks.maxItems).toBe(8);
+      const names = [options.crossCityTitle || options.oneInvalidAmongFour ? "大阪城" : "東京塔",
+        "淺草寺", "東京車站", ...(options.oneInvalidAmongFour ? ["東京塔"] : [])];
       const entries = names.map((name, index) => ({ name, sourceUrl: `https://example.org/tokyo-${index}`,
         sourceTitle: `${options.wrongCity ? "大阪" : "東京"}・${name}` }));
       return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ landmarks: entries }) }] },
@@ -173,6 +176,15 @@ describe("owner-only persistent background generation", () => {
     const store = new MemoryStore(), fake = httpFor({ crossCityTitle: true });
     expect((await startBackground(request(), env, fake.http, store as unknown as ReturnType<typeof backgroundStore>)).status).toBe(502);
     expect(fake.counts()).toEqual({ images: 0, quota: 1, landmarks: 1 });
-    expect(fake.locations()).toBe(1);
+    expect(fake.locations()).toBe(3);
+  });
+  it("uses three independently verified landmarks when one of four model names is out of city", async () => {
+    const store = new MemoryStore(), fake = httpFor({ oneInvalidAmongFour: true });
+    const response = await startBackground(request(), env, fake.http, store as unknown as ReturnType<typeof backgroundStore>);
+    expect(response.status).toBe(200);
+    expect(fake.counts()).toEqual({ images: 2, quota: 1, landmarks: 1 });
+    expect(fake.locations()).toBe(4);
+    expect(fake.prompts[0]).not.toContain("大阪城");
+    expect(fake.prompts[0]).toContain("東京塔");
   });
 });
