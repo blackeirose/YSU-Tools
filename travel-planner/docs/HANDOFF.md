@@ -1,5 +1,8 @@
 # Travel Planner V1 — 隔離試用交付
 
+> **最新交接（2026-10-04 09:50 PDT）：** Owner 明確授權的精確新 Preview 網域已加入 Firebase Authorized Domains，Console 表格列讀回。此 [完整站隔離 Preview](https://6ac201713f7da5f9d3f390d5--ycsu-tools-router.netlify.app/travel-planner/) / deploy `6ac201713f7da5f9d3f390d5` / 產品 runtime `4b1c67b5e1fa8e28ed99fb0276fdeb1bf82af458` 現已在 Chrome 與獨立 IAB 兩個 browser contexts 正常 Owner 登入並顯示「已同步」；IAB 第一次連線失敗後按重試成功。新合成旅程及兩筆合成地點雙向新增、對側讀取、雙邊刷新保留通過。原生日期欄位的自動化 `fill()` 未觸發 React 事件；鍵盤操作後重繪保留，暫存表單已取消，不能以此判定產品日期缺陷。Netlify 正式 current deploy 讀回仍為 `6ac0989e1e8fabf48ee75360`。**Full Gate NOT PASS，未發布升級版**：付費 AI／背景 Blob、真正離線回連與舊 pending 恢復、200% zoom、實體 iPhone 仍未驗收。保留舊 origin 私人離線資料；本輪不更新 MAIN／Tracker。下方 00:45「尚未授權新網域」是歷史狀態，已由本段取代。詳見 [Gate](UPGRADE_GATE_2026-10-03.md) 與 [報告](RELEASE_REPORT_2026-10-03.md)。
+
+
 > **最新交接（2026-10-04 00:45 PDT）：** [新隔離完整站 Preview](https://6ac201713f7da5f9d3f390d5--ycsu-tools-router.netlify.app/travel-planner/) `6ac201713f7da5f9d3f390d5` 對應產品 runtime `4b1c67b5e1fa8e28ed99fb0276fdeb1bf82af458`；其後 `8a10020` 只修正乾淨 browser context 的測試前置。發布 [CI 37185745756](https://github.com/blackeirose/social-capture-tool/actions/runs/37185745756) PASS，完整站遠端驗證 326 檔／9 Functions、兄弟路由與共用排程／流量規則保留、Planner PWA 範圍及匿名 API 401。1280px「更多→提醒中心」的實際滑鼠點擊、390/320px 首屏及深層網址刷新通過；102 unit PASS，browser 聚焦回歸 14 PASS，另 2 項跨分頁案例修正測試入口後 PASS。這個新主機尚未加入 Firebase Authorized Domains，**新 Preview 的雲端登入／同步／離線未驗證**；舊 Preview 的真人 Owner 同步證據不能替代新來源驗收。付費 AI／背景 Blob 因保守每日額度與先前實測缺口仍未通過。Full Gate **NOT PASS**，正式站 deploy 仍是 `6ac0989e1e8fabf48ee75360`；不更新 MAIN／Tracker，不清除舊 origin 的離線 pending/conflicts。詳見 [Gate](UPGRADE_GATE_2026-10-03.md) 與 [報告](RELEASE_REPORT_2026-10-03.md)。
 
 
