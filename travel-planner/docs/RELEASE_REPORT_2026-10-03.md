@@ -1,5 +1,10 @@
 # Travel Planner UX / Gemini upgrade — release gate report
 
+## Reorder conflict addendum — 2026-10-05 04:28 UTC
+
+[CI 37263447650](https://github.com/blackeirose/YSU-Tools/actions/runs/37263447650) passed on test source `e28df073`: typecheck/build, 108 unit, 8 rules, 7 emulator browser. The added synthetic two-context case proves offline reorder, same-item competing note edit, same-ID backup, explicit remote recovery and later edit propagation without losing the note. Independent reviewer inspected and accepted the narrow assertions after tightening. Current Preview remains runtime `5e9880d`; Full Gate NOT PASS and no production deployment.
+
+
 ## Emulator addendum — 2026-10-05 04:21 UTC
 
 [CI 37262976480](https://github.com/blackeirose/YSU-Tools/actions/runs/37262976480) passed at test/docs HEAD `b588ac7c`: typecheck, build, 108 unit, 8 rules and 6 emulator browser tests. Added same-origin synthetic old-pending quarantine/backup/remote-recovery regression; independent source reviewer accepted this narrow evidence only. This is not live current-Preview cloud acceptance. Preview runtime `5e9880d` and production `6ac2c370d1409615f07878bd` are unchanged. Full Gate NOT PASS; no production release.
