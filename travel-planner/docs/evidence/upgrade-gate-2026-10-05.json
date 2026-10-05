@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "recordedAtUtc": "2026-10-05T06:32:00Z",
+  "recordedAtUtc": "2026-10-05T06:36:00Z",
   "gate": "NOT_PASS",
   "productRuntimeCommit": "ac2f023e2f3c27e7b1370c2a33a3737ced7fda7e",
   "productPullRequest": "https://github.com/blackeirose/YSU-Tools/pull/3",
@@ -36,7 +36,11 @@
     "deepLinkRefresh": "PASS",
     "crossDayCardMapSelection": "PASS",
     "markerToCard": "PASS",
-    "viewportWidthsPx": [1440, 390, 320],
+    "viewportWidthsPx": [
+      1440,
+      390,
+      320
+    ],
     "horizontalOverflow": false
   },
   "newPreviewAuthorizedDomain": "EXACT_HOST_ADDED_AND_READ_BACK",
@@ -48,7 +52,10 @@
     "fixedTimeZoneAndPaymentCancellationDeadlinesRetained": "PASS",
     "deepLinkRefresh": "PASS",
     "nativeSelectMouseOnlyExpansion": "UNVERIFIED_SCREENSHOT_DID_NOT_CAPTURE_OS_POPUP",
-    "realOfflineReconnectSameRecordConflicts": "UNVERIFIED"
+    "realOfflineReconnectSameRecordConflicts": "UNVERIFIED",
+    "onlineSameItemStaleFormConflict": "PASS_STALE_SAVE_REJECTED_DRAFT_RETAINED",
+    "onlineSameItemManualMergeAndPeerReadback": "PASS_BOTH_SYNTHETIC_NOTES_PRESERVED",
+    "liveOfflineMoveReorderDeleteConflicts": "UNVERIFIED"
   },
   "newPreviewPaidAi": "UNVERIFIED",
   "newPreviewBackgroundBlob": "UNVERIFIED",
@@ -66,7 +73,10 @@
   "aiReservationUtc20261004Usd": 0.94,
   "aiRequestReadback": {
     "immutableAssistExploreVisionRequestRecords": 12,
-    "aiUsageDocumentsUtc": ["2026-10-04", "2026-10-05"],
+    "aiUsageDocumentsUtc": [
+      "2026-10-04",
+      "2026-10-05"
+    ],
     "perRequestResultOrChargePersisted": false,
     "backgroundAttemptsTrackedSeparately": true
   },
