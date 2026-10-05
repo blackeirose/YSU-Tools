@@ -139,7 +139,7 @@ test("emulator: same-origin upgrade quarantines a synthetic unguarded old pendin
     const upgraded = await context.newPage();
     await upgraded.goto("http://127.0.0.1:4174/travel-planner/");
     await expect(upgraded.locator(".conflict")).toBeVisible({ timeout: 45000 });
-    await expect(upgraded.locator(".conflict")).toContainText("舊版");
+    await expect(upgraded.locator(".conflict")).toContainText("升級前的離線操作");
     const backup = upgraded.waitForEvent("download");
     await upgraded.getByRole("button", { name: "下載兩份備份" }).click();
     const saved = await backup;
