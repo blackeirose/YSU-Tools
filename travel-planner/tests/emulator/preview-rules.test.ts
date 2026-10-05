@@ -27,6 +27,19 @@ beforeAll(async () => {
   });
 });
 afterAll(async () => env?.cleanup());
+it("requires an explicit empty detachment list when restoring a shortened Trip", async () => {
+  const claims = { email: ownerEmail, email_verified: true, firebase: { sign_in_provider: "google.com" } };
+  const owner = env.authenticatedContext("owner", claims).firestore();
+  const trip = { ...blankTrip("owner"), start: "2030-01-01", end: "2030-01-03", revision: 1 };
+  const ref = doc(owner, `travelPlanner/preview-v1/users/owner/records/${trip.id}`);
+  await assertSucceeds(setDoc(ref, trip));
+  await assertSucceeds(setDoc(ref, { ...trip, end: "2030-01-02", detachedItemIds: [crypto.randomUUID()], revision: 2 }));
+  await assertFails(setDoc(ref, { ...trip, revision: 3 }));
+  await assertSucceeds(setDoc(ref, { ...trip, detachedItemIds: [], revision: 3 }));
+  const saved = await getDoc(ref);
+  if (saved.data()?.end !== "2030-01-03" || saved.data()?.detachedItemIds?.length !== 0)
+    throw new Error("Restored Trip was not retained");
+});
 it("preview requires the trusted verified Google owner, correct UID, revisions; production and sibling paths stay denied", async () => {
   const claims = {
     email: ownerEmail,
