@@ -187,6 +187,7 @@ test("emulator: offline reorder versus remote note preserves both versions and l
     await a.reload();
     await expect(a.locator('[data-day="2030-01-01"] article').first())
       .toHaveAttribute("aria-label", "Second stop");
+    await expect(a.getByText("離線 · 修改待同步", { exact: true })).toBeVisible();
 
     await b.getByRole("article", { name: "Second stop" })
       .getByRole("button", { name: "時間／備註" }).click();
@@ -203,11 +204,14 @@ test("emulator: offline reorder versus remote note preserves both versions and l
     await a.getByRole("button", { name: "下載兩份備份" }).click();
     const saved = await backup;
     const versions = JSON.parse(await readFile((await saved.path())!, "utf8")) as {
-      operation: { changes: { after: { order: number; placeId: string } }[] };
-      remote: { order: number; notes: string; placeId: string }[];
+      operation: { changes: { id: string; before: { order: number }; after: { order: number } }[] };
+      remote: { id: string; order: number; notes: string }[];
     };
-    expect(versions.operation.changes.some((c) => c.after.order === 0)).toBe(true);
-    expect(versions.remote.some((row) => row.notes === "Remote note retained")).toBe(true);
+    const moved = versions.operation.changes.find((change) =>
+      change.before.order === 1 && change.after.order === 0);
+    expect(moved).toBeDefined();
+    expect(versions.remote).toEqual(expect.arrayContaining([expect.objectContaining({
+      id: moved!.id, order: 1, notes: "Remote note retained" })]));
     await a.getByRole("button", { name: /使用遠端版本/ }).click();
     await expect(a.locator(".conflict")).toHaveCount(0);
     await a.reload();
@@ -220,6 +224,8 @@ test("emulator: offline reorder versus remote note preserves both versions and l
     await a.getByRole("button", { name: "Second stop上移", exact: true }).click();
     await expect(b.locator('[data-day="2030-01-01"] article').first())
       .toHaveAttribute("aria-label", "Second stop");
+    await expect(b.getByRole("article", { name: "Second stop" }))
+      .toContainText("Remote note retained");
   } finally { await Promise.allSettled([first.close(), second.close()]); }
 });
 
