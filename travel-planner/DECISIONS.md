@@ -1,5 +1,10 @@
 # Decisions
 
+## Release decision — 2026-10-05 04:15 UTC
+
+Hold the upgraded Planner at the isolated draft `6ac2d52a8b3b09627e4a347b`; do not publish or promote it while new-host cloud offline/conflict and paid modalities/Blob remain unaccepted. Keep production `6ac2c370d1409615f07878bd` and its newer UMS release intact. The precise Firebase Auth domain is Owner-authorized but still absent pending Computer Use operation-time confirmation. Today's UTC quota document was absent at read time; yesterday's US$0.94 remains only a reservation. Netlify team AI credits do not establish all Planner costs, so do not reset usage, increase caps, or treat unknown requests as free. Normal browser Photon search succeeds, but server-side source verification remains unknown; keep source validation strict. Fifty-seven focused mock/unit tests pass but do not waive Full Gate.
+
+
 ## Release decision — 2026-10-04 15:50 PDT
 
 Keep PR #3 and the new complete-host draft `6ac2d52a8b3b09627e4a347b` isolated. Production is independently observed at `6ac2c370d1409615f07878bd` and contains a newer sibling UMS release; no older baseline may replace it. Runtime source `5e9880d` passed CI and narrow independent synthetic Preview review, and the currently deployed shared rules hash matches the reviewed preview-v1 merge. The Full Gate is NOT PASS until exact-host Auth, live cloud offline/conflicts, paid AI modalities/Blob, attributable budget evidence and source-matched review pass. Conservative US$0.94 quota reservation is not a bill. Conditional release authorization does not waive the Gate. No production promotion, shared-policy widening, paid cap reset or MAIN/Tracker update is permitted.
