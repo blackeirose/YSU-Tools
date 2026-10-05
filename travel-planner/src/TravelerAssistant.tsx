@@ -3,10 +3,11 @@ import { Modal } from "./Forms";
 import type { AssistantAction } from "./server/gemini";
 
 type Result = { action?: AssistantAction; transcript?: string; quota?: { used: number; limit: number }; error?: string };
+export type AssistantRequestContext = { tripId: string; selectedItemId?: string };
 export function TravelerAssistant({ tripId, selectedDay, city, selectedItem, token, onAction, onDraft, onClose }: {
   tripId: string; selectedDay: string; city: string; selectedItem?: { id: string; name: string };
   token: () => Promise<string>;
-  onAction: (action: AssistantAction, requestId: string) => Promise<string>;
+  onAction: (action: AssistantAction, requestId: string, context: AssistantRequestContext) => Promise<string>;
   onDraft: (action: AssistantAction, expectedTripId: string) => Promise<string>;
   onClose: () => void;
 }) {
@@ -28,6 +29,7 @@ export function TravelerAssistant({ tripId, selectedDay, city, selectedItem, tok
     if (inFlight.current) return;
     inFlight.current = true; setBusy(true); setError(""); setResult(""); setDraft(null);
     const requestId = crypto.randomUUID();
+    const context = { tripId, selectedItemId: selectedItem?.id };
     try {
       const currentController = new AbortController(); controller.current = currentController;
       if (!navigator.onLine) throw new Error("Gemini 需要網路；已下載行程仍可查看與手動編輯");
@@ -47,7 +49,7 @@ export function TravelerAssistant({ tripId, selectedDay, city, selectedItem, tok
         setResult("請逐項核對日期與名稱，確認後才會一次加入；地點、營業與預約尚未查證。");
         return;
       }
-      const message = await onAction(data.action, requestId);
+      const message = await onAction(data.action, requestId, context);
       setResult(message || data.action.message);
       if (["add", "move", "edit_time", "candidate", "undo"].includes(data.action.kind)) setQuery("");
     } catch (e) { if (!cancelled.current) setError(e instanceof Error ? e.message : "助手暫時無法使用；輸入仍保留"); }

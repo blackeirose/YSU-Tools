@@ -255,6 +255,29 @@ describe("Gemini paid boundary", () => {
       message: expect.stringContaining("選取") });
     expect(paid).toBe(0);
   });
+  it("rejects a model's different item ID even when one card was selected", async () => {
+    const chosen = crypto.randomUUID();
+    const body = { mode: "assist", tripId: crypto.randomUUID(), requestId: crypto.randomUUID(),
+      query: "把所選安排移到 2030-01-02", selectedDay: "2030-01-01",
+      selectedItem: { id: chosen, name: "合成地點甲" } };
+    const http = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("accounts:lookup")) return owner();
+      if (url.includes("/records/")) return trip();
+      if (url.includes("/aiRequests/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/")) return new Response("", { status: 404 });
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({
+        kind: "move", message: "移動", itemId: crypto.randomUUID(), day: "2030-01-02",
+      }) }] } }] });
+    };
+    const response = await geminiHandler(new Request("https://preview.test/travel-planner/api/ai", {
+      method: "POST", headers: { Authorization: "Bearer synthetic-token" }, body: JSON.stringify(body),
+    }), env, http as typeof fetch, new Date("2030-01-01T12:00:00Z"));
+    expect(response.status).toBe(200);
+    expect((await response.json()).action).toMatchObject({ kind: "clarify",
+      message: expect.stringContaining("所選卡片") });
+  });
   it("refuses a model action that silently uses the selected date instead of destination today", async () => {
     const body = { mode: "assist", tripId: crypto.randomUUID(), requestId: crypto.randomUUID(),
       query: "今天加入午餐", selectedDay: "2030-01-02" };

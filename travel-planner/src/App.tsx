@@ -48,8 +48,9 @@ import { TravelMap } from "./Map";
 import { PlaceSearch } from "./PlaceSearch";
 import { ImportFlow } from "./ImportFlow";
 import { TravelerAssistant } from "./TravelerAssistant";
+import type { AssistantRequestContext } from "./TravelerAssistant";
 import { TripBackground } from "./TripBackground";
-import { assistantActionAlreadyApplied, assistantDraftIds, assistantItemId, assertAssistantDraftTrip, assertAssistantMutationAllowed, assertAssistantTargetDay } from "./assistant-actions";
+import { assistantActionAlreadyApplied, assistantDraftIds, assistantItemId, assertAssistantDraftTrip, assertAssistantMutationAllowed, assertAssistantMutationTarget, assertAssistantTargetDay } from "./assistant-actions";
 import type { AssistantAction } from "./server/gemini";
 import { fillPlaceFromPhoton, searchPhoton } from "./place-search";
 import type { PhotonPlace } from "./place-search";
@@ -150,7 +151,8 @@ export default function App() {
     activeStore = useRef<PlannerStore | null>(null),
     recovery = useRef(new Map<string, Snapshot>()),
     ack = useRef(new Set<string>()),
-    assistantDone = useRef(new Map<string, number>());
+    assistantDone = useRef(new Map<string, number>()),
+    assistantContext = useRef<{ tripId: string | null; selectedItemId: string | null }>({ tripId: null, selectedItemId: null });
   const attempt = async (fn: () => Promise<unknown>, success?: string): Promise<boolean> => {
     ser("");
     try {
@@ -268,6 +270,8 @@ export default function App() {
     (r) => r.kind === "item" && r.tripId === trip?.id,
   ) as Item[];
   const items = trip ? rawItems.map((item) => effectiveItem(trip, item)) : rawItems;
+  assistantContext.current = { tripId: trip?.id ?? null,
+    selectedItemId: items.some((item) => item.id === selected) ? selected : null };
   const projectedRecords = trip ? records.map((record) => record.kind === "item" && record.tripId === trip.id
     ? effectiveItem(trip, record) : record) : records;
   const tasks = records.filter(
@@ -670,8 +674,10 @@ export default function App() {
     sn(`旅伴已加入 ${targetDay ?? "待定"}：${found.name}；可復原。`);
     return `已加入 ${targetDay ?? "待定"}：${found.name}。地點來自 ${found.source.split(" · ")[0]}；時間是可調整安排，並非已訂位。`;
   }
-  async function executeAssistant(action: AssistantAction, requestId: string): Promise<string> {
+  async function executeAssistant(action: AssistantAction, requestId: string, context: AssistantRequestContext): Promise<string> {
     if (!trip || !store) throw new Error("請先選擇旅程");
+    if (context.tripId !== assistantContext.current.tripId)
+      throw new Error("旅程已切換；請在目前旅程重新提出指令");
     if (["clarify", "draft", "suggest"].includes(action.kind)) return action.message;
     if (action.kind === "add") {
       if (!action.name?.trim()) throw new Error("尚未取得清楚地點名稱，請補充一個名稱");
@@ -686,6 +692,8 @@ export default function App() {
       if (!store.snapshot.undo) return "目前沒有可安全復原的操作。";
       await store.undo(); sn("已復原最近一次操作"); return "已復原最近一次操作。";
     }
+    assertAssistantMutationTarget(action, context.tripId, context.selectedItemId,
+      assistantContext.current.tripId ?? "", assistantContext.current.selectedItemId);
     const item = items.find((row) => row.id === action.itemId);
     if (!item) throw new Error("找不到要修改的行程；請先選取卡片再重試");
     assertAssistantTargetDay(item, action);

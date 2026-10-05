@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assistantActionAlreadyApplied, assistantDraftIds, assistantItemId, assertAssistantDraftTrip, assertAssistantMutationAllowed, assertAssistantTargetDay } from "../src/assistant-actions";
+import { assistantActionAlreadyApplied, assistantDraftIds, assistantItemId, assertAssistantDraftTrip, assertAssistantMutationAllowed, assertAssistantTargetDay, assertAssistantMutationTarget } from "../src/assistant-actions";
 import { blankItem, blankTrip } from "../src/model";
 
 describe("assistant action replay", () => {
@@ -37,6 +37,14 @@ describe("assistant action replay", () => {
     expect(() => assertAssistantTargetDay(item, { kind: "candidate", message: "明天待定", day: "2030-01-02" })).toThrow("2030-01-02");
     expect(() => assertAssistantTargetDay(item, { kind: "move", message: "移去明天", day: "2030-01-02" })).not.toThrow();
     expect(() => assertAssistantTargetDay(item, { kind: "edit_time", message: "今天改時", day: "2030-01-01", time: "09:00" })).not.toThrow();
+  });
+  it("rejects a model response for a different item or a switched selection/trip", () => {
+    const action = { kind: "move" as const, message: "移日", itemId: item.id, day: "2030-01-02" };
+    expect(() => assertAssistantMutationTarget(action, trip.id, item.id, trip.id, item.id)).not.toThrow();
+    expect(() => assertAssistantMutationTarget({ ...action, itemId: crypto.randomUUID() }, trip.id, item.id, trip.id, item.id)).toThrow("所選安排");
+    expect(() => assertAssistantMutationTarget(action, trip.id, item.id, trip.id, crypto.randomUUID())).toThrow("所選安排");
+    expect(() => assertAssistantMutationTarget(action, trip.id, item.id, crypto.randomUUID(), item.id)).toThrow("旅程已切換");
+    expect(() => assertAssistantMutationTarget(action, trip.id, undefined, trip.id, undefined)).toThrow("先選取");
   });
   it("binds a confirmed draft to its originating trip and reuses IDs only after an Undo tombstone", async () => {
     expect(() => assertAssistantDraftTrip(trip.id, crypto.randomUUID())).toThrow("旅程已切換");

@@ -24,6 +24,15 @@ export function assertAssistantTargetDay(item: Item, action: AssistantAction): v
     throw new Error(`旅伴指令指定 ${action.day}，但所選安排位於 ${item.day ?? "待定"}；請重新選取安排並確認日期`);
 }
 
+/** Bind a model's item ID to the card submitted with this exact request. */
+export function assertAssistantMutationTarget(action: AssistantAction, requestTripId: string,
+  requestItemId: string | undefined, currentTripId: string, currentItemId: string | null): void {
+  if (requestTripId !== currentTripId) throw new Error("旅程已切換；請重新提出旅伴指令");
+  if (!requestItemId) throw new Error("請先選取要修改的行程卡片再重試");
+  if (!currentItemId || currentItemId !== requestItemId || action.itemId !== requestItemId)
+    throw new Error("旅伴回傳的安排與所選安排不符，或所選安排已變更；原行程未修改，請重新選取後重試");
+}
+
 export async function assistantItemId(fingerprint: string, latitude: number, longitude: number): Promise<string> {
   const bytes = new Uint8Array(await crypto.subtle.digest("SHA-256",
     new TextEncoder().encode(`travel-planner-assistant-v1:${fingerprint}:${latitude}:${longitude}`)));
