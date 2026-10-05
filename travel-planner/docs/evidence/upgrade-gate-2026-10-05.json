@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "recordedAtUtc": "2026-10-05T21:18:00Z",
+  "recordedAtUtc": "2026-10-05T21:38:00Z",
   "gate": "NOT_PASS",
   "productRuntimeCommit": "ae0d42b57187ae529199ec64c72943c940b7d445",
   "productPullRequest": "https://github.com/blackeirose/YSU-Tools/pull/3",
@@ -41,7 +41,9 @@
       390,
       320
     ],
-    "layoutAssertions": "PASS_AFTER_EXPLICIT_LOCAL_MODE"
+    "layoutAssertions": "PASS_AFTER_EXPLICIT_LOCAL_MODE",
+    "scopedPwaDeepLinkAndPrivateCacheExclusion": "PASS_SYNTHETIC_LOCAL",
+    "ordinaryPhotonSearchToMappedItem": "PASS_BROWSER_CLIENT_ONLY"
   },
   "newPreviewAuthorizedDomain": "ABSENT_CONFIRMED_2026-10-05",
   "newPreviewLiveCloud": "BLOCKED_AUTH_DOMAIN",
@@ -117,5 +119,15 @@
       ],
       "horizontalOverflow": false
     }
+  },
+  "sameOriginOldShellUpgrade": {
+    "status": "PASS_SYNTHETIC_LOCAL_AFTER_OLD_CLIENT_CLOSED",
+    "oldRuntime": "ac2f023e2f3c27e7b1370c2a33a3737ced7fda7e",
+    "newRuntime": "ae0d42b57187ae529199ec64c72943c940b7d445",
+    "oldPlannerShellRemoved": true,
+    "siblingCacheAndLocalTripRetained": true,
+    "oldWorkerWaitingBeforeClose": true,
+    "ownerPrivatePendingTouched": false,
+    "cloudPendingUpgradeProven": false
   }
 }
