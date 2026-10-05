@@ -1,5 +1,10 @@
 # YSU Travel Planner
 
+## Emulator upgrade regression — 2026-10-05 04:21 UTC
+
+Product test/docs HEAD `b588ac7c` passed [CI 37262976480](https://github.com/blackeirose/YSU-Tools/actions/runs/37262976480): typecheck/build, 108 unit, 8 rules, 6 emulator browser. The new sixth test proves same-origin synthetic old-pending quarantine, both-version backup, remote recovery and later sync. It does not touch private Owner data or prove a live old-app upgrade. Deployed Preview still runs `5e9880d`; Full Gate and production status remain unchanged.
+
+
 ## Continuing gate audit — 2026-10-05 04:15 UTC
 
 Runtime `5e9880d` and complete-host draft `6ac2d52a8b3b09627e4a347b` are unchanged; production readback remains the newer UMS-inclusive `6ac2c370d1409615f07878bd`. The new exact Firebase Auth hostname is absent and its UI operation-time confirmation is pending. On this draft, the ordinary browser Photon search returned results, although Netlify Function source verification is still unknown. Fifty-seven focused storage/Gemini/background/PWA tests passed. The 2026-10-05 UTC preview quota document was absent when read; 2026-10-04 US$0.94 is a reservation, not a bill. Team AI credits cannot identify Planner cost and may lag. New-origin cloud and paid AI acceptance remain open; Full Gate NOT PASS. Preserve all old-origin private pending data and the current production baseline.
