@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "recordedAtUtc": "2026-10-05T06:26:00Z",
+  "recordedAtUtc": "2026-10-05T06:32:00Z",
   "gate": "NOT_PASS",
   "productRuntimeCommit": "ac2f023e2f3c27e7b1370c2a33a3737ced7fda7e",
   "productPullRequest": "https://github.com/blackeirose/YSU-Tools/pull/3",
@@ -64,6 +64,12 @@
     "unknownRequestOutcomes": "not resolved"
   },
   "aiReservationUtc20261004Usd": 0.94,
+  "aiRequestReadback": {
+    "immutableAssistExploreVisionRequestRecords": 12,
+    "aiUsageDocumentsUtc": ["2026-10-04", "2026-10-05"],
+    "perRequestResultOrChargePersisted": false,
+    "backgroundAttemptsTrackedSeparately": true
+  },
   "aiActualCost": {
     "plannerAttributableUsd": null,
     "netlifyTeamCreditsThroughOct04": 6.48,
