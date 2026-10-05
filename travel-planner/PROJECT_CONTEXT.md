@@ -1,5 +1,10 @@
 # YSU Travel Planner
 
+## Continuing gate audit — 2026-10-05 04:15 UTC
+
+Runtime `5e9880d` and complete-host draft `6ac2d52a8b3b09627e4a347b` are unchanged; production readback remains the newer UMS-inclusive `6ac2c370d1409615f07878bd`. The new exact Firebase Auth hostname is absent and its UI operation-time confirmation is pending. On this draft, the ordinary browser Photon search returned results, although Netlify Function source verification is still unknown. Fifty-seven focused storage/Gemini/background/PWA tests passed. The 2026-10-05 UTC preview quota document was absent when read; 2026-10-04 US$0.94 is a reservation, not a bill. Team AI credits cannot identify Planner cost and may lag. New-origin cloud and paid AI acceptance remain open; Full Gate NOT PASS. Preserve all old-origin private pending data and the current production baseline.
+
+
 ## Upgrade checkpoint — 2026-10-04 15:50 PDT
 
 Product runtime `5e9880df97584089b3876f25a69d6fb526988183` has an isolated full-host synthetic [Preview](https://6ac2d52a8b3b09627e4a347b--ycsu-tools-router.netlify.app/travel-planner/) from current production baseline `6ac2c370d1409615f07878bd`; it has not been promoted. Canonical remote validation passed all 326 files, 9 Functions and sibling routes. CI 37238970637 passed 108 unit, 8 rules, 5 emulator browser, build/typecheck. The independent focused reviewer accepted only the synthetic Preview source/isolation scope. Browser checks passed 1440/390/320px deep refresh, local add/map and scoped PWA update. Current shared Firestore rules read-only SHA-256 matches the reviewed preview-v1 merge (`41a93ced…`). The new hostname awaits exact Firebase Auth domain confirmation; live new-origin cloud offline, AI and billing are not accepted. Full Gate remains NOT PASS, so the older production Planner remains in place.
