@@ -1,5 +1,10 @@
 # Travel Planner UX / Gemini upgrade — Full Gate
 
+## Emulator upgrade regression — 2026-10-05 04:21 UTC
+
+[CI run 37262976480](https://github.com/blackeirose/YSU-Tools/actions/runs/37262976480) on product document/test HEAD `b588ac7c1fe9450cca6cd2c1db878ad1c1cd206d` passed typecheck, build, 108 unit tests, 8 Firestore emulator rules tests and **6** Chromium/Auth/Firestore emulator browser tests. The added sixth test seeds a synthetic old, unguarded pending Item move into IndexedDB on the **same origin**, opens the current app, observes its legacy conflict, downloads a backup containing both local and remote versions, chooses the remote version, refreshes, and confirms an independent context sees a later edit. No Owner old-origin data was touched. The test does not run the old app/service worker or prove automatic replay of the old move; those remain unverified. Reviewer `/root/full_gate_review` inspected this narrow test and source risk; this is code/emulator review, not live Preview acceptance. Runtime Preview remains `5e9880d`, so this test-only/docs branch head is not the deployed source. Full Gate remains NOT PASS; production unchanged.
+
+
 ## Continuing gate audit — 2026-10-05 04:15 UTC (2026-10-04 21:15 PDT)
 
 **Full Gate NOT PASS; no production release.** Canonical Core main `57a69136b7473718dfcf26311ae801f033696f05` was re-read and compared. Product runtime remains `5e9880df97584089b3876f25a69d6fb526988183`; exact full-site draft remains [`6ac2d52a8b3b09627e4a347b`](https://6ac2d52a8b3b09627e4a347b--ycsu-tools-router.netlify.app/travel-planner/). Netlify production was read back at `6ac2c370d1409615f07878bd`, including the newer UMS baseline. No app source, shared rules, sibling tools or production deploy changed in this audit.
