@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+vi.mock("../src/server/ai-ledger", () => ({
+  beginAiUsage: vi.fn(async () => ({ key: "synthetic", etag: "synthetic" })),
+  finishAiUsage: vi.fn(async () => {}),
+}));
 import { gatewayReady, geminiHandler, reserveQuota } from "../src/server/gemini";
+import { beginAiUsage } from "../src/server/ai-ledger";
 
 const vars: Record<string, string> = {
   GOOGLE_GEMINI_BASE_URL: "https://gateway.test/gemini",
@@ -23,6 +28,24 @@ const trip = () => Response.json({ fields: { ownerId: { stringValue: "owner" }, 
   timezone: { stringValue: "Asia/Tokyo" } } });
 
 describe("Gemini paid boundary", () => {
+  it("never calls the paid provider when the durable sent receipt fails", async () => {
+    vi.mocked(beginAiUsage).mockRejectedValueOnce(new Error("ledger-unavailable"));
+    let paidCalls = 0;
+    const http = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("accounts:lookup")) return owner();
+      if (url.includes("/records/")) return trip();
+      if (url.includes("/aiRequests/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/")) return new Response("", { status: 404 });
+      paidCalls++;
+      return Response.json({});
+    };
+    const response = await geminiHandler(request(), env, http as typeof fetch);
+    expect(response.status).toBe(503);
+    expect((await response.json()).error).toContain("沒有呼叫 Gemini");
+    expect(paidCalls).toBe(0);
+  });
   it("charges and calls the provider once for concurrent/replayed request IDs, even with a changed payload", async () => {
     const id = crypto.randomUUID();
     let gatewayCalls = 0, quotaWrites = 0;

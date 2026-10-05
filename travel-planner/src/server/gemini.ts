@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { aiProvider, modelUrl } from "./ai-provider";
-import { logAiUsage } from "./ai-usage";
+import { beginAiUsage, finishAiUsage } from "./ai-ledger";
 import { inTrip, relativeAmbiguous, relativeTarget, relativeUnsupported, travelClock } from "./travel-clock";
 import { placeInCity, searchPhoton } from "../place-search";
 
@@ -217,12 +217,15 @@ export async function geminiHandler(req: Request, env: Env, http: typeof fetch =
     const trace = { id: input.requestId, mode: input.mode, stage: "inference", provider: provider.name,
       model, atUtc: now.toISOString(), dailyReservationAfterMicrousd: quota.reservedMicrousd,
       hasAudio: !!input.audio };
-    logAiUsage({ ...trace, result: "sent-charge-unknown" });
+    let receipt: Awaited<ReturnType<typeof beginAiUsage>>;
+    try { receipt = await beginAiUsage(namespace, ownerId, { ...trace, result: "sent-charge-unknown" }); }
+    catch { return reply(503, { error: "無法安全記錄 AI 請求，本次沒有呼叫 Gemini", quota }); }
     const response = await http(modelUrl(provider, model),
       { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": provider.key },
         body: JSON.stringify(requestBody), signal: AbortSignal.timeout(45000) });
     if (!response.ok) {
-      logAiUsage({ ...trace, atUtc: new Date().toISOString(), result: "http-error-charge-unknown", httpStatus: response.status });
+      await finishAiUsage(receipt, { ...trace, atUtc: new Date().toISOString(),
+        result: "http-error-charge-unknown", httpStatus: response.status });
       return reply(502, { error: "Gemini 暫時無法完成；行程未變更", quota });
     }
     const output = await response.json() as { candidates?: { content?: { parts?: { text?: string }[] }; groundingMetadata?: { groundingChunks?: { web?: { uri?: string } }[] } }[];
@@ -230,7 +233,8 @@ export async function geminiHandler(req: Request, env: Env, http: typeof fetch =
     const usage = { promptTokens: output.usageMetadata?.promptTokenCount ?? null,
       outputTokens: output.usageMetadata?.candidatesTokenCount ?? null,
       totalTokens: output.usageMetadata?.totalTokenCount ?? null };
-    logAiUsage({ ...trace, atUtc: new Date().toISOString(), result: "provider-returned", httpStatus: response.status, usage });
+    await finishAiUsage(receipt, { ...trace, atUtc: new Date().toISOString(),
+      result: "provider-returned", httpStatus: response.status, usage });
     const candidate = output.candidates?.[0];
     const text = candidate?.content?.parts?.map((part) => part.text ?? "").join("") ?? "";
     let parsed: unknown;

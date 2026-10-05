@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+vi.mock("../src/server/ai-ledger", () => ({
+  beginAiUsage: vi.fn(async () => ({ key: "synthetic", etag: "synthetic" })),
+  finishAiUsage: vi.fn(async () => {}),
+}));
 import { readBackground, startBackground, backgroundStore } from "../src/server/background";
+import { beginAiUsage } from "../src/server/ai-ledger";
 
 const tripId = "00000000-0000-4000-8000-000000000001";
 const request = (token = "owner") => new Request(`https://tools.ycsu.cc/travel-planner/api/background/start?tripId=${tripId}`,
@@ -87,6 +92,14 @@ function httpFor(options: { owner?: string; city?: boolean; cityName?: string; i
 }
 
 describe("owner-only persistent background generation", () => {
+  it("does not generate landmarks or images if the private sent receipt cannot be written", async () => {
+    vi.mocked(beginAiUsage).mockRejectedValueOnce(new Error("ledger-unavailable"));
+    const fake = httpFor(), store = new MemoryStore();
+    const result = await startBackground(request(), env, fake.http,
+      store as unknown as ReturnType<typeof backgroundStore>);
+    expect(result.status).toBe(502);
+    expect(fake.counts()).toEqual({ images: 0, quota: 1, landmarks: 0 });
+  });
   it("returns 401 before service-availability checks and makes no paid call", async () => {
     const store = new MemoryStore() as unknown as ReturnType<typeof backgroundStore>;
     const unavailable = () => undefined;
