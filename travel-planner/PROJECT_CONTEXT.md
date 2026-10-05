@@ -1,5 +1,10 @@
 # YSU Travel Planner
 
+## Offline reorder emulator regression — 2026-10-05 04:28 UTC
+
+[CI 37263447650](https://github.com/blackeirose/YSU-Tools/actions/runs/37263447650) passed on test source `e28df073`: 108 unit, 8 rules, 7 emulator browser, typecheck/build. New synthetic two-context case covers offline reorder/reload, same-item remote note, both-version backup, explicit remote recovery and later sync while retaining the note. Independent reviewer checked tightened assertions. Deployed Preview still runs `5e9880d`; live cloud Full Gate and production status remain unchanged.
+
+
 ## Emulator upgrade regression — 2026-10-05 04:21 UTC
 
 Product test/docs HEAD `b588ac7c` passed [CI 37262976480](https://github.com/blackeirose/YSU-Tools/actions/runs/37262976480): typecheck/build, 108 unit, 8 rules, 6 emulator browser. The new sixth test proves same-origin synthetic old-pending quarantine, both-version backup, remote recovery and later sync. It does not touch private Owner data or prove a live old-app upgrade. Deployed Preview still runs `5e9880d`; Full Gate and production status remain unchanged.
