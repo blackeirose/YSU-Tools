@@ -83,6 +83,76 @@ test("configured Preview local mode survives a deep-link reload and clears on si
     await expect(page.getByRole("heading", { name: "東京 · 合成示範" })).toHaveCount(0);
   } finally { await context.close(); }
 });
+test("emulator: same-origin upgrade quarantines a synthetic unguarded old pending move without losing later edits", async ({ browser }) => {
+  const context = await browser.newContext(), peer = await browser.newContext();
+  const page = await context.newPage(), other = await peer.newPage();
+  const email = `legacy-${crypto.randomUUID()}@example.test`;
+  try {
+    await login(page, email);
+    await createRangeTrip(page, "Synthetic old-pending upgrade");
+    await quick(page, "Legacy move stop");
+    await expect(page.getByText("已同步", { exact: true })).toBeVisible();
+    await login(other, email);
+    await expect(other.getByRole("article", { name: "Legacy move stop" })).toBeVisible();
+    await page.close();
+
+    // Load a static file on the *same origin* so no Planner store is running
+    // while the pre-guard IndexedDB shape is installed. Never touch a real
+    // account or transfer its private browser storage between origins.
+    const seed = await context.newPage();
+    await seed.goto("http://127.0.0.1:4174/travel-planner/api-unavailable.json");
+    await seed.evaluate(async () => {
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        const request = indexedDB.open("ysu-travel-planner-v1", 1);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const tx = db.transaction("accounts", "readwrite");
+          const records = tx.objectStore("accounts");
+          const keys = records.getAllKeys();
+          keys.onsuccess = () => {
+            if (keys.result.length !== 1) { tx.abort(); return; }
+            const key = keys.result[0];
+            const read = records.get(key);
+            read.onsuccess = () => {
+              const snapshot = read.result;
+              const item = snapshot.records.find((row: { kind: string }) => row.kind === "item");
+              if (!item || snapshot.pending.length) { tx.abort(); return; }
+              const after = { ...item, day: "2030-01-02", revision: item.revision + 1,
+                updatedAt: new Date().toISOString() };
+              const legacy = { id: crypto.randomUUID(), label: "old offline move",
+                changes: [{ id: item.id, before: item, after }] };
+              records.put({ ...snapshot, records: snapshot.records.map((row: { id: string }) =>
+                row.id === item.id ? after : row), pending: [legacy], undo: legacy }, key);
+            };
+          };
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+          tx.onabort = () => reject(tx.error ?? new Error("synthetic seed aborted"));
+        });
+      } finally { db.close(); }
+    });
+    await seed.close();
+
+    const upgraded = await context.newPage();
+    await upgraded.goto("http://127.0.0.1:4174/travel-planner/");
+    await expect(upgraded.locator(".conflict")).toBeVisible({ timeout: 45000 });
+    await expect(upgraded.locator(".conflict")).toContainText("舊版");
+    const backup = upgraded.waitForEvent("download");
+    await upgraded.getByRole("button", { name: "下載兩份備份" }).click();
+    const saved = await backup;
+    const contents = await readFile((await saved.path())!, "utf8");
+    expect(contents).toContain("old offline move");
+    expect(contents).toContain("2030-01-02");
+    await upgraded.getByRole("button", { name: /使用遠端版本/ }).click();
+    await expect(upgraded.locator(".conflict")).toHaveCount(0);
+    await editing(upgraded);
+    await quick(upgraded, "After legacy recovery");
+    await expect(other.getByRole("article", { name: "After legacy recovery" })).toBeVisible({ timeout: 45000 });
+  } finally { await Promise.allSettled([context.close(), peer.close()]); }
+});
 test("cloud deep link survives a stale same-origin trip cache until the server confirms the new date", async ({ browser }) => {
   const writer = await browser.newContext(), stale = await browser.newContext();
   const a = await writer.newPage(), b = await stale.newPage();
