@@ -1,5 +1,10 @@
 # Travel Planner UX / Gemini upgrade — release gate report
 
+## Emulator addendum — 2026-10-05 04:21 UTC
+
+[CI 37262976480](https://github.com/blackeirose/YSU-Tools/actions/runs/37262976480) passed at test/docs HEAD `b588ac7c`: typecheck, build, 108 unit, 8 rules and 6 emulator browser tests. Added same-origin synthetic old-pending quarantine/backup/remote-recovery regression; independent source reviewer accepted this narrow evidence only. This is not live current-Preview cloud acceptance. Preview runtime `5e9880d` and production `6ac2c370d1409615f07878bd` are unchanged. Full Gate NOT PASS; no production release.
+
+
 ## Continuing disposition — 2026-10-05 04:15 UTC
 
 The upgraded runtime `5e9880d` stays at isolated full-site draft `6ac2d52a8b3b09627e4a347b`; production readback is `6ac2c370d1409615f07878bd` and was not modified. Exact Firebase Auth hostname is absent pending action-time UI confirmation. The Preview's ordinary browser Photon search returned results, while deployed Function source checks remain unverified. Fifty-seven current-source focused mock/unit tests passed. UTC Oct 5 preview quota document was absent at read time; Oct 4 US$0.94 is reservation, not actual spend. Team AI Gateway model usage is not Planner-attributable and may lag. No paid call was made. Full Gate NOT PASS; no promotion, production deploy, shared rules change, or sibling overwrite. Preserve old-origin IndexedDB pending/conflicts; any future full-site assembly must read the then-current production baseline.
