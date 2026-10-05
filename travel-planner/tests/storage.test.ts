@@ -13,6 +13,7 @@ import {
   productionTripViolation,
   undoUpdates,
   firestoreRecord,
+  canRetryDetachedUndo,
 } from "../src/storage";
 import type { RecordData } from "../src/model";
 import type { Remote, Operation } from "../src/storage";
@@ -63,6 +64,57 @@ describe("recoverable editing", () => {
     const op = makeOperation("shorten", [trip], [{ ...trip, end: "2030-01-02", detachedItemIds: [] }], owner);
     expect(deniedWriteConflict(op, [{ ...trip, revision: trip.revision + 1 }]).reason).toBe("concurrent");
     expect(deniedWriteConflict(op, [trip]).reason).toBe("policy");
+  });
+  it("undoes a date shrink without dropping the cloud detachment field", () => {
+    const owner = crypto.randomUUID();
+    const trip = { ...blankTrip(owner), start: "2030-01-01", end: "2030-01-03" };
+    const item = blankItem(owner, trip, crypto.randomUUID(), "2030-01-03");
+    const shortened = makeOperation("shorten", [trip, item], [
+      { ...trip, end: "2030-01-02", detachedItemIds: [item.id] },
+    ], owner);
+    const current = applyOperation([trip, item], shortened);
+    const inverse = makeOperation("undo", current, undoUpdates(shortened, current), owner);
+    expect(inverse.changes).toHaveLength(1);
+    expect(inverse.changes[0].after).toMatchObject({
+      kind: "trip", end: "2030-01-03", detachedItemIds: [],
+    });
+    expect(current.find((row) => row.id === item.id)).toMatchObject({ day: "2030-01-03" });
+  });
+  it("recovers an old rejected date Undo without losing the remote Trip or local intent", async () => {
+    const owner = crypto.randomUUID();
+    const trip = { ...blankTrip(owner), start: "2030-01-01", end: "2030-01-03" };
+    const item = blankItem(owner, trip, crypto.randomUUID(), "2030-01-03");
+    const shrink = makeOperation("shrink", [trip, item], [
+      { ...trip, end: "2030-01-02", detachedItemIds: [item.id] },
+    ], owner);
+    let server = applyOperation([trip, item], shrink);
+    const shortened = server.find((row) => row.id === trip.id)!;
+    const oldUndo = makeOperation("old undo", server, [
+      { ...trip, revision: shortened.revision },
+    ], owner);
+    const conflict = { operation: oldUndo, remote: [shortened], createdAt: new Date().toISOString(), reason: "policy" as const };
+    expect(canRetryDetachedUndo(conflict)).toBe(true);
+    await persist(owner, { records: applyOperation(server, oldUndo), pending: [], conflicts: [conflict], undo: null, downloaded: [] });
+    const remote: Remote = {
+      watch: () => () => {},
+      read: async (ids) => server.filter((row) => ids.includes(row.id)),
+      readTrip: async (id) => server.filter((row) => row.kind === "item" && row.tripId === id),
+      commit: async (op) => {
+        expect(checkBase(server, op)).toBe(true);
+        const restored = op.changes.find((change) => change.id === trip.id)?.after;
+        expect(restored).toMatchObject({ end: "2030-01-03", detachedItemIds: [] });
+        server = applyOperation(server, op);
+      },
+    };
+    const store = new PlannerStore(owner, remote);
+    await store.init();
+    await store.resolve(oldUndo.id, "local");
+    await store.flush();
+    expect(store.snapshot.conflicts).toHaveLength(0);
+    expect(store.snapshot.pending).toHaveLength(0);
+    expect(server.find((row) => row.id === trip.id)).toMatchObject({ end: "2030-01-03", detachedItemIds: [] });
+    expect(server.find((row) => row.id === item.id)).toMatchObject({ day: "2030-01-03" });
+    await store.clear();
   });
   it("keeps a denied write pending when its verification read only fails transiently", () => {
     const unavailable = Object.assign(new Error("network unavailable"), { code: "unavailable" });
