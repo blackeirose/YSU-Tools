@@ -1,5 +1,10 @@
 # Decisions
 
+## Reorder conflict gate decision — 2026-10-05 04:28 UTC
+
+Accept [CI 37263447650](https://github.com/blackeirose/YSU-Tools/actions/runs/37263447650) as synthetic emulator evidence for same-item offline reorder versus online edit conflict, explicit backup/recovery and subsequent sync. Reviewer `/root/full_gate_review` found the strengthened same-ID and final-note assertions adequate for that narrow claim. It does not establish new-Preview live Auth/offline behavior, paid AI/Blob or Full Gate; no production release.
+
+
 ## Emulator gate decision — 2026-10-05 04:21 UTC
 
 Accept [CI 37262976480](https://github.com/blackeirose/YSU-Tools/actions/runs/37262976480) as a narrow same-origin **synthetic** legacy-pending regression: 108 unit, 8 rules and 6 emulator browser tests passed on test/docs HEAD `b588ac7c`. Keep live old-origin Owner data untouched. This does not satisfy new Preview cloud/paid Full Gate or authorize production release; the deployed app remains runtime `5e9880d`.
