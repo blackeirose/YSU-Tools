@@ -1,5 +1,9 @@
 # Decisions
 
+## Current 21:18 UTC decision — 2026-10-05
+
+Keep product `ae0d42b57187ae529199ec64c72943c940b7d445` at isolated complete-site draft `6ac412e3c5002ab9e6196bbf`. The new date picker pointer path, 1440/390/320px local Preview UI and exact-source emulator regressions passed; the new hostname is not an Authorized Domain, paid AI cumulative cost remains unbounded, and genuine new-runtime cloud offline/AI/Blob/200% zoom gates have not passed. **Do not publish the upgrade to production** or promote the draft. Preserve production `6ac2c370d1409615f07878bd`, its newer UMS and all sibling files/Functions/traffic/schedule; preserve every private pending/conflict on old origins. Future candidates must use the then-current complete production baseline. No shared rule widening, cap change, Supabase in Planner, DNS, MAIN or Tracker change.
+
 ## Current-draft cloud gate decision — 2026-10-05 06:26 UTC
 
 Accept normal same-account, two-browser-context cloud add, cross-day move/Undo, date shrink-to-candidates/Undo, fixed booking and deadline retention, and deep-route reload as **live PASS** on exact runtime `ac2f023e` / draft `6ac33f299da97d91b71b4b61`. The single exact Firebase hostname was authorized and verified; no sibling domain, provider or rule changed. Do not promote: true live offline reconnect with same-record move/reorder/delete conflicts, paid audio/vision/Explore/background/private Blob, cost attribution, 200% zoom, Safari and physical iPhone are not accepted. Older source-review/emulator evidence remains valid only in its stated scope. Preserve the existing production baseline and all private pending/conflicts; no MAIN/Tracker update.

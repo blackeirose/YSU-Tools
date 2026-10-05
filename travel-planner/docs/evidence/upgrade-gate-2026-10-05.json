@@ -1,25 +1,25 @@
 {
   "schemaVersion": 1,
-  "recordedAtUtc": "2026-10-05T06:36:00Z",
+  "recordedAtUtc": "2026-10-05T21:18:00Z",
   "gate": "NOT_PASS",
-  "productRuntimeCommit": "ac2f023e2f3c27e7b1370c2a33a3737ced7fda7e",
+  "productRuntimeCommit": "ae0d42b57187ae529199ec64c72943c940b7d445",
   "productPullRequest": "https://github.com/blackeirose/YSU-Tools/pull/3",
   "publisherPullRequest": "https://github.com/blackeirose/social-capture-tool/pull/23",
-  "publisherRemoteHeadAtAssembly": "162ddffb43962d0efb84b1219ac636325f3a2fb9",
+  "publisherRemoteHeadAtAssembly": "5b259349b5e7bb18a3ad09bde7b106ff4109f491",
   "publisherLocalSourceCommit": "68d91790913cf1aa2a2846767f3027713c1cace5",
-  "previewDeployId": "6ac33f299da97d91b71b4b61",
-  "previewUrl": "https://6ac33f299da97d91b71b4b61--ycsu-tools-router.netlify.app/travel-planner/",
+  "previewDeployId": "6ac412e3c5002ab9e6196bbf",
+  "previewUrl": "https://6ac412e3c5002ab9e6196bbf--ycsu-tools-router.netlify.app/travel-planner/",
   "productionDeployIdBeforeAndAfter": "6ac2c370d1409615f07878bd",
   "productionPromoted": false,
   "sharedRulesCandidateAndObservedSha256": "41a93cedb3feec655faad0e8665868b9e05b44174cbfe12843d6ff860a068c00",
   "productCi": {
-    "url": "https://github.com/blackeirose/YSU-Tools/actions/runs/37270788373",
-    "sourceCommit": "ac2f023e2f3c27e7b1370c2a33a3737ced7fda7e",
-    "unitPassed": 115,
-    "rulesPassed": 9,
-    "emulatorBrowserPassed": 7,
-    "typecheck": "PASS",
-    "build": "PASS"
+    "runs": [
+      "https://github.com/blackeirose/YSU-Tools/actions/runs/37367525379",
+      "https://github.com/blackeirose/YSU-Tools/actions/runs/37367126946"
+    ],
+    "status": "BLOCKED_RUNNER_NOT_ACQUIRED",
+    "sourceCommit": "ae0d42b57187ae529199ec64c72943c940b7d445",
+    "stepsStarted": false
   },
   "publisherLocalTestsPassed": 39,
   "remoteCompleteHost": {
@@ -34,30 +34,18 @@
   "newPreviewBrowser": {
     "localSyntheticMode": "PASS",
     "deepLinkRefresh": "PASS",
-    "crossDayCardMapSelection": "PASS",
-    "markerToCard": "PASS",
+    "mouseDateMoveUndoReload": "PASS",
     "viewportWidthsPx": [
       1440,
+      1366,
       390,
       320
     ],
-    "horizontalOverflow": false
+    "layoutAssertions": "PASS_AFTER_EXPLICIT_LOCAL_MODE"
   },
-  "newPreviewAuthorizedDomain": "EXACT_HOST_ADDED_AND_READ_BACK",
-  "newPreviewLiveCloud": {
-    "sameAccountTwoIndependentBrowserContexts": "PASS_IAB_AND_WINDOWS_CHROME",
-    "bidirectionalSyntheticCreateAndReadback": "PASS",
-    "crossDayMoveUndoAndPeerReadback": "PASS",
-    "dateShrinkTwoFixedItemsToCandidatesUndoAndPeerReadback": "PASS",
-    "fixedTimeZoneAndPaymentCancellationDeadlinesRetained": "PASS",
-    "deepLinkRefresh": "PASS",
-    "nativeSelectMouseOnlyExpansion": "UNVERIFIED_SCREENSHOT_DID_NOT_CAPTURE_OS_POPUP",
-    "realOfflineReconnectSameRecordConflicts": "UNVERIFIED",
-    "onlineSameItemStaleFormConflict": "PASS_STALE_SAVE_REJECTED_DRAFT_RETAINED",
-    "onlineSameItemManualMergeAndPeerReadback": "PASS_BOTH_SYNTHETIC_NOTES_PRESERVED",
-    "liveOfflineMoveReorderDeleteConflicts": "UNVERIFIED"
-  },
-  "newPreviewPaidAi": "UNVERIFIED",
+  "newPreviewAuthorizedDomain": "ABSENT_CONFIRMED_2026-10-05",
+  "newPreviewLiveCloud": "BLOCKED_AUTH_DOMAIN",
+  "newPreviewPaidAi": "BLOCKED_COST_BOUND_AND_AUTH_DOMAIN",
   "newPreviewBackgroundBlob": "UNVERIFIED",
   "real200PercentZoom": "UNVERIFIED",
   "physicalIphoneSafari": "UNVERIFIED",
@@ -87,5 +75,47 @@
     "netlifyTeamCreditsPerUsd": 180,
     "limitation": "Team-wide delayed usage is not Planner-attributable and does not bound unknown Oct 5 outcomes. No paid call on this new draft."
   },
-  "recovery": "Do not promote the draft. Preserve every old-origin private pending/conflict; rebuild future Planner-only candidates from the then-current complete-site baseline."
+  "recovery": "Do not promote the draft. Keep production and every old-origin private pending/conflict. Rebuild any future Planner-only candidate from the then-current complete-site baseline.",
+  "localExactSource": {
+    "unitPassed": 123,
+    "rulesPassed": 9,
+    "emulatorBrowserPassed": 7,
+    "typecheck": "PASS",
+    "previewBuild": "PASS",
+    "browser": "installed Chrome; task-local port adaptation 4174 to 4184"
+  },
+  "aiPriorRequestCountObserved": 12,
+  "aiCumulativeUsd5UpperBound": null,
+  "historicalAuthorizedPreview": {
+    "recordedAtUtc": "2026-10-05T06:36:00Z",
+    "runtime": "ac2f023e2f3c27e7b1370c2a33a3737ced7fda7e",
+    "deployId": "6ac33f299da97d91b71b4b61",
+    "url": "https://6ac33f299da97d91b71b4b61--ycsu-tools-router.netlify.app/travel-planner/",
+    "authorizedDomain": "EXACT_HOST_ADDED_AND_READ_BACK",
+    "liveCloud": {
+      "sameAccountTwoIndependentBrowserContexts": "PASS_IAB_AND_WINDOWS_CHROME",
+      "bidirectionalSyntheticCreateAndReadback": "PASS",
+      "crossDayMoveUndoAndPeerReadback": "PASS",
+      "dateShrinkTwoFixedItemsToCandidatesUndoAndPeerReadback": "PASS",
+      "fixedTimeZoneAndPaymentCancellationDeadlinesRetained": "PASS",
+      "deepLinkRefresh": "PASS",
+      "nativeSelectMouseOnlyExpansion": "UNVERIFIED_SCREENSHOT_DID_NOT_CAPTURE_OS_POPUP",
+      "realOfflineReconnectSameRecordConflicts": "UNVERIFIED",
+      "onlineSameItemStaleFormConflict": "PASS_STALE_SAVE_REJECTED_DRAFT_RETAINED",
+      "onlineSameItemManualMergeAndPeerReadback": "PASS_BOTH_SYNTHETIC_NOTES_PRESERVED",
+      "liveOfflineMoveReorderDeleteConflicts": "UNVERIFIED"
+    },
+    "browser": {
+      "localSyntheticMode": "PASS",
+      "deepLinkRefresh": "PASS",
+      "crossDayCardMapSelection": "PASS",
+      "markerToCard": "PASS",
+      "viewportWidthsPx": [
+        1440,
+        390,
+        320
+      ],
+      "horizontalOverflow": false
+    }
+  }
 }
