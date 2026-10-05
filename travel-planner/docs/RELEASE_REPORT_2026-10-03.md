@@ -1,5 +1,10 @@
 # Travel Planner UX / Gemini upgrade — release gate report
 
+## Continuing disposition — 2026-10-05 04:15 UTC
+
+The upgraded runtime `5e9880d` stays at isolated full-site draft `6ac2d52a8b3b09627e4a347b`; production readback is `6ac2c370d1409615f07878bd` and was not modified. Exact Firebase Auth hostname is absent pending action-time UI confirmation. The Preview's ordinary browser Photon search returned results, while deployed Function source checks remain unverified. Fifty-seven current-source focused mock/unit tests passed. UTC Oct 5 preview quota document was absent at read time; Oct 4 US$0.94 is reservation, not actual spend. Team AI Gateway model usage is not Planner-attributable and may lag. No paid call was made. Full Gate NOT PASS; no promotion, production deploy, shared rules change, or sibling overwrite. Preserve old-origin IndexedDB pending/conflicts; any future full-site assembly must read the then-current production baseline.
+
+
 ## Latest release disposition — 2026-10-04 15:50 PDT
 
 **16:00 PDT addendum:** Exact draft local synthetic operation passed date extension, range shrink to recoverable candidate, original fixed-booking zone, Undo/reload, and payment/cancellation deadline reload. These are local-mode checks only. Existing Photon public source returned HTTP 403 to its first bounded Tokyo lookup from TOWER; deployed Function egress was not proven identical, and citations were not weakened. Local Windows speech synthesis could not select an installed voice under the current security setting, so audio/microphone remain unverified. Neither finding authorizes production promotion.
