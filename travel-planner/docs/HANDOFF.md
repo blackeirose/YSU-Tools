@@ -1,5 +1,8 @@
 # Travel Planner V1 — 隔離試用交付
 
+> **接續審核（2026-10-05 04:15 UTC）：** 產品 runtime `5e9880d`、完整站隔離 [Preview `6ac2d52a8b3b09627e4a347b`](https://6ac2d52a8b3b09627e4a347b--ycsu-tools-router.netlify.app/travel-planner/) 與正式站 `6ac2c370d1409615f07878bd` 均未改。精確新 Auth 網域查重後仍不存在，已請求 Computer Use 操作當下確認；舊 Preview 的雙 context 證據不能移作新版。新版正常瀏覽器的 Photon 搜尋回傳結果，TOWER 直連 403 不能證明 Function 受阻，Function 來源核對仍待實測。57 項聚焦 storage／Gemini／背景／PWA 測試通過，但為 mock／unit。UTC 10/5 的 Preview 額度文件尚未建立；10/4 US$0.94 是保守預留非帳單，團隊模型 credits 無法歸屬 Planner。雲端離線衝突、付費 AI／Blob、200% 與實體 iPhone 尚未驗收，**Full Gate NOT PASS，沒有升級版正式發布**。保留舊 origin 私人資料和新版 UMS baseline。
+
+
 > **最新交接（2026-10-04 15:50 PDT）：** 新版產品 runtime `5e9880d` 的完整站隔離 [Preview](https://6ac2d52a8b3b09627e4a347b--ycsu-tools-router.netlify.app/travel-planner/)（deploy `6ac2d52a8b3b09627e4a347b`）已從當時正式站 `6ac2c370d1409615f07878bd` 組裝並通過遠端完整站／兄弟工具／9 Functions 驗證。CI [37238970637](https://github.com/blackeirose/YSU-Tools/actions/runs/37238970637) 通過 108 單元、8 rules、5 emulator browser 及 build/typecheck；獨立 reviewer 只對合成 Preview 的 Auth、離線佇列、相依修正、額度／去重、發布隔離給予限定 PASS。新版實際 1440／390／320px、本機新增／刷新、地圖、深層網址及 PWA 舊 shell 清理均通過。Firebase 現行規則全文唯讀雜湊 `41a93ced…` 與已審核 preview-v1 相同，未修改規則。此新版 hostname 的 Auth 精確網域仍待操作當下確認，因此舊 Preview 的雙 context 登入／同步 PASS 不可移作新版證據。付費 AI 與真實雲端離線／衝突未驗收，**Full Gate 未通過，正式站未發布新版**。今天 US$0.94 是保守預留，不是實際費用；真實 Planner 費用與 US$5 累計額度尚待核對。回復時保留私人 IndexedDB pending/conflict，正式組裝須重抓當時最新完整站，不可回灌舊站檔。
 
 
