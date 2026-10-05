@@ -112,6 +112,33 @@ describe("Gemini paid boundary", () => {
         draftItems: { items: { required: ["day", "name"] } } },
     });
   });
+  it("constrains image recognition to complete preview rows before a paid provider call", async () => {
+    let schema: Record<string, unknown> | undefined;
+    const http = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("accounts:lookup")) return owner();
+      if (url.includes("/records/")) return trip();
+      if (url.includes("/aiRequests/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/")) return new Response("", { status: 404 });
+      schema = (JSON.parse(String(init?.body)) as { generationConfig: { responseJsonSchema?: Record<string, unknown> } })
+        .generationConfig.responseJsonSchema;
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ rows: [{
+        dateText: "2030-01-02", name: "National Museum of Nature and Science", city: "Tokyo",
+        time: "10:00", candidate: false, notes: "", uncertain: false,
+      }], warnings: [] }) }] } }] });
+    };
+    const response = await geminiHandler(new Request("https://preview.test/travel-planner/api/ai", {
+      method: "POST", headers: { Authorization: "Bearer synthetic-token" }, body: JSON.stringify({
+        mode: "vision", tripId: crypto.randomUUID(), requestId: crypto.randomUUID(),
+        query: "Read only visible synthetic itinerary text", image: { mime: "image/png", base64: "AAAA" },
+      }),
+    }), env, http as typeof fetch);
+    expect(response.status).toBe(200);
+    expect(schema).toMatchObject({ type: "object", required: ["rows", "warnings"], properties: {
+      rows: { items: { required: ["dateText", "name", "city", "time", "candidate", "notes", "uncertain"] } },
+    } });
+  });
   it("rejects invalid identity and trip ownership before reserving cost", async () => {
     let calls = 0;
     const denied = async () => { calls++; return Response.json({ users: [{ localId: "other" }] }); };
@@ -210,6 +237,22 @@ describe("Gemini paid boundary", () => {
       http as typeof fetch, new Date("2030-01-01T12:00:00Z"));
     expect(response.status).toBe(200);
     expect((await response.json()).action.kind).toBe("clarify");
+    expect(paid).toBe(0);
+  });
+  it("asks for a selected card before a move instead of spending on an unusable action", async () => {
+    let paid = 0;
+    const http = async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.includes("accounts:lookup")) return owner();
+      if (url.includes("/records/")) return trip();
+      paid++;
+      throw new Error("should not reserve or infer");
+    };
+    const response = await geminiHandler(request("assist", crypto.randomUUID(),
+      "把 National Museum of Nature and Science 移到 2030-01-02"), env, http as typeof fetch);
+    expect(response.status).toBe(200);
+    expect((await response.json()).action).toMatchObject({ kind: "clarify",
+      message: expect.stringContaining("選取") });
     expect(paid).toBe(0);
   });
   it("refuses a model action that silently uses the selected date instead of destination today", async () => {
