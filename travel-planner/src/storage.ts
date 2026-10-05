@@ -191,8 +191,15 @@ export function undoUpdates(op: Operation, records: RecordData[]): RecordData[] 
   const projected = new Set<string>();
   const updates = op.changes.map((change) => {
     const before = change.before ?? { ...change.after, deleted: true };
+    // Published Planner rules require an existing detachment field to remain
+    // present on every Trip update. An old Trip may have had no such field
+    // before the shortening operation that Undo is reversing.
+    const restored = before.kind === "trip" && change.after.kind === "trip" &&
+      change.after.detachedItemIds !== undefined && before.detachedItemIds === undefined
+      ? { ...before, detachedItemIds: [] }
+      : before;
     if (before.kind !== "item" || before.deleted || !before.day)
-      return { ...before, revision: change.after.revision };
+      return { ...restored, revision: change.after.revision };
     const targetTrip = op.changes.find((candidate) => candidate.id === before.tripId)?.before ??
       records.find((record) => record.id === before.tripId);
     if (targetTrip?.kind !== "trip" || (before.day >= targetTrip.start && before.day <= targetTrip.end))
@@ -218,6 +225,19 @@ export function deniedWriteConflict(op: Operation, latest: RecordData[]) {
   return checkBase(latest, op)
     ? new ConflictError(latest, "policy")
     : new ConflictError(latest, "concurrent");
+}
+/** A previously queued range Undo may omit a field that the published rules
+ * require once the preceding shrink has added it. This exact shape is safe to
+ * retry only if the server still holds the same base Trip. */
+export function canRetryDetachedUndo(conflict: Conflict): boolean {
+  if (conflict.reason !== "policy" || conflict.operation.changes.length !== 1) return false;
+  const change = conflict.operation.changes[0];
+  const before = change.before;
+  const after = change.after;
+  return before?.kind === "trip" && after.kind === "trip" &&
+    before.detachedItemIds !== undefined && after.detachedItemIds === undefined &&
+    after.start <= before.start && after.end >= before.end &&
+    (after.start < before.start || after.end > before.end);
 }
 /** Only a confirmed read denial proves this is a durable access-policy error. */
 export function deniedWriteReadFailure(error: unknown) {
@@ -577,8 +597,20 @@ export class PlannerStore {
       if (choice === "local") {
         if (conflict.reason === "oversize")
           throw new Error("此舊批次超過 450 筆，請先下載衝突備份；無法整批重新同步。可選擇遠端版本並重新分批建立。 ");
+        const retryDetachedUndo = canRetryDetachedUndo(conflict);
+        if (conflict.reason === "policy" && !retryDetachedUndo)
+          throw new Error("雲端規則拒絕此操作；備份與衝突仍保留，不能直接重試。");
+        if (retryDetachedUndo) {
+          const change = conflict.operation.changes[0];
+          const current = remote.get(change.id);
+          if (!current || !change.before || current.revision !== change.before.revision ||
+            canonical(current) !== canonical(change.before))
+            throw new Error("遠端旅程已再次變動；備份與衝突仍保留，請重新檢查兩份內容。");
+        }
         const localUpdates = conflict.operation.changes.map((c) => {
-          const base = isTripVersionTouch(c) ? (remote.get(c.id) ?? c.after) : c.after;
+          const base = retryDetachedUndo && c.after.kind === "trip"
+            ? { ...c.after, detachedItemIds: [] }
+            : isTripVersionTouch(c) ? (remote.get(c.id) ?? c.after) : c.after;
           if (base.kind === "item" && base.day) {
             const ownerTrip = records.find((r) => r.id === base.tripId);
             if (ownerTrip?.kind === "trip" && (base.day < ownerTrip.start || base.day > ownerTrip.end)) {
