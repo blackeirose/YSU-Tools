@@ -1,5 +1,9 @@
 # Decisions
 
+## Current-draft cloud gate decision — 2026-10-05 06:26 UTC
+
+Accept normal same-account, two-browser-context cloud add, cross-day move/Undo, date shrink-to-candidates/Undo, fixed booking and deadline retention, and deep-route reload as **live PASS** on exact runtime `ac2f023e` / draft `6ac33f299da97d91b71b4b61`. The single exact Firebase hostname was authorized and verified; no sibling domain, provider or rule changed. Do not promote: true live offline reconnect with same-record move/reorder/delete conflicts, paid audio/vision/Explore/background/private Blob, cost attribution, 200% zoom, Safari and physical iPhone are not accepted. Older source-review/emulator evidence remains valid only in its stated scope. Preserve the existing production baseline and all private pending/conflicts; no MAIN/Tracker update.
+
 ## Full Gate hold — 2026-10-05 06:13 UTC
 
 Keep product runtime `ac2f023e2f3c27e7b1370c2a33a3737ced7fda7e` at immutable full-site draft `6ac33f299da97d91b71b4b61`; do not promote it. Its new exact hostname is not yet a Firebase Authorized Domain. Source-matched CI and independent source review pass, but current-host cloud offline/conflict, real audio/vision/background/Blob and budget attribution are not accepted. An older authorized draft yielded real synthetic text action/Undo and cited Explore cards, but its runtime is `5e9880d` and cannot certify this build. UTC Oct 5 Planner usage reserves US$0.27, plus Oct 4 US$0.94; these are conservative reservations, not billed spend. Actual cost and unknown request outcomes remain separate. Keep US$1/day and US$5 cumulative limits, existing rules, current production `6ac2c370d1409615f07878bd`, sibling tools and private offline state unchanged. No MAIN/Tracker update.

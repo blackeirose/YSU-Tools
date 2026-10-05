@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "recordedAtUtc": "2026-10-05T06:15:00Z",
+  "recordedAtUtc": "2026-10-05T06:26:00Z",
   "gate": "NOT_PASS",
   "productRuntimeCommit": "ac2f023e2f3c27e7b1370c2a33a3737ced7fda7e",
   "productPullRequest": "https://github.com/blackeirose/YSU-Tools/pull/3",
@@ -39,8 +39,17 @@
     "viewportWidthsPx": [1440, 390, 320],
     "horizontalOverflow": false
   },
-  "newPreviewAuthorizedDomain": "ABSENT",
-  "newPreviewLiveCloud": "BLOCKED",
+  "newPreviewAuthorizedDomain": "EXACT_HOST_ADDED_AND_READ_BACK",
+  "newPreviewLiveCloud": {
+    "sameAccountTwoIndependentBrowserContexts": "PASS_IAB_AND_WINDOWS_CHROME",
+    "bidirectionalSyntheticCreateAndReadback": "PASS",
+    "crossDayMoveUndoAndPeerReadback": "PASS",
+    "dateShrinkTwoFixedItemsToCandidatesUndoAndPeerReadback": "PASS",
+    "fixedTimeZoneAndPaymentCancellationDeadlinesRetained": "PASS",
+    "deepLinkRefresh": "PASS",
+    "nativeSelectMouseOnlyExpansion": "UNVERIFIED_SCREENSHOT_DID_NOT_CAPTURE_OS_POPUP",
+    "realOfflineReconnectSameRecordConflicts": "UNVERIFIED"
+  },
   "newPreviewPaidAi": "UNVERIFIED",
   "newPreviewBackgroundBlob": "UNVERIFIED",
   "real200PercentZoom": "UNVERIFIED",
@@ -55,5 +64,12 @@
     "unknownRequestOutcomes": "not resolved"
   },
   "aiReservationUtc20261004Usd": 0.94,
+  "aiActualCost": {
+    "plannerAttributableUsd": null,
+    "netlifyTeamCreditsThroughOct04": 6.48,
+    "netlifyTeamRequestsThroughOct04": 13,
+    "netlifyTeamCreditsPerUsd": 180,
+    "limitation": "Team-wide delayed usage is not Planner-attributable and does not bound unknown Oct 5 outcomes. No paid call on this new draft."
+  },
   "recovery": "Do not promote the draft. Preserve every old-origin private pending/conflict; rebuild future Planner-only candidates from the then-current complete-site baseline."
 }
