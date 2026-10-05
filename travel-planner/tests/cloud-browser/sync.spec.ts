@@ -144,10 +144,23 @@ test("emulator: same-origin upgrade quarantines a synthetic unguarded old pendin
     await upgraded.getByRole("button", { name: "下載兩份備份" }).click();
     const saved = await backup;
     const contents = await readFile((await saved.path())!, "utf8");
-    expect(contents).toContain("old offline move");
-    expect(contents).toContain("2030-01-02");
+    const kept = JSON.parse(contents) as { reason: string; operation: { label: string; changes: {
+      id: string; before: { day: string }; after: { day: string } }[] }; remote: { id: string; day: string }[] };
+    expect(kept.reason).toBe("legacy");
+    expect(kept.operation.label).toBe("old offline move");
+    expect(kept.operation.changes[0].before.day).toBe("2030-01-01");
+    expect(kept.operation.changes[0].after.day).toBe("2030-01-02");
+    expect(kept.remote).toEqual(expect.arrayContaining([expect.objectContaining({
+      id: kept.operation.changes[0].id, day: "2030-01-01" })]));
     await upgraded.getByRole("button", { name: /使用遠端版本/ }).click();
     await expect(upgraded.locator(".conflict")).toHaveCount(0);
+    await expect(upgraded.locator('[data-day="2030-01-01"]')
+      .getByRole("article", { name: "Legacy move stop" })).toBeVisible();
+    await upgraded.reload();
+    await expect(upgraded.locator('[data-day="2030-01-01"]')
+      .getByRole("article", { name: "Legacy move stop" })).toBeVisible();
+    await expect(other.locator('[data-day="2030-01-01"]')
+      .getByRole("article", { name: "Legacy move stop" })).toBeVisible();
     await editing(upgraded);
     await quick(upgraded, "After legacy recovery");
     await expect(other.getByRole("article", { name: "After legacy recovery" })).toBeVisible({ timeout: 45000 });
