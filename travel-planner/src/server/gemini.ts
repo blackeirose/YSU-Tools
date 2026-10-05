@@ -74,6 +74,14 @@ const exploreResponseSchema = { type: "object", properties: { suggestions: { typ
     pending: { type: "array", items: { type: "string" } },
   }, required: ["name", "originalName", "location", "reason", "sourceUrls", "pending"] } } },
 required: ["suggestions"] } as const;
+const visionResponseSchema = { type: "object", properties: {
+  rows: { type: "array", maxItems: 100, items: { type: "object", properties: {
+    dateText: { type: "string" }, name: { type: "string" }, city: { type: "string" },
+    time: { type: "string" }, candidate: { type: "boolean" }, notes: { type: "string" },
+    uncertain: { type: "boolean" },
+  }, required: ["dateText", "name", "city", "time", "candidate", "notes", "uncertain"] } },
+  warnings: { type: "array", maxItems: 20, items: { type: "string" } },
+}, required: ["rows", "warnings"] } as const;
 const visionSchema = z.object({ rows: z.array(z.object({ dateText: z.string().max(30), name: z.string().min(1).max(200),
   city: z.string().max(200), time: z.string().max(8), candidate: z.boolean(), notes: z.string().max(500),
   uncertain: z.boolean() })).max(100), warnings: z.array(z.string().max(200)).max(20) });
@@ -163,6 +171,12 @@ export async function geminiHandler(req: Request, env: Env, http: typeof fetch =
     if (input.mode !== "vision" && !clock) return reply(409, { error: "旅程的目的地時區無效，請先設定有效的 IANA 時區" });
     if (input.mode === "assist" && (relativeAmbiguous(input.query) || relativeUnsupported(input.query)))
       return reply(200, { action: { kind: "clarify", message: "請確認要操作目的地的今天／明天，還是畫面選定的日期；行程尚未變更。" } });
+    // The client only mutates an explicitly selected Item ID. A place name in
+    // prose cannot identify one of several same-name, multi-day arrangements.
+    if (input.mode === "assist" && !input.audio && !input.selectedItem &&
+      /移到|移至|移去|改時間|調整時間|設為候選|變成候選|\bmove\b|\breschedule\b/i.test(input.query))
+      return reply(200, { action: { kind: "clarify",
+        message: "請先選取要調整的行程卡片，再指定目的日期或時間；行程尚未變更。" } });
     const requestedDay = clock ? relativeTarget(input.query, clock) : null;
     if (requestedDay && !inTrip(requestedDay.day, clock!)) return reply(200, { action: {
       kind: "clarify", message: `${requestedDay.term}是目的地 ${requestedDay.timezone} 的 ${requestedDay.day}，不在此旅程日期內。請選擇旅程內日期或自行編輯旅程範圍。`,
@@ -197,6 +211,7 @@ export async function geminiHandler(req: Request, env: Env, http: typeof fetch =
       generationConfig: { responseMimeType: "application/json",
         ...(input.mode === "assist" ? { responseJsonSchema: assistantResponseSchema } : {}),
         ...(input.mode === "explore" ? { responseJsonSchema: exploreResponseSchema } : {}),
+        ...(input.mode === "vision" ? { responseJsonSchema: visionResponseSchema } : {}),
         maxOutputTokens: input.mode === "vision" || input.mode === "explore" ? 2200 : 1200 } };
     const response = await http(modelUrl(provider, model),
       { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": provider.key },
