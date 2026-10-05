@@ -116,6 +116,29 @@ describe("recoverable editing", () => {
     expect(server.find((row) => row.id === item.id)).toMatchObject({ day: "2030-01-03" });
     await store.clear();
   });
+  it("keeps an old Undo conflict when the remote Trip changed after rejection", async () => {
+    const owner = crypto.randomUUID();
+    const trip = { ...blankTrip(owner), start: "2030-01-01", end: "2030-01-03" };
+    const shrink = makeOperation("shrink", [trip], [{ ...trip, end: "2030-01-02", detachedItemIds: [] }], owner);
+    const shortened = applyOperation([trip], shrink)[0];
+    const oldUndo = makeOperation("old undo", [shortened], [{ ...trip, revision: shortened.revision }], owner);
+    const conflict = { operation: oldUndo, remote: [shortened], createdAt: new Date().toISOString(), reason: "policy" as const };
+    const newer = makeOperation("other device edit", [shortened], [{ ...shortened, name: "changed elsewhere" }], owner);
+    const server = applyOperation([shortened], newer);
+    await persist(owner, { records: applyOperation([shortened], oldUndo), pending: [], conflicts: [conflict], undo: null, downloaded: [] });
+    const remote: Remote = {
+      watch: () => () => {},
+      read: async () => server,
+      readTrip: async () => [],
+      commit: async () => { throw new Error("must not commit stale recovery"); },
+    };
+    const store = new PlannerStore(owner, remote);
+    await store.init();
+    await expect(store.resolve(oldUndo.id, "local")).rejects.toThrow("遠端旅程已再次變動");
+    expect(store.snapshot.conflicts).toHaveLength(1);
+    expect(store.snapshot.pending).toHaveLength(0);
+    await store.clear();
+  });
   it("keeps a denied write pending when its verification read only fails transiently", () => {
     const unavailable = Object.assign(new Error("network unavailable"), { code: "unavailable" });
     expect(deniedWriteReadFailure(unavailable)).toBe(unavailable);
