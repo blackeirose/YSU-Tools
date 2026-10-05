@@ -43,7 +43,7 @@ const category = (value: unknown): Place["category"] => {
   if (["station", "bus_stop", "airport", "tram_stop"].includes(kind)) return "交通";
   return "景點";
 };
-export function parsePhoton(input: unknown, checkedAt = new Date().toISOString(), term = ""): PhotonPlace[] {
+export function parsePhoton(input: unknown, checkedAt = new Date().toISOString(), term = "", maxResults = 5): PhotonPlace[] {
   const features = (input as { features?: unknown })?.features;
   if (!Array.isArray(features)) return [];
   const normalizedTerm = term.trim().toLocaleLowerCase();
@@ -73,21 +73,22 @@ export function parsePhoton(input: unknown, checkedAt = new Date().toISOString()
     const state = String(p.state ?? "").slice(0, 200);
     const city = localityCity || county || state;
     const administrativeArea = [p.city, p.county, p.state].filter((x) => typeof x === "string").join(" · ").slice(0, 300);
-    const identity = `${p.name.toLocaleLowerCase()}|${city.toLocaleLowerCase()}|${p.osm_value ?? ""}`;
+    const osmUrl = `https://www.openstreetmap.org/${type}/${p.osm_id}`;
+    const identity = osmUrl;
     if (seen.has(identity)) return [];
     seen.add(identity);
     const address = [p.street, p.housenumber, p.postcode, city, p.country].filter((x) => typeof x === "string" && x.trim()).join(" · ").slice(0, 2000);
-    const osmUrl = `https://www.openstreetmap.org/${type}/${p.osm_id}`;
     return [{
       name: p.name.trim().slice(0, 200), city, localityCity, county, state, administrativeArea, address,
       category: category(p.osm_value), lat, lng,
       osmUrl, source: `OpenStreetMap / Photon · ${osmUrl} · ${checkedAt}`,
       mapsUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lat},${lng}`)}`,
     }];
-  }).slice(0, 5);
+  }).slice(0, maxResults);
 }
 
-export async function searchPhoton(term: string, cityHint: string, broaden = false, http: typeof fetch = fetch, layer?: "city") {
+export async function searchPhoton(term: string, cityHint: string, broaden = false, http: typeof fetch = fetch,
+  layer?: "city", maxResults = 5) {
   const clean = term.trim();
   if (clean.length < (layer === "city" ? 2 : 3) || clean.length > 100) return [];
   const url = new URL("https://photon.komoot.io/api/");
@@ -97,7 +98,7 @@ export async function searchPhoton(term: string, cityHint: string, broaden = fal
   if (layer === "city") for (const value of ["city", "state", "locality"]) url.searchParams.append("layer", value);
   const response = await http(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(8000) });
   if (!response.ok) throw new Error("外部地點搜尋暫時無法使用；仍可手動儲存地點。");
-  return parsePhoton(await response.json(), new Date().toISOString(), clean);
+  return parsePhoton(await response.json(), new Date().toISOString(), clean, maxResults);
 }
 
 export function fillPlaceFromPhoton(place: Place, found: PhotonPlace): Place {

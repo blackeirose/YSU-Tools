@@ -3,8 +3,14 @@ vi.mock("../src/server/ai-ledger", () => ({
   beginAiUsage: vi.fn(async () => ({ key: "synthetic", etag: "synthetic" })),
   finishAiUsage: vi.fn(async () => {}),
 }));
+vi.mock("../src/server/ai-test-budget", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../src/server/ai-test-budget")>(),
+  reserveAiTestBudget: vi.fn(async () => ({ upperBoundMicrousd: 180_000, reservedAfterMicrousd: 180_000,
+    remainingMicrousd: 820_000 })),
+}));
 import { readBackground, startBackground, backgroundStore } from "../src/server/background";
 import { beginAiUsage } from "../src/server/ai-ledger";
+import { reserveAiTestBudget } from "../src/server/ai-test-budget";
 
 const tripId = "00000000-0000-4000-8000-000000000001";
 const request = (token = "owner") => new Request(`https://tools.ycsu.cc/travel-planner/api/background/start?tripId=${tripId}`,
@@ -79,7 +85,8 @@ function httpFor(options: { owner?: string; city?: boolean; cityName?: string; i
     }
     if (target.includes("/v1beta/models/gemini-3.1-flash-lite-image:generateContent")) {
       const body = JSON.parse(String(init?.body)) as { contents: { parts: { text?: string }[] }[]; generationConfig: { responseModalities: string[]; responseFormat: { image: { aspectRatio: string; imageSize: string } } } };
-      expect(body.generationConfig).toEqual({ responseModalities: ["IMAGE"], responseFormat: { image: { aspectRatio: "3:2", imageSize: "1K" } } });
+      expect(body.generationConfig).toEqual({ responseModalities: ["IMAGE"], candidateCount: 1,
+        maxOutputTokens: 4096, responseFormat: { image: { aspectRatio: "3:2", imageSize: "1K" } } });
       prompts.push(body.contents[0].parts[0].text ?? "");
       images++;
       if (options.failSecond && images === 2) return new Response("", { status: 500 });

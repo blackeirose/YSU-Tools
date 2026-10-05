@@ -38,6 +38,16 @@ describe("Photon place results", () => {
     expect(parsePhoton({ features: [...hotels, ...parks] }, "2030-01-01T00:00:00Z", "DISNEY").slice(0, 2).map((x) => x.name))
       .toEqual(["Tokyo DisneySea", "Tokyo Disneyland"]);
   });
+  it("retains distinct OSM identities for same-named places so AI can refuse ambiguous citations", () => {
+    const features = [101, 202].map((osm_id, index) => ({
+      geometry: { coordinates: [139.7 + index, 35.6] },
+      properties: { name: "Same Name", city: "Tokyo", country: "Japan", osm_type: "N", osm_id,
+        osm_value: "restaurant" },
+    }));
+    expect(parsePhoton({ features }, "2030-01-01T00:00:00Z", "Same Name", 20)
+      .map((place) => place.osmUrl)).toEqual([
+      "https://www.openstreetmap.org/node/101", "https://www.openstreetmap.org/node/202"]);
+  });
   it("checks the requested city rather than accepting a prefecture or substring", () => {
     const make = (city: string, state: string) => parsePhoton({ features: [{ geometry: { coordinates: [139, 35] },
       properties: { name: "Synthetic landmark", city, state, osm_type: "N", osm_id: 42, osm_value: "attraction" } }] })[0];

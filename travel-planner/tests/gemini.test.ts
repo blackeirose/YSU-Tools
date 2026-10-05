@@ -3,8 +3,14 @@ vi.mock("../src/server/ai-ledger", () => ({
   beginAiUsage: vi.fn(async () => ({ key: "synthetic", etag: "synthetic" })),
   finishAiUsage: vi.fn(async () => {}),
 }));
+vi.mock("../src/server/ai-test-budget", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../src/server/ai-test-budget")>(),
+  reserveAiTestBudget: vi.fn(async () => ({ upperBoundMicrousd: 60_000, reservedAfterMicrousd: 60_000,
+    remainingMicrousd: 940_000 })),
+}));
 import { gatewayReady, geminiHandler, reserveQuota } from "../src/server/gemini";
 import { beginAiUsage } from "../src/server/ai-ledger";
+import { reserveAiTestBudget } from "../src/server/ai-test-budget";
 
 const vars: Record<string, string> = {
   GOOGLE_GEMINI_BASE_URL: "https://gateway.test/gemini",
@@ -28,6 +34,23 @@ const trip = () => Response.json({ fields: { ownerId: { stringValue: "owner" }, 
   timezone: { stringValue: "Asia/Tokyo" } } });
 
 describe("Gemini paid boundary", () => {
+  it("does not call the provider when the one-time budget cannot reserve", async () => {
+    vi.mocked(reserveAiTestBudget).mockRejectedValueOnce(new Error("test-budget-exhausted"));
+    let paidCalls = 0;
+    const http = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("accounts:lookup")) return owner();
+      if (url.includes("/records/")) return trip();
+      if (url.includes("/aiRequests/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/")) return new Response("", { status: 404 });
+      paidCalls++; return Response.json({});
+    };
+    const response = await geminiHandler(request(), env, http as typeof fetch);
+    expect(response.status).toBe(429);
+    expect((await response.json()).error).toContain("沒有呼叫 Gemini");
+    expect(paidCalls).toBe(0);
+  });
   it("never calls the paid provider when the durable sent receipt fails", async () => {
     vi.mocked(beginAiUsage).mockRejectedValueOnce(new Error("ledger-unavailable"));
     let paidCalls = 0;
@@ -336,6 +359,54 @@ describe("Gemini paid boundary", () => {
         groundingMetadata: { groundingChunks: [{ web: { uri: "https://real.test/" } }] } }] });
     };
     expect((await geminiHandler(request("explore"), env, http as typeof fetch)).status).toBe(502);
+  });
+  it("never accepts model citations as source proof without independent place lookup", async () => {
+    const cards = Array.from({ length: 3 }, (_, index) => ({ name: `虛構地點 ${index}`,
+      originalName: "", location: "東京", reason: "可考慮", sourceUrls: ["https://example.org/cited"], pending: [] }));
+    const http = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("accounts:lookup")) return owner();
+      if (url.includes("/records/")) return trip();
+      if (url.includes("/aiRequests/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/")) return new Response("", { status: 404 });
+      if (url.startsWith("https://photon.komoot.io/api/")) return Response.json({ features: [] });
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ suggestions: cards }) }] },
+        groundingMetadata: { groundingChunks: [{ web: { uri: "https://example.org/cited" } }] } }] });
+    };
+    const response = await geminiHandler(new Request("https://preview.test/travel-planner/api/ai", {
+      method: "POST", headers: { Authorization: "Bearer synthetic-token" },
+      body: JSON.stringify({ mode: "explore", tripId: crypto.randomUUID(), requestId: crypto.randomUUID(),
+        city: "Tokyo", query: "景點" }) }), env, http as typeof fetch);
+    expect(response.status).toBe(502);
+  });
+  it("refuses to cite one of two same-named OSM locations without disambiguation", async () => {
+    const names = ["Same Name", "Unique A", "Unique B"];
+    const cards = names.map((name) => ({ name, originalName: "", location: "Tokyo",
+      reason: "可考慮", sourceUrls: [], pending: [] }));
+    const http = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("accounts:lookup")) return owner();
+      if (url.includes("/records/")) return trip();
+      if (url.includes("/aiRequests/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/")) return new Response("", { status: 404 });
+      if (url.startsWith("https://photon.komoot.io/api/")) {
+        const name = new URL(url).searchParams.get("q") ?? "";
+        const count = name === "Same Name" ? 2 : 1;
+        return Response.json({ features: Array.from({ length: count }, (_, index) => ({
+          geometry: { coordinates: [139.7 + index, 35.6] },
+          properties: { name, city: "Tokyo", country: "Japan", osm_type: "N",
+            osm_id: (names.indexOf(name) + 1) * 100 + index, osm_value: "attraction" },
+        })) });
+      }
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ suggestions: cards }) }] } }] });
+    };
+    const response = await geminiHandler(new Request("https://preview.test/travel-planner/api/ai", {
+      method: "POST", headers: { Authorization: "Bearer synthetic-token" },
+      body: JSON.stringify({ mode: "explore", tripId: crypto.randomUUID(), requestId: crypto.randomUUID(),
+        city: "Tokyo", query: "景點" }) }), env, http as typeof fetch);
+    expect(response.status).toBe(502);
   });
   it("replaces ungrounded model URLs with independently verified OSM place sources", async () => {
     const names = ["Tokyo Tower", "Sensoji", "Tokyo Skytree"];

@@ -10,6 +10,7 @@ export type AiUsageEvent = {
   result: string;
   httpStatus?: number;
   dailyReservationAfterMicrousd?: number;
+  testBudgetReservedAfterMicrousd?: number;
   usage?: AiUsage;
   hasAudio?: boolean;
 };
@@ -37,6 +38,8 @@ export function aiUsageEntry(event: AiUsageEvent) {
     ...(event.httpStatus === undefined ? {} : { httpStatus: event.httpStatus }),
     ...(event.dailyReservationAfterMicrousd === undefined ? {} :
       { dailyReservationAfterMicrousd: event.dailyReservationAfterMicrousd }),
+    ...(event.testBudgetReservedAfterMicrousd === undefined ? {} :
+      { testBudgetReservedAfterMicrousd: event.testBudgetReservedAfterMicrousd }),
     usage: { promptTokens: input, outputTokens: output, totalTokens: safeCount(event.usage?.totalTokens) },
     estimatedTokenUsd, estimated: estimatedTokenUsd !== null, completeCostUpperBound: false,
     pricingBasis: { asOf: "2026-10-05", googlePricing, netlifyPricing, netlifyCreditsPerUsd: 180 },
