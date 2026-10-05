@@ -1,5 +1,9 @@
 # Travel Planner UX / Gemini upgrade — Full Gate
 
+## Live same-item online conflict and recovery — 2026-10-05 06:36 UTC
+
+On the authenticated immutable draft `6ac33f299da97d91b71b4b61`, two independent contexts opened the same synthetic itinerary item's edit form at the same base revision. IAB entered `IAB 先寫入・合成衝突 A`; Windows Chrome entered `Chrome 後寫入・合成衝突 B` before either saved. IAB saved and synced first. Chrome then tried to save its stale form: the app refused the overwrite with `此項目已更新，草稿仍保留。請先複製草稿內容，再重新開啟最新版本編輯。`, retaining B visibly in the form while IAB's A was present in the latest record. Chrome reopened the latest record, merged both synthetic notes into `IAB 先寫入・合成衝突 A｜Chrome 後寫入・合成衝突 B`, saved, and IAB independently read back the merged value with `已同步`. This is **PASS for an online stale same-item form and manual recovery**, not a claim that browser-offline reconnect or move/reorder/delete conflicts passed. No private Owner itinerary was touched.
+
 ## Authenticated current-draft acceptance — 2026-10-05 06:26 UTC
 
 **Full Gate NOT PASS; production was not published.** Firebase Console Authorized Domains was checked, then the single exact host `6ac33f299da97d91b71b4b61--ycsu-tools-router.netlify.app` was added and read back as `Custom` with a success notice. No wildcard, provider, other domain or shared rule was changed. On the immutable [complete-site draft `6ac33f299da97d91b71b4b61`](https://6ac33f299da97d91b71b4b61--ycsu-tools-router.netlify.app/travel-planner/) running product `ac2f023e2f3c27e7b1370c2a33a3737ced7fda7e`, normal Owner Google login reached `已同步` independently in Codex IAB and Windows Chrome. Both contexts opened the same pre-existing **synthetic** Preview trip. IAB added `FG 新版同步合成 A 2026-10-05` and Chrome read it; Chrome added `FG 新版同步合成 B 2026-10-05` and IAB read it. No Owner real itinerary was modified.
