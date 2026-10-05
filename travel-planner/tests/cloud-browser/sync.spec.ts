@@ -166,6 +166,63 @@ test("emulator: same-origin upgrade quarantines a synthetic unguarded old pendin
     await expect(other.getByRole("article", { name: "After legacy recovery" })).toBeVisible({ timeout: 45000 });
   } finally { await Promise.allSettled([context.close(), peer.close()]); }
 });
+test("emulator: offline reorder versus remote note preserves both versions and later edits", async ({ browser }) => {
+  const first = await browser.newContext(), second = await browser.newContext();
+  const a = await first.newPage(), b = await second.newPage();
+  const email = `sort-${crypto.randomUUID()}@example.test`;
+  try {
+    await login(a, email);
+    await createRangeTrip(a, "Synthetic reorder conflict");
+    await quick(a, "First stop");
+    await quick(a, "Second stop");
+    await expect(a.getByText("已同步", { exact: true })).toBeVisible();
+    await login(b, email);
+    await editing(b);
+    await expect(b.getByRole("article", { name: "Second stop" })).toBeVisible();
+
+    await first.setOffline(true);
+    await a.getByRole("button", { name: "Second stop上移", exact: true }).click();
+    await expect(a.locator('[data-day="2030-01-01"] article').first())
+      .toHaveAttribute("aria-label", "Second stop");
+    await a.reload();
+    await expect(a.locator('[data-day="2030-01-01"] article').first())
+      .toHaveAttribute("aria-label", "Second stop");
+
+    await b.getByRole("article", { name: "Second stop" })
+      .getByRole("button", { name: "時間／備註" }).click();
+    await b.getByRole("dialog").getByLabel("這次安排的備註").fill("Remote note retained");
+    await b.getByRole("dialog").getByRole("button", { name: "儲存安排" }).click();
+    await expect(b.getByRole("dialog")).toHaveCount(0);
+    await expect(b.getByRole("article", { name: "Second stop" }))
+      .toContainText("Remote note retained");
+    await expect(b.getByText("已同步", { exact: true })).toBeVisible();
+
+    await first.setOffline(false);
+    await expect(a.locator(".conflict")).toBeVisible({ timeout: 45000 });
+    const backup = a.waitForEvent("download");
+    await a.getByRole("button", { name: "下載兩份備份" }).click();
+    const saved = await backup;
+    const versions = JSON.parse(await readFile((await saved.path())!, "utf8")) as {
+      operation: { changes: { after: { order: number; placeId: string } }[] };
+      remote: { order: number; notes: string; placeId: string }[];
+    };
+    expect(versions.operation.changes.some((c) => c.after.order === 0)).toBe(true);
+    expect(versions.remote.some((row) => row.notes === "Remote note retained")).toBe(true);
+    await a.getByRole("button", { name: /使用遠端版本/ }).click();
+    await expect(a.locator(".conflict")).toHaveCount(0);
+    await a.reload();
+    await expect(a.locator('[data-day="2030-01-01"] article').first())
+      .toHaveAttribute("aria-label", "First stop");
+    await expect(a.getByRole("article", { name: "Second stop" }))
+      .toContainText("Remote note retained");
+
+    await editing(a);
+    await a.getByRole("button", { name: "Second stop上移", exact: true }).click();
+    await expect(b.locator('[data-day="2030-01-01"] article').first())
+      .toHaveAttribute("aria-label", "Second stop");
+  } finally { await Promise.allSettled([first.close(), second.close()]); }
+});
+
 test("cloud deep link survives a stale same-origin trip cache until the server confirms the new date", async ({ browser }) => {
   const writer = await browser.newContext(), stale = await browser.newContext();
   const a = await writer.newPage(), b = await stale.newPage();
