@@ -1,5 +1,9 @@
 # Decisions
 
+## Full Gate hold — 2026-10-05 06:13 UTC
+
+Keep product runtime `ac2f023e2f3c27e7b1370c2a33a3737ced7fda7e` at immutable full-site draft `6ac33f299da97d91b71b4b61`; do not promote it. Its new exact hostname is not yet a Firebase Authorized Domain. Source-matched CI and independent source review pass, but current-host cloud offline/conflict, real audio/vision/background/Blob and budget attribution are not accepted. An older authorized draft yielded real synthetic text action/Undo and cited Explore cards, but its runtime is `5e9880d` and cannot certify this build. UTC Oct 5 Planner usage reserves US$0.27, plus Oct 4 US$0.94; these are conservative reservations, not billed spend. Actual cost and unknown request outcomes remain separate. Keep US$1/day and US$5 cumulative limits, existing rules, current production `6ac2c370d1409615f07878bd`, sibling tools and private offline state unchanged. No MAIN/Tracker update.
+
 ## Reorder conflict gate decision — 2026-10-05 04:28 UTC
 
 Accept [CI 37263447650](https://github.com/blackeirose/YSU-Tools/actions/runs/37263447650) as synthetic emulator evidence for same-item offline reorder versus online edit conflict, explicit backup/recovery and subsequent sync. Reviewer `/root/full_gate_review` found the strengthened same-ID and final-note assertions adequate for that narrow claim. It does not establish new-Preview live Auth/offline behavior, paid AI/Blob or Full Gate; no production release.

@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "recordedAtUtc": "2026-10-05T06:15:00Z",
+  "gate": "NOT_PASS",
+  "productRuntimeCommit": "ac2f023e2f3c27e7b1370c2a33a3737ced7fda7e",
+  "productPullRequest": "https://github.com/blackeirose/YSU-Tools/pull/3",
+  "publisherPullRequest": "https://github.com/blackeirose/social-capture-tool/pull/23",
+  "publisherRemoteHeadAtAssembly": "162ddffb43962d0efb84b1219ac636325f3a2ddb0",
+  "publisherLocalSourceCommit": "68d91790913cf1aa2a2846767f3027713c1cace5",
+  "previewDeployId": "6ac33f299da97d91b71b4b61",
+  "previewUrl": "https://6ac33f299da97d91b71b4b61--ycsu-tools-router.netlify.app/travel-planner/",
+  "productionDeployIdBeforeAndAfter": "6ac2c370d1409615f07878bd",
+  "productionPromoted": false,
+  "sharedRulesCandidateAndObservedSha256": "41a93cedb3feec655faad0e8665868b9e05b44174cbfe12843d6ff860a068c00",
+  "productCi": {
+    "url": "https://github.com/blackeirose/YSU-Tools/actions/runs/37270788373",
+    "sourceCommit": "ac2f023e2f3c27e7b1370c2a33a3737ced7fda7e",
+    "unitPassed": 115,
+    "rulesPassed": 9,
+    "emulatorBrowserPassed": 7,
+    "typecheck": "PASS",
+    "build": "PASS"
+  },
+  "publisherLocalTestsPassed": 39,
+  "remoteCompleteHost": {
+    "staticFiles": 326,
+    "functions": 9,
+    "baselineFilesMatched": 322,
+    "protectedSiblingFunctionsMatched": 6,
+    "routesAndScopedPwa": "PASS",
+    "anonymousPlannerApi": 401
+  },
+  "independentReview": "PASS_SOURCE_SCOPE_ONLY",
+  "newPreviewBrowser": {
+    "localSyntheticMode": "PASS",
+    "deepLinkRefresh": "PASS",
+    "crossDayCardMapSelection": "PASS",
+    "markerToCard": "PASS",
+    "viewportWidthsPx": [1440, 390, 320],
+    "horizontalOverflow": false
+  },
+  "newPreviewAuthorizedDomain": "ABSENT",
+  "newPreviewLiveCloud": "BLOCKED",
+  "newPreviewPaidAi": "UNVERIFIED",
+  "newPreviewBackgroundBlob": "UNVERIFIED",
+  "real200PercentZoom": "UNVERIFIED",
+  "physicalIphoneSafari": "UNVERIFIED",
+  "aiUsageUtc20261005": {
+    "assistCount": 3,
+    "exploreCount": 1,
+    "visionCount": 1,
+    "backgroundCount": 0,
+    "conservativeReservationUsd": 0.27,
+    "actualBilledUsd": null,
+    "unknownRequestOutcomes": "not resolved"
+  },
+  "aiReservationUtc20261004Usd": 0.94,
+  "recovery": "Do not promote the draft. Preserve every old-origin private pending/conflict; rebuild future Planner-only candidates from the then-current complete-site baseline."
+}

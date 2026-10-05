@@ -1,5 +1,9 @@
 # YSU Travel Planner
 
+## Current Full Gate checkpoint — 2026-10-05 06:13 UTC
+
+The source-matched [complete-site Preview](https://6ac33f299da97d91b71b4b61--ycsu-tools-router.netlify.app/travel-planner/) is draft `6ac33f299da97d91b71b4b61` from product runtime `ac2f023e2f3c27e7b1370c2a33a3737ced7fda7e`; production remains `6ac2c370d1409615f07878bd` with the newer UMS. [CI 37270788373](https://github.com/blackeirose/YSU-Tools/actions/runs/37270788373) passed 115 unit, 9 Firestore rules and 7 emulator browser tests, plus typecheck/build. An independent reviewer source-approved the selected-card AI target guard, offline preservation and Planner-only release isolation; live Full Gate is separate. Canonical complete-host validation passed 326 files and nine Functions while retaining all six sibling Function digests. Local synthetic Preview passed desktop and 390/320px layout, deep-route refresh, cross-day card selection and marker-to-card selection. Firebase shared rules readback SHA256 is `41a93cedb3feec655faad0e8665868b9e05b44174cbfe12843d6ff860a068c00`. The new exact hostname is absent from Authorized Domains; authenticated new-origin cloud, paid modalities and Blob remain unaccepted. **Full Gate NOT PASS; no production release.** Preserve all old-origin private pending/conflicts.
+
 ## Offline reorder emulator regression — 2026-10-05 04:28 UTC
 
 [CI 37263447650](https://github.com/blackeirose/YSU-Tools/actions/runs/37263447650) passed on test source `e28df073`: 108 unit, 8 rules, 7 emulator browser, typecheck/build. New synthetic two-context case covers offline reorder/reload, same-item remote note, both-version backup, explicit remote recovery and later sync while retaining the note. Independent reviewer checked tightened assertions. Deployed Preview still runs `5e9880d`; live cloud Full Gate and production status remain unchanged.
