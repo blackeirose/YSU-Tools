@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ZodError } from "zod";
 import { Temporal } from "@js-temporal/polyfill";
-import { PlannerStore } from "./storage";
+import { PlannerStore, canRetryDetachedUndo } from "./storage";
 import type { Snapshot } from "./storage";
 import {
   configured,
@@ -1096,7 +1096,9 @@ export default function App() {
                 : c.reason === "legacy"
                   ? "升級前的離線操作缺少旅程日期保護，已暫停送出。本機資料仍保留；先下載兩份備份，再確認是否重新同步。"
                   : c.reason === "policy"
-                    ? "正式雲端規則拒絕這批操作。已保留本機修改並暫停此批；請下載備份，再選擇遠端版本。其他無關編輯可繼續同步。"
+                    ? canRetryDetachedUndo(c)
+                      ? "舊版日期復原缺少雲端要求的待定欄位。兩份資料都已保留；請先下載備份，再選擇保留本機版本安全重試。若遠端已變動，重試會停止。"
+                      : "正式雲端規則拒絕這批操作。已保留本機修改並暫停此批；請下載備份，再選擇遠端版本。其他無關編輯可繼續同步。"
                   : "其他裝置修改了同一項目。本機與遠端內容均保留；以下選擇會影響這批移動／排序／刪除。"}
             </p>
             <details>
@@ -1131,7 +1133,7 @@ export default function App() {
                 </select>
               </label> : null;
             })()}
-            {c.reason !== "oversize" && c.reason !== "policy" && <button
+            {(c.reason !== "oversize" && c.reason !== "policy" || canRetryDetachedUndo(c)) && <button
               onClick={() =>
                 void attempt(() => store.resolve(c.operation.id, "local", recoveryDays[c.operation.id]))
               }
