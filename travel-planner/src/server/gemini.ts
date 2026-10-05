@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { aiProvider, modelUrl } from "./ai-provider";
+import { logAiUsage } from "./ai-usage";
 import { inTrip, relativeAmbiguous, relativeTarget, relativeUnsupported, travelClock } from "./travel-clock";
 import { placeInCity, searchPhoton } from "../place-search";
 
@@ -213,16 +214,23 @@ export async function geminiHandler(req: Request, env: Env, http: typeof fetch =
         ...(input.mode === "explore" ? { responseJsonSchema: exploreResponseSchema } : {}),
         ...(input.mode === "vision" ? { responseJsonSchema: visionResponseSchema } : {}),
         maxOutputTokens: input.mode === "vision" || input.mode === "explore" ? 2200 : 1200 } };
+    const trace = { id: input.requestId, mode: input.mode, stage: "inference", provider: provider.name,
+      model, atUtc: now.toISOString(), dailyReservationAfterMicrousd: quota.reservedMicrousd,
+      hasAudio: !!input.audio };
+    logAiUsage({ ...trace, result: "sent-charge-unknown" });
     const response = await http(modelUrl(provider, model),
       { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": provider.key },
         body: JSON.stringify(requestBody), signal: AbortSignal.timeout(45000) });
-    if (!response.ok) return reply(502, { error: "Gemini 暫時無法完成；行程未變更", quota });
+    if (!response.ok) {
+      logAiUsage({ ...trace, atUtc: new Date().toISOString(), result: "http-error-charge-unknown", httpStatus: response.status });
+      return reply(502, { error: "Gemini 暫時無法完成；行程未變更", quota });
+    }
     const output = await response.json() as { candidates?: { content?: { parts?: { text?: string }[] }; groundingMetadata?: { groundingChunks?: { web?: { uri?: string } }[] } }[];
       usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number } };
     const usage = { promptTokens: output.usageMetadata?.promptTokenCount ?? null,
       outputTokens: output.usageMetadata?.candidatesTokenCount ?? null,
       totalTokens: output.usageMetadata?.totalTokenCount ?? null };
-    console.info("travel-planner-ai-usage", { mode: input.mode, provider: provider.name, model, ...usage });
+    logAiUsage({ ...trace, atUtc: new Date().toISOString(), result: "provider-returned", httpStatus: response.status, usage });
     const candidate = output.candidates?.[0];
     const text = candidate?.content?.parts?.map((part) => part.text ?? "").join("") ?? "";
     let parsed: unknown;

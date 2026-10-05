@@ -349,8 +349,9 @@ test("R7 emulator: offline new item versus trip shortening conflicts in both com
     await expect(b.getByRole("article", { name: "Move into Jan3" })).toBeVisible();
     await second.setOffline(true);
     await shorten(b);
-    await a.getByRole("article", { name: "Move into Jan3" })
-      .getByRole("combobox", { name: "Move into Jan3移到某日" }).selectOption("2030-01-03");
+    const rangeItem = a.getByRole("article", { name: "Move into Jan3" });
+    await rangeItem.getByRole("button", { name: "Move into Jan3移到某日", exact: true }).click();
+    await rangeItem.getByRole("button", { name: "Move into Jan3移到某日 2030-01-03" }).click();
     await expect(a.locator('[data-day="2030-01-03"]').getByRole("article", { name: "Move into Jan3" })).toBeVisible();
     await expect(a.getByText("已同步", { exact: true })).toBeVisible();
     await second.setOffline(false);
@@ -449,10 +450,9 @@ test("emulator: independent same-user contexts synchronize both directions and p
       }),
     ).toHaveCount(0);
     await first.setOffline(true);
-    await a
-      .getByRole("article", { name: "A to B", exact: true })
-      .getByRole("combobox", { name: "A to B移到某日", exact: true })
-      .selectOption("2030-01-02");
+    const itemToMove = a.getByRole("article", { name: "A to B", exact: true });
+    await itemToMove.getByRole("button", { name: "A to B移到某日", exact: true }).click();
+    await itemToMove.getByRole("button", { name: "A to B移到某日 2030-01-02" }).click();
     await quick(a, "Offline new record");
     // The built app shell and pending operations must survive an offline reload.
     await a.reload();
@@ -489,10 +489,9 @@ test("emulator: independent same-user contexts synchronize both directions and p
     await expect(
       b.getByRole("article", { name: "Offline independent record", exact: true }),
     ).toBeVisible({ timeout: 45000 });
-    await b
-      .getByRole("article", { name: "B to A", exact: true })
-      .getByRole("combobox", { name: "B to A移到某日", exact: true })
-      .selectOption("2030-01-02");
+    const peerItem = b.getByRole("article", { name: "B to A", exact: true });
+    await peerItem.getByRole("button", { name: "B to A移到某日", exact: true }).click();
+    await peerItem.getByRole("button", { name: "B to A移到某日 2030-01-02" }).click();
     await expect(
       a
         .locator('[data-day="2030-01-02"]')

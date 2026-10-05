@@ -50,6 +50,7 @@ import { ImportFlow } from "./ImportFlow";
 import { TravelerAssistant } from "./TravelerAssistant";
 import type { AssistantRequestContext } from "./TravelerAssistant";
 import { TripBackground } from "./TripBackground";
+import { DayMovePicker } from "./DayMovePicker";
 import { assistantActionAlreadyApplied, assistantDraftIds, assistantItemId, assertAssistantDraftTrip, assertAssistantMutationAllowed, assertAssistantMutationTarget, assertAssistantTargetDay } from "./assistant-actions";
 import type { AssistantAction } from "./server/gemini";
 import { fillPlaceFromPhoton, searchPhoton } from "./place-search";
@@ -888,25 +889,9 @@ export default function App() {
           </a>
         </div>
         <div className="item-actions">
-          <label className="compact-label">
-            {candidate ? "加入" : "移到"}
-            <select
-              aria-label={`${p.name}移到某日`}
-              disabled={dateList.length < 2 && !candidate}
-              value=""
-              onChange={(e) => {
-                if (e.target.value)
-                  void attempt(() =>
-                    replace ? replaceItem(i, replace) : move(i, e.target.value),
-                  );
-              }}
-            >
-              <option value="">選擇日期</option>
-              {dateList.map((d) => (
-                <option key={d}>{d}</option>
-              ))}
-            </select>
-          </label>
+          <DayMovePicker label={`${p.name}移到某日`} caption={candidate ? "加入" : "移到"}
+            current={i.day} dates={dateList} disabled={dateList.length < 2 && !candidate}
+            onChoose={(date) => attempt(() => move(i, date))} />
           {dateList.length < 2 && !candidate && (
             <span className="small">目前只有一天，可先延長旅程。</span>
           )}
@@ -1922,14 +1907,10 @@ export default function App() {
             {selectedItem.status !== "candidate" && <button onClick={() => void attempt(async () => { await edit("標記完成", [{ ...selectedItem, status: "done" }]); si(null); })}>完成</button>}
             {selectedItem.status !== "candidate" && <button onClick={() => void attempt(async () => { await edit("跳過安排", [{ ...selectedItem, status: "skipped" }]); si(null); })}>跳過</button>}
           </div>
-          <label className="detail-move">移到某日 · 目前 {selectedItem.day ?? "待定"}
-            <select aria-label={`${selectedPlace.name}詳細移到某日`} value="" onChange={(event) => {
-              if (event.target.value) void attempt(async () => { await move(selectedItem, event.target.value); si(null); });
-            }}>
-              <option value="">選擇日期</option>
-              {dateList.map((date) => <option key={date} value={date}>{date}</option>)}
-            </select>
-          </label>
+          <div className="detail-move"><DayMovePicker label={`${selectedPlace.name}詳細移到某日`}
+            caption="移到某日" current={selectedItem.day} dates={dateList}
+            disabled={dateList.length < 2 && selectedItem.status !== "candidate"}
+            onChoose={(date) => attempt(async () => { await move(selectedItem, date); si(null); })} /></div>
           {dateList.length === 1 && <p className="hint">目前只有一天，可先延長旅程。</p>}
           <button onClick={() => si(null)}>關閉詳細資訊</button>
         </Modal>

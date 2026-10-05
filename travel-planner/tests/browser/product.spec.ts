@@ -250,8 +250,12 @@ test("cross-day move, replacement preserves original, undo survives reload", asy
     .filter({ has: page.getByText("上午", { exact: true }) });
   if (info.project.name === "mobile") {
     await temple.click();
-    await page.getByRole("dialog").getByLabel("淺草寺詳細移到某日").selectOption("2030-01-09");
-  } else await temple.getByLabel("淺草寺移到某日").selectOption("2030-01-09");
+    await page.getByRole("dialog").getByRole("button", { name: "淺草寺詳細移到某日", exact: true }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "淺草寺詳細移到某日 2030-01-09" }).click();
+  } else {
+    await temple.getByRole("button", { name: "淺草寺移到某日", exact: true }).click();
+    await temple.getByRole("button", { name: "淺草寺移到某日 2030-01-09" }).click();
+  }
   await page.getByLabel("旅行日期", { exact: true }).selectOption("2030-01-09");
   await expect(
     page.getByRole("article", { name: "淺草寺", exact: true }).first(),
