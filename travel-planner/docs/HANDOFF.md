@@ -1,5 +1,8 @@
 # Travel Planner V1 — 隔離試用交付
 
+> **Emulator 補測（2026-10-05 04:21 UTC）：** [CI 37262976480](https://github.com/blackeirose/YSU-Tools/actions/runs/37262976480) 於測試／文件 HEAD `b588ac7c` 通過 typecheck、build、108 unit、8 rules、6 emulator browser。新增第六個案例在**相同 origin**植入合成舊版 pending，驗證隔離衝突、下載含本機／遠端版本的備份、採用遠端版本後刷新及另一 context 後續同步。未碰 Owner 舊 origin 私人資料，也未實跑舊版 app／SW 或證明舊移日自動重播；這些不得標 PASS。Preview runtime 仍為 `5e9880d`，Full Gate 未通過，正式站未發布新版。
+
+
 > **接續審核（2026-10-05 04:15 UTC）：** 產品 runtime `5e9880d`、完整站隔離 [Preview `6ac2d52a8b3b09627e4a347b`](https://6ac2d52a8b3b09627e4a347b--ycsu-tools-router.netlify.app/travel-planner/) 與正式站 `6ac2c370d1409615f07878bd` 均未改。精確新 Auth 網域查重後仍不存在，已請求 Computer Use 操作當下確認；舊 Preview 的雙 context 證據不能移作新版。新版正常瀏覽器的 Photon 搜尋回傳結果，TOWER 直連 403 不能證明 Function 受阻，Function 來源核對仍待實測。57 項聚焦 storage／Gemini／背景／PWA 測試通過，但為 mock／unit。UTC 10/5 的 Preview 額度文件尚未建立；10/4 US$0.94 是保守預留非帳單，團隊模型 credits 無法歸屬 Planner。雲端離線衝突、付費 AI／Blob、200% 與實體 iPhone 尚未驗收，**Full Gate NOT PASS，沒有升級版正式發布**。保留舊 origin 私人資料和新版 UMS baseline。
 
 
