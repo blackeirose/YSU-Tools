@@ -1,5 +1,10 @@
 # Decisions
 
+## Emulator gate decision — 2026-10-05 04:21 UTC
+
+Accept [CI 37262976480](https://github.com/blackeirose/YSU-Tools/actions/runs/37262976480) as a narrow same-origin **synthetic** legacy-pending regression: 108 unit, 8 rules and 6 emulator browser tests passed on test/docs HEAD `b588ac7c`. Keep live old-origin Owner data untouched. This does not satisfy new Preview cloud/paid Full Gate or authorize production release; the deployed app remains runtime `5e9880d`.
+
+
 ## Release decision — 2026-10-05 04:15 UTC
 
 Hold the upgraded Planner at the isolated draft `6ac2d52a8b3b09627e4a347b`; do not publish or promote it while new-host cloud offline/conflict and paid modalities/Blob remain unaccepted. Keep production `6ac2c370d1409615f07878bd` and its newer UMS release intact. The precise Firebase Auth domain is Owner-authorized but still absent pending Computer Use operation-time confirmation. Today's UTC quota document was absent at read time; yesterday's US$0.94 remains only a reservation. Netlify team AI credits do not establish all Planner costs, so do not reset usage, increase caps, or treat unknown requests as free. Normal browser Photon search succeeds, but server-side source verification remains unknown; keep source validation strict. Fifty-seven focused mock/unit tests pass but do not waive Full Gate.
