@@ -1,5 +1,10 @@
 # Travel Planner UX / Gemini upgrade — Full Gate
 
+## Offline reorder emulator regression — 2026-10-05 04:28 UTC
+
+[CI 37263447650](https://github.com/blackeirose/YSU-Tools/actions/runs/37263447650) on test source `e28df073f302d1512b18d17ca2f073363d0cb00b` passed typecheck, build, 108 unit, 8 rules and **7** Auth/Firestore emulator Chromium browser tests. The seventh synthetic case uses two independent contexts: A reorders an item offline and reloads with a visible pending badge; B edits **that same item** online; on reconnect A sees a conflict, downloads a backup whose local reordered record and remote edited record share an ID, chooses remote, refreshes, and then performs another reorder that B observes without losing the remote note. Independent reviewer `/root/full_gate_review` required tighter same-ID and final-note assertions, then source-reviewed the fix. This is emulator evidence only, not authenticated current-Preview cloud acceptance. Runtime Preview remains `5e9880d`; Full Gate NOT PASS and production unchanged.
+
+
 ## Emulator upgrade regression — 2026-10-05 04:21 UTC
 
 [CI run 37262976480](https://github.com/blackeirose/YSU-Tools/actions/runs/37262976480) on product document/test HEAD `b588ac7c1fe9450cca6cd2c1db878ad1c1cd206d` passed typecheck, build, 108 unit tests, 8 Firestore emulator rules tests and **6** Chromium/Auth/Firestore emulator browser tests. The added sixth test seeds a synthetic old, unguarded pending Item move into IndexedDB on the **same origin**, opens the current app, observes its legacy conflict, downloads a backup containing both local and remote versions, chooses the remote version, refreshes, and confirms an independent context sees a later edit. No Owner old-origin data was touched. The test does not run the old app/service worker or prove automatic replay of the old move; those remain unverified. Reviewer `/root/full_gate_review` inspected this narrow test and source risk; this is code/emulator review, not live Preview acceptance. Runtime Preview remains `5e9880d`, so this test-only/docs branch head is not the deployed source. Full Gate remains NOT PASS; production unchanged.
