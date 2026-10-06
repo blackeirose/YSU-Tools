@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { callUpperBoundMicrousd, reserveAiTestBudget, TEST_BUDGET_MICROUSD,
+import { callUpperBoundMicrousd, nextBudgetDocument, reserveAiTestBudget, TEST_BUDGET_MICROUSD,
   type aiTestBudgetStore } from "../src/server/ai-test-budget";
 
 type Store = ReturnType<typeof aiTestBudgetStore>;
 function memoryStore() {
-  let value: unknown = null, etag = 0;
+  let value: unknown = { schemaVersion: 1, campaign: "ux-gemini-20261005-usd1",
+    limitMicrousd: TEST_BUDGET_MICROUSD, reservedMicrousd: 0, entries: [] }, etag = 1;
   const store = {
     getWithMetadata: async () => value === null ? null : { data: value, etag: String(etag) },
     setJSON: async (_key: string, data: unknown, options: { onlyIfNew?: boolean; onlyIfMatch?: string }) => {
@@ -57,5 +58,35 @@ describe("one-time cross-deploy AI test grant", () => {
     const broken = { getWithMetadata: async () => { throw new Error("offline"); } } as unknown as Store;
     await expect(reserveAiTestBudget(id(3), "inference", "assist", "netlify-gateway", false, broken))
       .rejects.toThrow("offline");
+    corrupt(null);
+    await expect(reserveAiTestBudget(id(4), "inference", "assist", "netlify-gateway", false, store))
+      .rejects.toThrow("missing");
+  });
+  it("prepares a future explicit grant in the same CAS write without losing old reservations", () => {
+    const atUtc = "2026-10-06T12:00:00.000Z";
+    const entries = [60_000, 180_000, 60_000, 60_000, 60_000, 180_000, 60_000]
+      .map((upperBoundMicrousd, index) => ({ id: id(index + 1), stage: "inference" as const,
+        mode: "assist" as const, upperBoundMicrousd, atUtc }));
+    const old = { schemaVersion: 1 as const, campaign: "ux-gemini-20261005-usd1",
+      limitMicrousd: 1_000_000, reservedMicrousd: 660_000, entries };
+    const next = { id: id(8), stage: "photo" as const, mode: "background" as const,
+      upperBoundMicrousd: 180_000, atUtc };
+    expect(() => nextBudgetDocument(old, next, 2_000_000, "")).toThrow("grant-unapproved");
+    const granted = nextBudgetDocument(old, next, 2_000_000, "synthetic owner grant");
+    expect(granted.limitMicrousd).toBe(2_000_000);
+    expect(granted.reservedMicrousd).toBe(840_000);
+    expect(granted.entries.slice(0, 7)).toEqual(entries);
+    expect(granted.grantHistory).toEqual([{ fromMicrousd: 1_000_000,
+      toMicrousd: 2_000_000, atUtc, authorization: "synthetic owner grant" }]);
+    expect(() => nextBudgetDocument(granted, { ...next, id: id(9) }, 1_000_000, ""))
+      .toThrow("corrupt"); // old runtime fails closed after a new cap is recorded
+    expect(() => nextBudgetDocument(granted, next, 2_000_000, "synthetic owner grant"))
+      .toThrow("duplicate");
+    const continued = nextBudgetDocument(granted, { ...next, id: id(9) }, 2_000_000, "");
+    expect(continued.grantHistory).toHaveLength(1);
+    expect(continued.reservedMicrousd).toBe(1_020_000);
+    expect(() => nextBudgetDocument({ ...granted, grantHistory: [] },
+      { ...next, id: id(10) }, 2_000_000, "")).toThrow("corrupt");
   });
 });
+
