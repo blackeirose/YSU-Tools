@@ -150,6 +150,8 @@ describe("owner-only persistent background generation", () => {
       store as unknown as ReturnType<typeof backgroundStore>);
     expect(result.status).toBe(502);
     expect(fake.counts()).toEqual({ images: 0, quota: 1, landmarks: 0 });
+    const key = `preview-v1/owner/${tripId}/job`;
+    expect((store.values.get(key)?.data as { attempts: number }).attempts).toBe(0);
   });
   it("returns 401 before service-availability checks and makes no paid call", async () => {
     const store = new MemoryStore() as unknown as ReturnType<typeof backgroundStore>;
@@ -199,6 +201,20 @@ describe("owner-only persistent background generation", () => {
     expect((await startBackground(request(), env, fake.http, provided)).status).toBe(502);
     expect((await startBackground(request(), env, fake.http, provided)).status).toBe(200);
     expect(fake.counts()).toEqual({ images: 3, quota: 2, landmarks: 1 });
+  });
+  it("a budget refusal on lower-panel retry preserves the remaining paid attempt and upper panel", async () => {
+    const store = new MemoryStore(), fake = httpFor({ failSecond: true });
+    const provided = store as unknown as ReturnType<typeof backgroundStore>;
+    expect((await startBackground(request(), env, fake.http, provided)).status).toBe(502);
+    expect(fake.counts()).toEqual({ images: 2, quota: 1, landmarks: 1 });
+    const key = `preview-v1/owner/${tripId}/job`;
+    vi.mocked(reserveAiTestBudget).mockRejectedValueOnce(new Error("test-budget-daily-limit"));
+    expect((await startBackground(request(), env, fake.http, provided)).status).toBe(502);
+    expect(fake.counts()).toEqual({ images: 2, quota: 2, landmarks: 1 });
+    expect((store.values.get(key)?.data as { attempts: number }).attempts).toBe(1);
+    expect([...store.values.keys()].some((path) => path.endsWith("/top"))).toBe(true);
+    expect((await startBackground(request(), env, fake.http, provided)).status).toBe(200);
+    expect(fake.counts()).toEqual({ images: 3, quota: 3, landmarks: 1 });
   });
   it("quota refusals make no paid call and do not exhaust background retries, including an old job", async () => {
     const store = new MemoryStore(), fake = httpFor();
