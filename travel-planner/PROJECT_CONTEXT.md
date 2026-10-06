@@ -1,6 +1,12 @@
 # YSU Travel Planner
 
-## Current upgrade checkpoint — 2026-10-06 21:36 UTC
+## Current upgrade checkpoint — 2026-10-06 23:45 UTC
+
+Product PR #3 commit `3c97b2df1b425a98732df9fe5d066ef3097b1841` is the executable source for complete-host [Preview `6ac584df1801b9eafb089249`](https://6ac584df1801b9eafb089249--ycsu-tools-router.netlify.app/travel-planner/). [CI 37545390444](https://github.com/blackeirose/YSU-Tools/actions/runs/37545390444), focused independent source review and canonical 326-static/nine-Function remote isolation validation passed. Publisher content matches authority PR #23 `9ef2756` tree; production `6ac2c370d1409615f07878bd` is unchanged. The current exact hostname still needs Firebase authorization, and live two-context offline/conflict, AI/Blob and true zoom are outstanding. Synthetic conflict data is prepared in `preview-v1`, but it is not live-offline evidence. The same campaign reserves US$1.20 of its US$2.00 cap; actual charges unknown, and the US$1.31 remaining whole-batch upper bound needs an additional approval (maximum US$0.60 requested). Daily US$1 stays fixed. **Full Gate NOT PASS.**
+
+---
+
+## Historical upgrade checkpoint — 2026-10-06 21:36 UTC
 
 Product PR #3 runtime `4ccd80297c8c2ac297a80ed2777a0ba2b2ecd62b` is on [final isolated complete-host Preview `6ac56a1df33fad04f496bf40`](https://6ac56a1df33fad04f496bf40--ycsu-tools-router.netlify.app/travel-planner/); [CI 37534792620](https://github.com/blackeirose/YSU-Tools/actions/runs/37534792620) and focused independent source review passed. Canonical publisher preserved 322 baseline files/six sibling Functions; production `6ac2c370d1409615f07878bd` unchanged. Owner approved same-campaign US$2 cumulative cap, US$1/day unchanged, old US$0.66 conservative reservation and unknown charges retained; no new paid call. Exact Firebase hostname, live two-context offline conflicts, AI modes/two-panel private Blob, true 200% zoom and post-release smoke remain open. **Full Gate NOT PASS.**
 

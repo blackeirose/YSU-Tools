@@ -1,6 +1,12 @@
 # Decisions
 
-## Current Full Gate decision — 2026-10-06 21:36 UTC
+## Current Full Gate decision — 2026-10-06 23:45 UTC
+
+Keep executable commit `3c97b2d` at isolated complete-host Preview `6ac584df1801b9eafb089249`; production remains `6ac2c370d1409615f07878bd`. Source-matched CI and focused source review pass, but exact-host Auth, real two-context offline conflict recovery, paid AI/private Blob and true zoom do not yet pass. Do not treat the old hostname approval or old background success as new-host acceptance. Preserve all existing campaign reservations and unknown costs; with US$1.20 of US$2.00 conservatively reserved and a US$1.31 whole-batch bound, hold further paid calls until the requested incremental grant is decided. Daily US$1 remains unchanged. Conditional production authorization remains subject to the existing Full Gate; use the canonical complete-host publisher and current baseline if the Gate later passes. No Supabase, sibling edit, shared security expansion or MAIN/Tracker update.
+
+---
+
+## Historical Full Gate decision — 2026-10-06 21:36 UTC
 
 Keep exact runtime `4ccd80297c8c2ac297a80ed2777a0ba2b2ecd62b` on isolated complete-host draft `6ac56a1df33fad04f496bf40` pending live Preview Gate. Source CI/review and complete-host preservation pass but do not replace exact-host Auth, real offline conflicts, bounded AI/private Blob or true 200% zoom. Owner approved same-campaign US$2 cumulative cap, US$1/day unchanged; grant history and old entries are preserved atomically on first new successful reservation. Background zero-provider-call budget denial no longer consumes the final retry. No new paid call or production release occurred. Preserve latest siblings, old-origin pending/conflicts and private data; no Supabase, DNS, shared-security expansion, MAIN or Tracker update. After Preview Full Gate, re-read current baseline and publish Planner-only, then run reserved production smoke.
 

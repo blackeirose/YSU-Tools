@@ -1,6 +1,6 @@
 # 最終候選的單次 Remote 驗收手冊（2026-10-06 準備稿）
 
-> 此手冊是**待執行步驟**，不是通過證據。最終候選產品 runtime `4ccd80297c8c2ac297a80ed2777a0ba2b2ecd62b`、來源一致 [CI 37534792620](https://github.com/blackeirose/YSU-Tools/actions/runs/37534792620) 與完整站 [Preview `6ac56a1df33fad04f496bf40`](https://6ac56a1df33fad04f496bf40--ycsu-tools-router.netlify.app/travel-planner/) 已固定。精確 hostname `6ac56a1df33fad04f496bf40--ycsu-tools-router.netlify.app` 尚待 Firebase Authorized Domains 操作當下確認、查重、加入及讀回；在此之前不得把新候選的登入寫為 PASS。Owner 已批准同一 campaign 累計上限 US$2.00，原每日 US$1.00 不變；尚未對新版本送出付費 AI 呼叫，送出前須重讀兩層額度。
+> 此手冊是**待執行步驟**，不是通過證據。當前候選產品 runtime [`3c97b2df1b425a98732df9fe5d066ef3097b1841`](https://github.com/blackeirose/YSU-Tools/commit/3c97b2df1b425a98732df9fe5d066ef3097b1841)、來源一致 [CI 37545390444](https://github.com/blackeirose/YSU-Tools/actions/runs/37545390444) 與完整站 [Preview `6ac584df1801b9eafb089249`](https://6ac584df1801b9eafb089249--ycsu-tools-router.netlify.app/travel-planner/) 已驗證。精確 hostname `6ac584df1801b9eafb089249--ycsu-tools-router.netlify.app` 尚待 Firebase Authorized Domains 的**此網域專屬**操作當下確認、查重、加入及讀回；舊 `6ac56...` 核准不能代用。四筆合成衝突項目已在同一 `preview-v1` namespace 經舊授權 Preview 建立並刷新讀回；尚未做真實離線測試。Owner 已批准 campaign 累計上限 US$2.00、每日 US$1.00 不變，但整批剩餘保守上界 US$1.31 大於帳本剩餘 US$0.80；追加額度僅為待批准提案。若額度變更造成新 runtime，本手冊的候選 URL 與 CI 必須先更新再讓 Owner Remote。
 
 ## Agent 在 Remote 前完成
 
