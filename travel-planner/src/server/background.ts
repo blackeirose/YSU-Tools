@@ -10,7 +10,8 @@ import { placeInCity, searchPhoton } from "../place-search";
 
 type Env = (name: string) => string | undefined;
 type Http = typeof fetch;
-type Accounting = { id: string; ownerId: string; namespace: string; dailyReservationAfterMicrousd: number };
+type Accounting = { id: string; ownerId: string; namespace: string; dailyReservationAfterMicrousd: number;
+  providerAttempted: boolean };
 type Landmark = { name: string; sourceUrl: string; sourceTitle: string; locationSourceUrl: string };
 type Job = { state: "running" | "ready" | "failed"; attempts: number; city: string; startedAt: string;
   updatedAt: string; error?: string; model?: string; styleVersion?: string; landmarks?: Landmark[];
@@ -141,6 +142,7 @@ async function generate(http: Http, env: Env, prompt: string, accounting: Accoun
     generationConfig: { imageConfig: { aspectRatio: "3:2" } } };
   const receipt = await beginAiUsage(accounting.namespace, accounting.ownerId,
     { ...trace, testBudgetReservedAfterMicrousd: testBudget.reservedAfterMicrousd, result: "sent-charge-unknown" });
+  accounting.providerAttempted = true;
   const response = await http(modelUrl(provider, "gemini-3.1-flash-lite-image"),
     { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": provider.key },
       body: JSON.stringify(body), signal: AbortSignal.timeout(120000) });
@@ -173,6 +175,7 @@ async function groundedLandmarks(http: Http, env: Env, city: string, accounting:
       required: ["landmarks"] }, candidateCount: 1, maxOutputTokens: 1200 } };
   const receipt = await beginAiUsage(accounting.namespace, accounting.ownerId,
     { ...trace, testBudgetReservedAfterMicrousd: testBudget.reservedAfterMicrousd, result: "sent-charge-unknown" });
+  accounting.providerAttempted = true;
   const response = await http(modelUrl(provider, "gemini-3.1-flash-lite"), {
     method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": provider.key },
     body: JSON.stringify(body), signal: AbortSignal.timeout(45000),
@@ -267,7 +270,8 @@ export async function startBackground(req: Request, env: Env, http: Http = fetch
     return json(429, { error: "今日用量已滿或無法安全預留；未呼叫 Gemini" });
   }
   const accounting: Accounting = { id: job.requestId!, ownerId: uid,
-    namespace: env("TRAVEL_PLANNER_FIREBASE_NAMESPACE")!, dailyReservationAfterMicrousd };
+    namespace: env("TRAVEL_PLANNER_FIREBASE_NAMESPACE")!, dailyReservationAfterMicrousd,
+    providerAttempted: false };
   try {
     if (!job.landmarks) {
       const landmarks = await groundedLandmarks(http, env, renderingCity, accounting);
@@ -302,7 +306,8 @@ export async function startBackground(req: Request, env: Env, http: Http = fetch
     console.warn("travel-planner-background-failed", { stage: /^[a-z-]+(?:-\d{3})?$/.test(code) ? code : "external" });
     const current = await readJob(store, key);
     if (current?.data.state === "running" && current.data.startedAt === job.startedAt)
-      await store.setJSON(`${key}/job`, { ...job, state: "failed", error: detail,
+      await store.setJSON(`${key}/job`, { ...job, state: "failed",
+        attempts: accounting.providerAttempted ? job.attempts : paidAttempts, error: detail,
         ...(code === "image-service-400" ? { blockedRequestRevision: IMAGE_REQUEST_REVISION } : {}) },
       { onlyIfMatch: current.etag });
     return json(502, { error: `${detail}；行程未變更` });
