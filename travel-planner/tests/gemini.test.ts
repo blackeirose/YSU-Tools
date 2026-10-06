@@ -429,7 +429,7 @@ describe("Gemini paid boundary", () => {
       }
       const body = JSON.parse(String(init?.body));
       expect(body.generationConfig.responseJsonSchema.properties.suggestions.minItems).toBe(3);
-      expect(body.generationConfig.responseJsonSchema.properties.suggestions.maxItems).toBe(5);
+      expect(body.generationConfig.responseJsonSchema.properties.suggestions.maxItems).toBe(8);
       return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ suggestions: cards }) }] },
         groundingMetadata: { groundingChunks: [{ web: { uri: "https://grounded.example/" } }] } }] });
     };
@@ -445,6 +445,38 @@ describe("Gemini paid boundary", () => {
     expect(result.suggestions[0].originalName).toBe("");
     expect(result.suggestions[0].pending).toContain("原文名稱尚未由地點來源確認");
     expect(result.suggestions[0].reason).toContain("理由未由地點來源證實");
+  });
+  it("checks additional proposals but only shows independently verified cards", async () => {
+    const cards = Array.from({ length: 8 }, (_, index) => ({ name: `Place ${index}`,
+      originalName: "", location: "Tokyo", reason: "可考慮", sourceUrls: [], pending: [] }));
+    const http = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("accounts:lookup")) return owner();
+      if (url.includes("/records/")) return trip();
+      if (url.includes("/aiRequests/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/")) return new Response("", { status: 404 });
+      if (url.startsWith("https://photon.komoot.io/api/")) {
+        const name = new URL(url).searchParams.get("q") ?? "";
+        const index = Number(name.replace("Place ", ""));
+        return Response.json({ features: Number.isInteger(index) && index >= 5 && index <= 7 ? [{
+          geometry: { coordinates: [139.7, 35.6] },
+          properties: { name, city: "Tokyo", country: "Japan", osm_type: "N",
+            osm_id: index + 500, osm_value: "attraction" },
+        }] : [] });
+      }
+      const body = JSON.parse(String(init?.body));
+      expect(body.generationConfig.responseJsonSchema.properties.suggestions.maxItems).toBe(8);
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ suggestions: cards }) }] } }] });
+    };
+    const response = await geminiHandler(new Request("https://preview.test/travel-planner/api/ai", {
+      method: "POST", headers: { Authorization: "Bearer synthetic-token" },
+      body: JSON.stringify({ mode: "explore", tripId: crypto.randomUUID(), requestId: crypto.randomUUID(),
+        city: "Tokyo", query: "景點" }),
+    }), env, http as typeof fetch);
+    expect(response.status).toBe(200);
+    expect((await response.json()).suggestions.map((card: { name: string }) => card.name))
+      .toEqual(["Place 5", "Place 6", "Place 7"]);
   });
   it("returns a bounded dated draft for explicit confirmation and rejects a prose-only draft", async () => {
     const payloads = [

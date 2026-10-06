@@ -81,8 +81,10 @@ async function generate(http: Http, env: Env, prompt: string, accounting: Accoun
   const testBudget = await reserveAiTestBudget(accounting.id, stage, "background", provider.name);
   const parts = [{ text: prompt }, ...(reference ? [{ inlineData: {
     mimeType: reference.mime, data: Buffer.from(reference.data).toString("base64") } }] : [])];
+  // Keep the image request to the documented generateContent surface. Image
+  // models may reject text-model controls such as candidateCount/output caps.
   const body = { contents: [{ role: "user", parts }], generationConfig: {
-    responseModalities: ["IMAGE"], candidateCount: 1, maxOutputTokens: 4096,
+    responseModalities: ["TEXT", "IMAGE"],
     responseFormat: { image: { aspectRatio: "3:2", imageSize: "1K" } } } };
   const receipt = await beginAiUsage(accounting.namespace, accounting.ownerId,
     { ...trace, testBudgetReservedAfterMicrousd: testBudget.reservedAfterMicrousd, result: "sent-charge-unknown" });
@@ -237,6 +239,7 @@ export async function startBackground(req: Request, env: Env, http: Http = fetch
     const code = error instanceof Error ? error.message : "";
     const detail = code.startsWith("test-budget-") ? "新增 AI 測試額度不足或無法安全預留；下一個模型呼叫未送出" :
       code.startsWith("landmark-") ? "地標名稱或位置尚未核對；可重試一次" :
+      code.startsWith("image-service-") ? "圖片服務拒絕請求；未產出背景，可重試一次" :
       code.startsWith("image-") ? "圖片模型未完成輸出；可重試一次" :
       "圖片服務暫時失敗；可重試一次";
     console.warn("travel-planner-background-failed", { stage: /^[a-z-]+(?:-\d{3})?$/.test(code) ? code : "external" });

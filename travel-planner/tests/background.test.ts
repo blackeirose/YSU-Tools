@@ -85,8 +85,8 @@ function httpFor(options: { owner?: string; city?: boolean; cityName?: string; i
     }
     if (target.includes("/v1beta/models/gemini-3.1-flash-lite-image:generateContent")) {
       const body = JSON.parse(String(init?.body)) as { contents: { parts: { text?: string }[] }[]; generationConfig: { responseModalities: string[]; responseFormat: { image: { aspectRatio: string; imageSize: string } } } };
-      expect(body.generationConfig).toEqual({ responseModalities: ["IMAGE"], candidateCount: 1,
-        maxOutputTokens: 4096, responseFormat: { image: { aspectRatio: "3:2", imageSize: "1K" } } });
+      expect(body.generationConfig).toEqual({ responseModalities: ["TEXT", "IMAGE"],
+        responseFormat: { image: { aspectRatio: "3:2", imageSize: "1K" } } });
       prompts.push(body.contents[0].parts[0].text ?? "");
       images++;
       if (options.failSecond && images === 2) return new Response("", { status: 500 });
