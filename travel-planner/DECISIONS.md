@@ -1,6 +1,12 @@
 # Decisions
 
-## Current Full Gate decision — 2026-10-06 03:32 UTC
+## Current Full Gate decision — 2026-10-06 21:36 UTC
+
+Keep exact runtime `4ccd80297c8c2ac297a80ed2777a0ba2b2ecd62b` on isolated complete-host draft `6ac56a1df33fad04f496bf40` pending live Preview Gate. Source CI/review and complete-host preservation pass but do not replace exact-host Auth, real offline conflicts, bounded AI/private Blob or true 200% zoom. Owner approved same-campaign US$2 cumulative cap, US$1/day unchanged; grant history and old entries are preserved atomically on first new successful reservation. Background zero-provider-call budget denial no longer consumes the final retry. No new paid call or production release occurred. Preserve latest siblings, old-origin pending/conflicts and private data; no Supabase, DNS, shared-security expansion, MAIN or Tracker update. After Preview Full Gate, re-read current baseline and publish Planner-only, then run reserved production smoke.
+
+---
+
+## Historical Full Gate decision — 2026-10-06 03:32 UTC
 
 Keep product runtime `58fd9d3a91f4f1c6514baa55dea01d05d42ed08a` on isolated complete-host draft `6ac46a5f1273483233b160e0`. Exact-source CI, narrow independent source review, current-baseline complete-host preservation, exact-host Firebase Auth and live synthetic online two-context add/move/Undo/refresh pass. Preview background requires an explicit click, preventing repeated paid auto generation on a fresh draft. The image endpoint's prior HTTP 400 and final request shape have no successful generated-image/Blob proof. Per-tab live offline conflict, voice, vision, true 200% zoom and production AI smoke remain outside the necessary Full Gate. New cumulative US$1 campaign has US$0.66 reserved, US$0.34 remaining; actual total and prior costs are unknown. **Do not deploy the upgrade to production, promote the synthetic draft, broaden shared permissions, raise/reset the cap, alter sibling tools, use Supabase in Planner, or update MAIN/Tracker.** Preserve published production `6ac2c370d1409615f07878bd`, newest UMS and all private old-origin pending/conflicts. A future eligible release must read a fresh complete-host baseline and replace only Planner through the canonical publisher.
 
