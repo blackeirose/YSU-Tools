@@ -5,7 +5,7 @@ import { callUpperBoundMicrousd, nextBudgetDocument, reserveAiTestBudget, TEST_B
 type Store = ReturnType<typeof aiTestBudgetStore>;
 function memoryStore() {
   let value: unknown = { schemaVersion: 1, campaign: "ux-gemini-20261005-usd1",
-    limitMicrousd: TEST_BUDGET_MICROUSD, reservedMicrousd: 0, entries: [] }, etag = 1;
+    limitMicrousd: 1_000_000, reservedMicrousd: 0, entries: [] }, etag = 1;
   const store = {
     getWithMetadata: async () => value === null ? null : { data: value, etag: String(etag) },
     setJSON: async (_key: string, data: unknown, options: { onlyIfNew?: boolean; onlyIfMatch?: string }) => {
@@ -40,6 +40,25 @@ describe("one-time cross-deploy AI test grant", () => {
     const last = await reserveAiTestBudget(id(1), "relief", "background", "netlify-gateway", false, store);
     expect(last.reservedAfterMicrousd).toBe(480_000);
     expect((read() as { entries: unknown[] }).entries).toHaveLength(4);
+  });
+  it("records the approved increment atomically against the existing seven-entry campaign", async () => {
+    const { store, read, corrupt } = memoryStore();
+    const entries = [60_000, 180_000, 60_000, 60_000, 60_000, 180_000, 60_000]
+      .map((upperBoundMicrousd, index) => ({ id: id(index + 1), stage: "inference" as const,
+        mode: "assist" as const, upperBoundMicrousd,
+        atUtc: index < 4 ? "2026-10-05T12:00:00.000Z" : "2026-10-06T12:00:00.000Z" }));
+    corrupt({ schemaVersion: 1, campaign: "ux-gemini-20261005-usd1",
+      limitMicrousd: 1_000_000, reservedMicrousd: 660_000, entries });
+    const result = await reserveAiTestBudget(id(8), "inference", "assist", "netlify-gateway", false, store);
+    const after = read() as { limitMicrousd: number; reservedMicrousd: number;
+      entries: typeof entries; grantHistory: Array<{ fromMicrousd: number; toMicrousd: number;
+        authorization: string }> };
+    expect(result.reservedAfterMicrousd).toBe(720_000);
+    expect(after.limitMicrousd).toBe(2_000_000);
+    expect(after.entries.slice(0, 7)).toEqual(entries);
+    expect(after.grantHistory).toHaveLength(1);
+    expect(after.grantHistory[0]).toMatchObject({ fromMicrousd: 1_000_000,
+      toMicrousd: 2_000_000, authorization: expect.stringContaining("Owner approval 2026-10-06") });
   });
   it("serializes parallel calls and refuses a call that cannot fit", async () => {
     const { store, read } = memoryStore();
