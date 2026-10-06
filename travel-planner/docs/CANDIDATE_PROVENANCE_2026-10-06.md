@@ -5,7 +5,7 @@
 | 項目 | 已讀回結果 |
 | --- | --- |
 | Core canonical | `blackeirose/ysu-ai-core` main `57a69136b7473718dfcf26311ae801f033696f05` |
-| 產品 PR | [YSU-Tools #3](https://github.com/blackeirose/YSU-Tools/pull/3)，branch `feature/travel-planner-ux-gemini-20261003`，本次查核 HEAD `68a8dc62645b4494d03761b73c561e409f52cb22` |
+| 產品 PR | [YSU-Tools #3](https://github.com/blackeirose/YSU-Tools/pull/3)，branch `feature/travel-planner-ux-gemini-20261003`，來源查核時 HEAD `68a8dc62645b4494d03761b73c561e409f52cb22`；後續預算保護與文件 commit 已前進，現有 Preview 不包含這些程式改動 |
 | GitHub 可取得的執行程式來源 | [`a11fae8c035f42cb4e3c981c5dbc5b30f6a98414`](https://github.com/blackeirose/YSU-Tools/commit/a11fae8c035f42cb4e3c981c5dbc5b30f6a98414)，tree `fa21c696cdd7f677dbcb2c545b375675773e50aa` |
 | 後續文件差異 | `a11fae8c`→`68a8dc6` 只修改 `travel-planner/docs/HANDOFF.md`、`travel-planner/docs/UPGRADE_GATE_2026-10-03.md`，未修改程式／lockfile／建置設定 |
 | 產品 CI | [run 37418271635](https://github.com/blackeirose/YSU-Tools/actions/runs/37418271635)，關聯 `a11fae8c`，completed/success；frozen install、typecheck、build、135 unit、rules 與 Chromium emulator contexts |
