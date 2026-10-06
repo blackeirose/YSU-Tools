@@ -81,9 +81,10 @@ async function generate(http: Http, env: Env, prompt: string, accounting: Accoun
   const testBudget = await reserveAiTestBudget(accounting.id, stage, "background", provider.name);
   const parts = [{ text: prompt }, ...(reference ? [{ inlineData: {
     mimeType: reference.mime, data: Buffer.from(reference.data).toString("base64") } }] : [])];
-  // The image model defaults to text + 1K image output. Use the documented
-  // minimal generateContent shape while the gateway's prior 400 is unresolved.
-  const body = { contents: [{ role: "user", parts }] };
+  // Keep the two panels at the documented 3:2 ratio. Leave the size and
+  // modalities at model defaults while the gateway's prior 400 is unresolved.
+  const body = { contents: [{ role: "user", parts }],
+    generationConfig: { imageConfig: { aspectRatio: "3:2" } } };
   const receipt = await beginAiUsage(accounting.namespace, accounting.ownerId,
     { ...trace, testBudgetReservedAfterMicrousd: testBudget.reservedAfterMicrousd, result: "sent-charge-unknown" });
   const response = await http(modelUrl(provider, "gemini-3.1-flash-lite-image"),

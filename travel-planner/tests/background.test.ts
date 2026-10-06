@@ -86,7 +86,7 @@ function httpFor(options: { owner?: string; city?: boolean; cityName?: string; i
     }
     if (target.includes("/v1beta/models/gemini-3.1-flash-lite-image:generateContent")) {
       const body = JSON.parse(String(init?.body)) as { contents: { parts: { text?: string }[] }[]; generationConfig?: unknown };
-      expect(body.generationConfig).toBeUndefined();
+      expect(body.generationConfig).toEqual({ imageConfig: { aspectRatio: "3:2" } });
       prompts.push(body.contents[0].parts[0].text ?? "");
       images++;
       if (options.failSecond && images === 2) return new Response("", { status: 500 });
