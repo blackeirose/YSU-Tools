@@ -66,7 +66,8 @@ describe("one-time cross-deploy AI test grant", () => {
     const atUtc = "2026-10-06T12:00:00.000Z";
     const entries = [60_000, 180_000, 60_000, 60_000, 60_000, 180_000, 60_000]
       .map((upperBoundMicrousd, index) => ({ id: id(index + 1), stage: "inference" as const,
-        mode: "assist" as const, upperBoundMicrousd, atUtc }));
+        mode: "assist" as const, upperBoundMicrousd,
+        atUtc: index < 4 ? "2026-10-05T12:00:00.000Z" : atUtc }));
     const old = { schemaVersion: 1 as const, campaign: "ux-gemini-20261005-usd1",
       limitMicrousd: 1_000_000, reservedMicrousd: 660_000, entries };
     const next = { id: id(8), stage: "photo" as const, mode: "background" as const,
@@ -87,6 +88,27 @@ describe("one-time cross-deploy AI test grant", () => {
     expect(continued.reservedMicrousd).toBe(1_020_000);
     expect(() => nextBudgetDocument({ ...granted, grantHistory: [] },
       { ...next, id: id(10) }, 2_000_000, "")).toThrow("corrupt");
+  });
+  it("applies the published worst-case cap per UTC day even after a campaign grant", () => {
+    const dayOne = "2026-10-06T23:59:59.000Z";
+    const dayTwo = "2026-10-07T00:00:00.000Z";
+    const old = { schemaVersion: 1 as const, campaign: "ux-gemini-20261005-usd1",
+      limitMicrousd: 2_000_000, reservedMicrousd: 940_000,
+      entries: [{ id: id(1), stage: "photo" as const, mode: "background" as const,
+        upperBoundMicrousd: 940_000, atUtc: dayOne }],
+      grantHistory: [{ fromMicrousd: 1_000_000, toMicrousd: 2_000_000,
+        atUtc: dayOne, authorization: "synthetic owner grant" }] };
+    const next = { id: id(2), stage: "inference" as const, mode: "assist" as const,
+      upperBoundMicrousd: 60_000, atUtc: dayOne };
+    const fullDay = nextBudgetDocument(old, next, 2_000_000, "");
+    expect(fullDay.reservedMicrousd).toBe(1_000_000);
+    expect(() => nextBudgetDocument(fullDay, { ...next, id: id(3) }, 2_000_000, ""))
+      .toThrow("daily-exhausted");
+    const newDay = nextBudgetDocument(fullDay, { ...next, id: id(4), atUtc: dayTwo },
+      2_000_000, "");
+    expect(newDay.reservedMicrousd).toBe(1_060_000);
+    expect(() => nextBudgetDocument({ ...old, entries: [{ ...old.entries[0], atUtc: "bad" }] },
+      next, 2_000_000, "")).toThrow("corrupt");
   });
 });
 
