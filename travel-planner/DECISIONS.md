@@ -1,6 +1,12 @@
 # Decisions
 
-## Current 21:18 UTC decision — 2026-10-05
+## Current Full Gate decision — 2026-10-06 03:32 UTC
+
+Keep product runtime `58fd9d3a91f4f1c6514baa55dea01d05d42ed08a` on isolated complete-host draft `6ac46a5f1273483233b160e0`. Exact-source CI, narrow independent source review, current-baseline complete-host preservation, exact-host Firebase Auth and live synthetic online two-context add/move/Undo/refresh pass. Preview background requires an explicit click, preventing repeated paid auto generation on a fresh draft. The image endpoint's prior HTTP 400 and final request shape have no successful generated-image/Blob proof. Per-tab live offline conflict, voice, vision, true 200% zoom and production AI smoke remain outside the necessary Full Gate. New cumulative US$1 campaign has US$0.66 reserved, US$0.34 remaining; actual total and prior costs are unknown. **Do not deploy the upgrade to production, promote the synthetic draft, broaden shared permissions, raise/reset the cap, alter sibling tools, use Supabase in Planner, or update MAIN/Tracker.** Preserve published production `6ac2c370d1409615f07878bd`, newest UMS and all private old-origin pending/conflicts. A future eligible release must read a fresh complete-host baseline and replace only Planner through the canonical publisher.
+
+## Historical decisions below
+
+## Historical 21:18 UTC decision — 2026-10-05
 
 Keep product `ae0d42b57187ae529199ec64c72943c940b7d445` at isolated complete-site draft `6ac412e3c5002ab9e6196bbf`. The new date picker pointer path, 1440/390/320px local Preview UI and exact-source emulator regressions passed; the new hostname is not an Authorized Domain, paid AI cumulative cost remains unbounded, and genuine new-runtime cloud offline/AI/Blob/200% zoom gates have not passed. **Do not publish the upgrade to production** or promote the draft. Preserve production `6ac2c370d1409615f07878bd`, its newer UMS and all sibling files/Functions/traffic/schedule; preserve every private pending/conflict on old origins. Future candidates must use the then-current complete production baseline. No shared rule widening, cap change, Supabase in Planner, DNS, MAIN or Tracker change.
 
