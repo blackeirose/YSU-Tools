@@ -81,11 +81,9 @@ async function generate(http: Http, env: Env, prompt: string, accounting: Accoun
   const testBudget = await reserveAiTestBudget(accounting.id, stage, "background", provider.name);
   const parts = [{ text: prompt }, ...(reference ? [{ inlineData: {
     mimeType: reference.mime, data: Buffer.from(reference.data).toString("base64") } }] : [])];
-  // Keep the image request to the documented generateContent surface. Image
-  // models may reject text-model controls such as candidateCount/output caps.
-  const body = { contents: [{ role: "user", parts }], generationConfig: {
-    responseModalities: ["TEXT", "IMAGE"],
-    responseFormat: { image: { aspectRatio: "3:2", imageSize: "1K" } } } };
+  // The image model defaults to text + 1K image output. Use the documented
+  // minimal generateContent shape while the gateway's prior 400 is unresolved.
+  const body = { contents: [{ role: "user", parts }] };
   const receipt = await beginAiUsage(accounting.namespace, accounting.ownerId,
     { ...trace, testBudgetReservedAfterMicrousd: testBudget.reservedAfterMicrousd, result: "sent-charge-unknown" });
   const response = await http(modelUrl(provider, "gemini-3.1-flash-lite-image"),

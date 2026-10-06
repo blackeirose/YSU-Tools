@@ -17,7 +17,8 @@ type Document = { schemaVersion: 1; campaign: typeof KEY; limitMicrousd: number;
 /** Worst-case admitted request at the provider's published rate on 2026-10-05.
  * Gateway input is limited to 200k tokens; direct Flash-Lite is limited to
  * 1,048,576 input tokens; direct Lite Image to 131,072. Output is explicitly
- * capped at 1,200/2,200 text tokens or 4,096 image tokens. The image bound
+ * capped at 1,200/2,200 text tokens; the image model has a hard 4,096-token
+ * output limit. The image bound
  * prices *every* output token at the $30/M image rate, including any text.
  * Search grounding is intentionally absent: model-chosen query fan-out has
  * no published maximum and cannot fit a hard per-request budget.

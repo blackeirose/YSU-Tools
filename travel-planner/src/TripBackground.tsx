@@ -4,6 +4,12 @@ import type { Trip } from "./model";
 type State = "none" | "running" | "ready" | "failed";
 type Status = { state: State; attempts?: number; error?: string; city?: string };
 const endpoint = "/travel-planner/api/background";
+// Draft deploys have separate private Blob stores. A new immutable Preview must
+// not silently repeat paid generation for a trip requested on an older deploy.
+export function shouldAutoStartBackground(namespace: string | undefined, requested: boolean,
+  state: State, confirmed: boolean, alreadySent: boolean) {
+  return namespace === "v1" && requested && state === "none" && confirmed && !alreadySent;
+}
 export function TripBackground({ trip, enabled, cloudReady, token }: {
   trip: Trip; enabled: boolean; cloudReady: boolean; token: () => Promise<string>;
 }) {
@@ -42,7 +48,8 @@ export function TripBackground({ trip, enabled, cloudReady, token }: {
         const data = await (await authenticated("status")).json() as Status;
         if (cancelled) return;
         setStatus(data); setError("");
-        if (data.state === "none" && confirmed && trip.backgroundRequested && autoSent.current !== `${trip.id}:${city?.name}`) {
+        if (shouldAutoStartBackground(import.meta.env.VITE_FIREBASE_NAMESPACE, !!trip.backgroundRequested,
+          data.state, confirmed, autoSent.current === `${trip.id}:${city?.name}`)) {
           autoSent.current = `${trip.id}:${city?.name}`;
           await authenticated("start", "POST");
           timer = window.setTimeout(() => void poll(), 3000);

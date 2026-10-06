@@ -11,6 +11,7 @@ vi.mock("../src/server/ai-test-budget", async (importOriginal) => ({
 import { readBackground, startBackground, backgroundStore } from "../src/server/background";
 import { beginAiUsage } from "../src/server/ai-ledger";
 import { reserveAiTestBudget } from "../src/server/ai-test-budget";
+import { shouldAutoStartBackground } from "../src/TripBackground";
 
 const tripId = "00000000-0000-4000-8000-000000000001";
 const request = (token = "owner") => new Request(`https://tools.ycsu.cc/travel-planner/api/background/start?tripId=${tripId}`,
@@ -84,9 +85,8 @@ function httpFor(options: { owner?: string; city?: boolean; cityName?: string; i
       } }] });
     }
     if (target.includes("/v1beta/models/gemini-3.1-flash-lite-image:generateContent")) {
-      const body = JSON.parse(String(init?.body)) as { contents: { parts: { text?: string }[] }[]; generationConfig: { responseModalities: string[]; responseFormat: { image: { aspectRatio: string; imageSize: string } } } };
-      expect(body.generationConfig).toEqual({ responseModalities: ["TEXT", "IMAGE"],
-        responseFormat: { image: { aspectRatio: "3:2", imageSize: "1K" } } });
+      const body = JSON.parse(String(init?.body)) as { contents: { parts: { text?: string }[] }[]; generationConfig?: unknown };
+      expect(body.generationConfig).toBeUndefined();
       prompts.push(body.contents[0].parts[0].text ?? "");
       images++;
       if (options.failSecond && images === 2) return new Response("", { status: 500 });
@@ -99,6 +99,13 @@ function httpFor(options: { owner?: string; city?: boolean; cityName?: string; i
 }
 
 describe("owner-only persistent background generation", () => {
+  it("does not automatically repeat a paid request on each isolated Preview deploy", () => {
+    expect(shouldAutoStartBackground("preview-v1", true, "none", true, false)).toBe(false);
+    expect(shouldAutoStartBackground("v1", true, "none", true, false)).toBe(true);
+    expect(shouldAutoStartBackground("v1", true, "ready", true, false)).toBe(false);
+    expect(shouldAutoStartBackground("v1", true, "none", true, true)).toBe(false);
+    expect(shouldAutoStartBackground("v1", false, "none", true, false)).toBe(false);
+  });
   it("does not generate landmarks or images if the private sent receipt cannot be written", async () => {
     vi.mocked(beginAiUsage).mockRejectedValueOnce(new Error("ledger-unavailable"));
     const fake = httpFor(), store = new MemoryStore();
