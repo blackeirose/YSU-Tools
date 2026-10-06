@@ -2,6 +2,7 @@ import { z } from "zod";
 import { aiProvider, modelUrl } from "./ai-provider";
 import { beginAiUsage, finishAiUsage } from "./ai-ledger";
 import { reserveAiTestBudget } from "./ai-test-budget";
+import { providerErrorDiagnostic } from "./provider-error";
 import { inTrip, relativeAmbiguous, relativeTarget, relativeUnsupported, travelClock } from "./travel-clock";
 import { placeInCity, searchPhoton } from "../place-search";
 
@@ -50,6 +51,24 @@ const actionSchema = z.object({
 }).refine((action) => action.kind !== "draft" || !!action.draftItems?.length,
   "完整草案需要逐項日期與名稱");
 export type AssistantAction = z.infer<typeof actionSchema>;
+const optionalActionFields = ["name", "itemId", "day", "time", "period", "draftItems", "transcript"] as const;
+const optionalDraftFields = ["time", "period", "notes"] as const;
+function stripEmptyOptionals(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const action = { ...value } as Record<string, unknown>;
+  // A null display message can be normalized; a missing message remains a
+  // schema failure so an incomplete provider response cannot trigger edits.
+  if (action.message === null) action.message = "請確認這項旅程操作";
+  for (const key of optionalActionFields) if (action[key] === null || action[key] === "") delete action[key];
+  if (Array.isArray(action.draftItems)) action.draftItems = action.draftItems.map((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return entry;
+    const draft = { ...entry } as Record<string, unknown>;
+    for (const key of optionalDraftFields) if (draft[key] === null || draft[key] === "") delete draft[key];
+    return draft;
+  });
+  return action;
+}
+export function parseAssistantAction(value: unknown) { return actionSchema.safeParse(stripEmptyOptionals(value)); }
 // Gemini's JSON MIME mode only guarantees parseable JSON. Constrain the action
 // shape at generation time as well, then keep Zod as the authoritative check.
 const assistantResponseSchema = {
@@ -57,7 +76,8 @@ const assistantResponseSchema = {
   properties: {
     kind: { type: "string", enum: ["add", "move", "edit_time", "candidate", "undo", "draft", "clarify", "suggest"] },
     message: { type: "string", description: "A short Traditional Chinese explanation of the proposed action or question." },
-    name: { type: "string" }, itemId: { type: "string" }, day: { type: "string" },
+    name: { type: "string" }, itemId: { type: "string", description: "For move/edit_time/candidate, copy selectedItem.id exactly; never invent an ID." },
+    day: { type: "string", description: "For dated actions, an in-trip YYYY-MM-DD destination date." },
     time: { type: "string" }, period: { type: "string", enum: ["上午", "下午", "晚上"] },
     draftItems: { type: "array", items: { type: "object", properties: {
       day: { type: "string" }, name: { type: "string" }, time: { type: "string" },
@@ -209,9 +229,13 @@ export async function geminiHandler(req: Request, env: Env, http: typeof fetch =
     ];
     if (input.audio) parts.push({ inlineData: { mimeType: input.audio.mime, data: input.audio.base64 } });
     if (input.image) parts.push({ inlineData: { mimeType: input.image.mime, data: input.image.base64 } });
+    const selectedActionSchema = input.selectedItem ? { ...assistantResponseSchema,
+      properties: { ...assistantResponseSchema.properties,
+        itemId: { type: "string", enum: [input.selectedItem.id],
+          description: "For an existing item, use this exact selectedItem.id." } } } : assistantResponseSchema;
     const requestBody = { systemInstruction: { parts: [{ text: instruction }] }, contents: [{ role: "user", parts }],
       generationConfig: { responseMimeType: "application/json", candidateCount: 1,
-        ...(input.mode === "assist" ? { responseJsonSchema: assistantResponseSchema } : {}),
+        ...(input.mode === "assist" ? { responseJsonSchema: selectedActionSchema } : {}),
         ...(input.mode === "explore" ? { responseJsonSchema: exploreResponseSchema } : {}),
         ...(input.mode === "vision" ? { responseJsonSchema: visionResponseSchema } : {}),
         maxOutputTokens: input.mode === "vision" || input.mode === "explore" ? 2200 : 1200 } };
@@ -228,8 +252,9 @@ export async function geminiHandler(req: Request, env: Env, http: typeof fetch =
       { method: "POST", headers: { "Content-Type": "application/json", "x-goog-api-key": provider.key },
         body: JSON.stringify(requestBody), signal: AbortSignal.timeout(45000) });
     if (!response.ok) {
+      const diagnostic = await providerErrorDiagnostic(response);
       await finishAiUsage(receipt, { ...trace, atUtc: new Date().toISOString(),
-        result: "http-error-charge-unknown", httpStatus: response.status });
+        result: "http-error-charge-unknown", httpStatus: response.status, ...diagnostic });
       return reply(502, { error: "Gemini 暫時無法完成；行程未變更", quota });
     }
     const output = await response.json() as { candidates?: { content?: { parts?: { text?: string }[] } }[];
@@ -244,8 +269,12 @@ export async function geminiHandler(req: Request, env: Env, http: typeof fetch =
     let parsed: unknown;
     try { parsed = JSON.parse(text); } catch { return reply(502, { error: "Gemini 輸出格式不完整，未執行任何動作", quota }); }
     if (input.mode === "assist") {
-      const action = actionSchema.safeParse(parsed);
-      if (!action.success) return reply(502, { error: "指令格式不正確，未執行任何動作", quota });
+      const action = parseAssistantAction(parsed);
+      if (!action.success) {
+        const field = action.error.issues[0]?.path.map(String).filter((part) =>
+          /^[A-Za-z][A-Za-z0-9]*$/.test(part)).slice(0, 2).join(".") || "action";
+        return reply(502, { error: `指令格式不正確（${field}）；未執行任何動作`, quota });
+      }
       if (input.audio && !action.data.transcript) return reply(502, { error: "語音辨識內容不完整，未執行動作", quota });
       const target = clock ? relativeTarget(input.audio ? action.data.transcript ?? input.query : input.query, clock) : null;
       if (input.audio && (relativeAmbiguous(action.data.transcript ?? "") || relativeUnsupported(action.data.transcript ?? "")))

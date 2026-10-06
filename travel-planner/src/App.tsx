@@ -1022,7 +1022,7 @@ export default function App() {
         </div>
       </header>
       <main className={viewMode === "view" ? "view-mode" : "edit-mode"}>
-        {trip && <TripBackground trip={trip} enabled={!demo && !!user && !!auth?.currentUser}
+        {trip && <TripBackground key={trip.id} trip={trip} enabled={!demo && !!user && !!auth?.currentUser}
           cloudReady={!!store?.isRemoteReady() && !store.snapshot.pending.length}
           token={async () => { if (!auth?.currentUser) throw new Error("登入已失效"); return auth.currentUser.getIdToken(); }} />}
         {recovery.current.size > 0 && (

@@ -10,6 +10,9 @@ export function shouldAutoStartBackground(namespace: string | undefined, request
   state: State, confirmed: boolean, alreadySent: boolean) {
   return namespace === "v1" && requested && state === "none" && confirmed && !alreadySent;
 }
+export function shouldPollAcceptedBackground(state: State, acceptedAt: number, now: number) {
+  return state === "none" && acceptedAt > 0 && now - acceptedAt < 120000;
+}
 export function TripBackground({ trip, enabled, cloudReady, token }: {
   trip: Trip; enabled: boolean; cloudReady: boolean; token: () => Promise<string>;
 }) {
@@ -19,6 +22,9 @@ export function TripBackground({ trip, enabled, cloudReady, token }: {
   const [error, setError] = useState("");
   const [refresh, setRefresh] = useState(0);
   const autoSent = useRef("");
+  const awaitingResult = useRef(0);
+  const activeTripId = useRef(trip.id);
+  activeTripId.current = trip.id;
   const city = trip.dayCities?.[trip.start];
   const confirmed = !!(city?.name && city.timezone && Number.isFinite(city.lat) && Number.isFinite(city.lng));
   useEffect(() => {
@@ -29,6 +35,7 @@ export function TripBackground({ trip, enabled, cloudReady, token }: {
   }, []);
   useEffect(() => {
     setStatus({ state: "none" }); setImages(null); setError(""); autoSent.current = "";
+    awaitingResult.current = 0;
   }, [trip.id]);
   useEffect(() => {
     if (!desktop || !enabled || !cloudReady) return;
@@ -47,11 +54,25 @@ export function TripBackground({ trip, enabled, cloudReady, token }: {
       try {
         const data = await (await authenticated("status")).json() as Status;
         if (cancelled) return;
+        // A just-accepted start can briefly read as "none" from Blob storage.
+        // Keep polling the existing job; never start a second paid request.
+        if (data.state === "none" && awaitingResult.current) {
+          if (shouldPollAcceptedBackground(data.state, awaitingResult.current, Date.now())) {
+            setStatus({ state: "running" });
+            timer = window.setTimeout(() => void poll(), 3000);
+            return;
+          }
+          setStatus({ state: "running" });
+          setError("背景工作狀態尚未更新；請稍後刷新確認，勿重複生成");
+          return;
+        } else if (data.state !== "running") awaitingResult.current = 0;
         setStatus(data); setError("");
         if (shouldAutoStartBackground(import.meta.env.VITE_FIREBASE_NAMESPACE, !!trip.backgroundRequested,
           data.state, confirmed, autoSent.current === `${trip.id}:${city?.name}`)) {
           autoSent.current = `${trip.id}:${city?.name}`;
           await authenticated("start", "POST");
+          if (cancelled || activeTripId.current !== trip.id) return;
+          awaitingResult.current = Date.now();
           timer = window.setTimeout(() => void poll(), 3000);
         } else if (data.state === "running") timer = window.setTimeout(() => void poll(), 12000);
         else if (data.state === "ready") {
@@ -69,14 +90,20 @@ export function TripBackground({ trip, enabled, cloudReady, token }: {
   }, [images]);
   if (!desktop || !enabled) return null;
   const retry = async () => {
+    const requestedTripId = trip.id;
     try {
       setError("");
       const response = await fetch(`${endpoint}/start?tripId=${encodeURIComponent(trip.id)}`, {
         method: "POST", headers: { Authorization: `Bearer ${await token()}` }, cache: "no-store" });
+      if (activeTripId.current !== requestedTripId) return;
       if (!response.ok && response.status !== 202) throw new Error("背景重試未開始；請稍後再試");
+      awaitingResult.current = Date.now();
       setStatus({ state: "running" });
       setRefresh((value) => value + 1);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "背景重試失敗"); }
+    } catch (cause) {
+      if (activeTripId.current === requestedTripId)
+        setError(cause instanceof Error ? cause.message : "背景重試失敗");
+    }
   };
   return <>
     {images && <div className="trip-background" aria-hidden="true">

@@ -13,8 +13,9 @@ export type AiUsageEvent = {
     "PERMISSION_DENIED" | "RESOURCE_EXHAUSTED" | "UNAVAILABLE" | "INTERNAL";
   providerErrorCategory?: "unknown-field" | "unsupported-modality" | "unsupported-model" |
     "invalid-aspect-ratio" | "quota" | "unclassified";
-  providerErrorField?: "responseFormat" | "imageConfig" | "responseModalities" |
-    "candidateCount" | "maxOutputTokens" | "imageSize" | "model";
+  providerErrorField?: "responseFormat" | "responseJsonSchema" | "responseSchema" | "imageConfig" |
+    "responseModalities" | "candidateCount" | "maxOutputTokens" | "imageSize" |
+    "inlineData" | "mimeType" | "model";
   dailyReservationAfterMicrousd?: number;
   testBudgetReservedAfterMicrousd?: number;
   usage?: AiUsage;

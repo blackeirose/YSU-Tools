@@ -11,7 +11,7 @@ vi.mock("../src/server/ai-test-budget", async (importOriginal) => ({
 import { readBackground, startBackground, backgroundStore } from "../src/server/background";
 import { beginAiUsage, finishAiUsage } from "../src/server/ai-ledger";
 import { reserveAiTestBudget } from "../src/server/ai-test-budget";
-import { shouldAutoStartBackground } from "../src/TripBackground";
+import { shouldAutoStartBackground, shouldPollAcceptedBackground } from "../src/TripBackground";
 
 const tripId = "00000000-0000-4000-8000-000000000001";
 const request = (token = "owner") => new Request(`https://tools.ycsu.cc/travel-planner/api/background/start?tripId=${tripId}`,
@@ -142,6 +142,13 @@ describe("owner-only persistent background generation", () => {
     expect(shouldAutoStartBackground("v1", true, "ready", true, false)).toBe(false);
     expect(shouldAutoStartBackground("v1", true, "none", true, true)).toBe(false);
     expect(shouldAutoStartBackground("v1", false, "none", true, false)).toBe(false);
+  });
+  it("keeps checking an accepted job through a transient empty read without another start", () => {
+    const acceptedAt = Date.UTC(2030, 0, 1);
+    expect(shouldPollAcceptedBackground("none", acceptedAt, acceptedAt + 3000)).toBe(true);
+    expect(shouldPollAcceptedBackground("running", acceptedAt, acceptedAt + 3000)).toBe(false);
+    expect(shouldPollAcceptedBackground("ready", acceptedAt, acceptedAt + 3000)).toBe(false);
+    expect(shouldPollAcceptedBackground("none", acceptedAt, acceptedAt + 120000)).toBe(false);
   });
   it("does not generate landmarks or images if the private sent receipt cannot be written", async () => {
     vi.mocked(beginAiUsage).mockRejectedValueOnce(new Error("ledger-unavailable"));

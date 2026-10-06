@@ -8,8 +8,8 @@ vi.mock("../src/server/ai-test-budget", async (importOriginal) => ({
   reserveAiTestBudget: vi.fn(async () => ({ upperBoundMicrousd: 60_000, reservedAfterMicrousd: 60_000,
     remainingMicrousd: 940_000 })),
 }));
-import { gatewayReady, geminiHandler, reserveQuota } from "../src/server/gemini";
-import { beginAiUsage } from "../src/server/ai-ledger";
+import { gatewayReady, geminiHandler, parseAssistantAction, reserveQuota } from "../src/server/gemini";
+import { beginAiUsage, finishAiUsage } from "../src/server/ai-ledger";
 import { reserveAiTestBudget } from "../src/server/ai-test-budget";
 
 const vars: Record<string, string> = {
@@ -34,6 +34,69 @@ const trip = () => Response.json({ fields: { ownerId: { stringValue: "owner" }, 
   timezone: { stringValue: "Asia/Tokyo" } } });
 
 describe("Gemini paid boundary", () => {
+  it("normalizes only empty optional action fields while retaining selected-ID and date validation", () => {
+    const id = crypto.randomUUID();
+    const action = parseAssistantAction({ kind: "move", message: null, itemId: id, day: "2030-01-02",
+      name: "", time: null, period: null, draftItems: null });
+    expect(action.success).toBe(true);
+    if (action.success) expect(action.data).toMatchObject({ kind: "move", itemId: id,
+      day: "2030-01-02", message: "請確認這項旅程操作" });
+    expect(parseAssistantAction({ kind: "move", itemId: "wrong-id", day: "2030-01-02" }).success).toBe(false);
+    expect(parseAssistantAction({ kind: "move", itemId: id, day: "tomorrow" }).success).toBe(false);
+  });
+  it("constrains a paid move proposal to the exact selected item in the provider schema", async () => {
+    const selectedId = crypto.randomUUID();
+    let schema: { properties?: { itemId?: { enum?: string[] } } } = {};
+    const http = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("accounts:lookup")) return owner();
+      if (url.includes("/records/")) return trip();
+      if (url.includes("/aiRequests/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/")) return new Response("", { status: 404 });
+      schema = JSON.parse(String(init?.body)).generationConfig.responseJsonSchema;
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({
+        kind: "move", message: "移到隔日", itemId: selectedId, day: "2030-01-02", time: null,
+      }) }] } }] });
+    };
+    const response = await geminiHandler(new Request("https://preview.test/travel-planner/api/ai", {
+      method: "POST", headers: { Authorization: "Bearer synthetic-token" }, body: JSON.stringify({
+        mode: "assist", tripId: crypto.randomUUID(), requestId: crypto.randomUUID(),
+        query: "請將所選卡片移到 2030-01-02", selectedDay: "2030-01-01",
+        selectedItem: { id: selectedId, name: "合成景點" },
+      }),
+    }), env, http as typeof fetch);
+    expect(response.status).toBe(200);
+    expect(schema.properties?.itemId?.enum).toEqual([selectedId]);
+    expect((await response.json()).action).toMatchObject({ kind: "move", itemId: selectedId,
+      day: "2030-01-02" });
+  });
+  it("keeps a vision HTTP 400 charge-unknown and records only allowlisted provider diagnostics", async () => {
+    vi.mocked(finishAiUsage).mockClear();
+    const http = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("accounts:lookup")) return owner();
+      if (url.includes("/records/")) return trip();
+      if (url.includes("/aiRequests/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/")) return new Response("", { status: 404 });
+      return Response.json({ error: { status: "INVALID_ARGUMENT",
+        message: "Unknown name 'responseJsonSchema' at 'generation_config': private fixture text" },
+      }, { status: 400 });
+    };
+    const result = await geminiHandler(new Request("https://preview.test/travel-planner/api/ai", {
+      method: "POST", headers: { Authorization: "Bearer synthetic-token" }, body: JSON.stringify({
+        mode: "vision", tripId: crypto.randomUUID(), requestId: crypto.randomUUID(), query: "synthetic image",
+        image: { mime: "image/png", base64: "AAAA" },
+      }),
+    }), env, http as typeof fetch);
+    expect(result.status).toBe(502);
+    const event = vi.mocked(finishAiUsage).mock.lastCall?.[1];
+    expect(event).toMatchObject({ result: "http-error-charge-unknown", httpStatus: 400,
+      providerErrorStatus: "INVALID_ARGUMENT", providerErrorCategory: "unknown-field",
+      providerErrorField: "responseJsonSchema" });
+    expect(JSON.stringify(event)).not.toContain("private fixture text");
+  });
   it("does not call the provider when the one-time budget cannot reserve", async () => {
     vi.mocked(reserveAiTestBudget).mockRejectedValueOnce(new Error("test-budget-exhausted"));
     let paidCalls = 0;
