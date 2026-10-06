@@ -1,6 +1,12 @@
 # YSU Travel Planner
 
-## Current upgrade checkpoint — 2026-10-06 03:32 UTC
+## Current upgrade checkpoint — 2026-10-06 21:36 UTC
+
+Product PR #3 runtime `4ccd80297c8c2ac297a80ed2777a0ba2b2ecd62b` is on [final isolated complete-host Preview `6ac56a1df33fad04f496bf40`](https://6ac56a1df33fad04f496bf40--ycsu-tools-router.netlify.app/travel-planner/); [CI 37534792620](https://github.com/blackeirose/YSU-Tools/actions/runs/37534792620) and focused independent source review passed. Canonical publisher preserved 322 baseline files/six sibling Functions; production `6ac2c370d1409615f07878bd` unchanged. Owner approved same-campaign US$2 cumulative cap, US$1/day unchanged, old US$0.66 conservative reservation and unknown charges retained; no new paid call. Exact Firebase hostname, live two-context offline conflicts, AI modes/two-panel private Blob, true 200% zoom and post-release smoke remain open. **Full Gate NOT PASS.**
+
+---
+
+## Historical upgrade checkpoint — 2026-10-06 03:32 UTC
 
 UX/Gemini Draft [PR #3](https://github.com/blackeirose/YSU-Tools/pull/3) runtime `58fd9d3a91f4f1c6514baa55dea01d05d42ed08a` is on the [isolated complete-host Preview](https://6ac46a5f1273483233b160e0--ycsu-tools-router.netlify.app/travel-planner/) (`6ac46a5f1273483233b160e0`), assembled by the canonical `social-capture-tool` publisher. Production is still `6ac2c370d1409615f07878bd` with the newer UMS. Exact-source [CI 37408729366](https://github.com/blackeirose/YSU-Tools/actions/runs/37408729366), focused independent source review, 326-file/nine-Function remote validation, exact-host Auth readback, two independent signed-in browser contexts, synthetic cloud add/move/Undo and deep reload pass. Preview login no longer auto-starts a paid background. Full Gate is **not** passed: live per-tab offline conflicts, audio/vision, a successful two-panel private background, true 200% zoom and production AI smoke remain open. Background photo returned HTTP 400 on the prior image request; the final 3:2 `imageConfig` is source/test verified but live unverified. New US$1 AI campaign reserves US$0.66; US$0.34 remains, which cannot cover a complete fresh background plus remaining modalities. Historical cost remains unknown. Preserve every sibling release and old-origin pending/conflict; do not publish, use Supabase in Planner, or update MAIN/Tracker. See [current Gate](docs/UPGRADE_GATE_2026-10-03.md). All dated checkpoints below are historical.
 
