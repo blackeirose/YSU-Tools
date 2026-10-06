@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Trip } from "./model";
 
 type State = "none" | "running" | "ready" | "failed";
-type Status = { state: State; attempts?: number; error?: string; city?: string };
+type Status = { state: State; attempts?: number; error?: string; city?: string; retryAllowed?: boolean };
 const endpoint = "/travel-planner/api/background";
 // Draft deploys have separate private Blob stores. A new immutable Preview must
 // not silently repeat paid generation for a trip requested on an older deploy.
@@ -87,7 +87,7 @@ export function TripBackground({ trip, enabled, cloudReady, token }: {
         !confirmed ? "地區背景：請先設定第一天城市與位置" :
         status.state === "running" ? "地區背景生成中；可以繼續規劃" :
           status.state === "failed" ? `地區背景：${status.error || "暫時失敗"}` : "地區背景尚未生成"}
-      {confirmed && cloudReady && (status.state === "none" || status.state === "failed") &&
+      {confirmed && cloudReady && (status.state === "none" || status.state === "failed" && status.retryAllowed !== false) &&
         <button type="button" onClick={() => void retry()}>{status.state === "failed" ? "重試" : "生成背景"}</button>}
       {error && <span className="error">{error}</span>}
     </div>

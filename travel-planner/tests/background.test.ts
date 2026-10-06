@@ -9,7 +9,7 @@ vi.mock("../src/server/ai-test-budget", async (importOriginal) => ({
     remainingMicrousd: 820_000 })),
 }));
 import { readBackground, startBackground, backgroundStore } from "../src/server/background";
-import { beginAiUsage } from "../src/server/ai-ledger";
+import { beginAiUsage, finishAiUsage } from "../src/server/ai-ledger";
 import { reserveAiTestBudget } from "../src/server/ai-test-budget";
 import { shouldAutoStartBackground } from "../src/TripBackground";
 
@@ -39,7 +39,7 @@ class MemoryStore {
 }
 function httpFor(options: { owner?: string; city?: boolean; cityName?: string; integerCoordinates?: boolean; failSecond?: boolean;
   unsourced?: boolean; wrongCity?: boolean; crossCityTitle?: boolean; oneInvalidAmongFour?: boolean;
-  bilingualLandmark?: boolean } = {}) {
+  bilingualLandmark?: boolean; failPhoto400?: boolean; failSecond400?: boolean } = {}) {
   let images = 0, quota = 0, landmarks = 0, locations = 0;
   const prompts: string[] = [];
   const http = (async (url: string | URL | Request, init?: RequestInit) => {
@@ -89,6 +89,14 @@ function httpFor(options: { owner?: string; city?: boolean; cityName?: string; i
       expect(body.generationConfig).toEqual({ imageConfig: { aspectRatio: "3:2" } });
       prompts.push(body.contents[0].parts[0].text ?? "");
       images++;
+      if (options.failPhoto400 && images === 1) return Response.json({ usageMetadata: {
+        promptTokenCount: 246, candidatesTokenCount: 0, totalTokenCount: 246 }, error: {
+        code: 400, status: "INVALID_ARGUMENT",
+        message: 'Invalid JSON payload received. Unknown name "responseFormat" at generationConfig. Private itinerary: secret-note',
+      } }, { status: 400 });
+      if (options.failSecond400 && images === 2) return Response.json({ error: {
+        code: 400, status: "INVALID_ARGUMENT", message: 'Unknown name "imageConfig" at generationConfig',
+      } }, { status: 400 });
       if (options.failSecond && images === 2) return new Response("", { status: 500 });
       return Response.json({ candidates: [{ content: { parts: [{ inlineData: {
         mimeType: "image/jpeg", data: Buffer.alloc(1200, 7).toString("base64") } }] } }] });
@@ -99,6 +107,35 @@ function httpFor(options: { owner?: string; city?: boolean; cityName?: string; i
 }
 
 describe("owner-only persistent background generation", () => {
+  it("records only allowlisted 400 diagnostics and refuses the same paid retry", async () => {
+    const store = new MemoryStore(), fake = httpFor({ failPhoto400: true });
+    const provided = store as unknown as ReturnType<typeof backgroundStore>;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      expect((await startBackground(request(), env, fake.http, provided)).status).toBe(502);
+      expect(fake.counts()).toEqual({ images: 1, quota: 1, landmarks: 1 });
+      const event = vi.mocked(finishAiUsage).mock.calls.find(([, entry]) => entry.stage === "photo")?.[1];
+      expect(event).toMatchObject({ result: "http-error-charge-unknown", httpStatus: 400,
+        providerErrorStatus: "INVALID_ARGUMENT", providerErrorCategory: "unknown-field",
+        providerErrorField: "responseFormat", usage: { promptTokens: 246, outputTokens: 0, totalTokens: 246 } });
+      expect(JSON.stringify(event)).not.toContain("secret-note");
+      expect(JSON.stringify(warn.mock.calls)).not.toContain("secret-note");
+      const state = await readBackground(new Request(`https://tools.ycsu.cc/travel-planner/api/background?tripId=${tripId}`,
+        { headers: { Authorization: "Bearer owner" } }), env, fake.http, provided);
+      expect((await state.json()).retryAllowed).toBe(false);
+      expect((await startBackground(request(), env, fake.http, provided)).status).toBe(409);
+      expect(fake.counts()).toEqual({ images: 1, quota: 1, landmarks: 1 });
+    } finally { warn.mockRestore(); }
+  });
+  it("retains a successful photo when relief gets 400 and blocks only the identical retry", async () => {
+    const store = new MemoryStore(), fake = httpFor({ failSecond400: true });
+    const provided = store as unknown as ReturnType<typeof backgroundStore>;
+    expect((await startBackground(request(), env, fake.http, provided)).status).toBe(502);
+    expect(fake.counts().images).toBe(2);
+    expect([...store.values.keys()].some((key) => key.endsWith("/top"))).toBe(true);
+    expect((await startBackground(request(), env, fake.http, provided)).status).toBe(409);
+    expect(fake.counts().images).toBe(2);
+  });
   it("does not automatically repeat a paid request on each isolated Preview deploy", () => {
     expect(shouldAutoStartBackground("preview-v1", true, "none", true, false)).toBe(false);
     expect(shouldAutoStartBackground("v1", true, "none", true, false)).toBe(true);

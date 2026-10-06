@@ -9,6 +9,12 @@ export type AiUsageEvent = {
   atUtc: string;
   result: string;
   httpStatus?: number;
+  providerErrorStatus?: "INVALID_ARGUMENT" | "FAILED_PRECONDITION" | "NOT_FOUND" |
+    "PERMISSION_DENIED" | "RESOURCE_EXHAUSTED" | "UNAVAILABLE" | "INTERNAL";
+  providerErrorCategory?: "unknown-field" | "unsupported-modality" | "unsupported-model" |
+    "invalid-aspect-ratio" | "quota" | "unclassified";
+  providerErrorField?: "responseFormat" | "imageConfig" | "responseModalities" |
+    "candidateCount" | "maxOutputTokens" | "imageSize" | "model";
   dailyReservationAfterMicrousd?: number;
   testBudgetReservedAfterMicrousd?: number;
   usage?: AiUsage;
@@ -36,6 +42,9 @@ export function aiUsageEntry(event: AiUsageEvent) {
   return { schemaVersion: 1, id: event.id, mode: event.mode, stage: event.stage,
     provider: event.provider, model: event.model, atUtc: event.atUtc, result: event.result,
     ...(event.httpStatus === undefined ? {} : { httpStatus: event.httpStatus }),
+    ...(event.providerErrorStatus ? { providerErrorStatus: event.providerErrorStatus } : {}),
+    ...(event.providerErrorCategory ? { providerErrorCategory: event.providerErrorCategory } : {}),
+    ...(event.providerErrorField ? { providerErrorField: event.providerErrorField } : {}),
     ...(event.dailyReservationAfterMicrousd === undefined ? {} :
       { dailyReservationAfterMicrousd: event.dailyReservationAfterMicrousd }),
     ...(event.testBudgetReservedAfterMicrousd === undefined ? {} :
