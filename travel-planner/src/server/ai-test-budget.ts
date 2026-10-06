@@ -5,11 +5,11 @@ import { getStore } from "@netlify/blobs";
 // day, namespace, deploy, or request ID. Missing/corrupt storage fails closed.
 const KEY = "ux-gemini-20261005-usd1";
 const INITIAL_LIMIT_MICROUSD = 1_000_000;
-export const TEST_BUDGET_MICROUSD = 1_000_000;
+export const TEST_BUDGET_MICROUSD = 2_000_000;
 const DAILY_TEST_BUDGET_MICROUSD = 1_000_000;
 // An incremental grant must change both this cap and the audit label in one
 // reviewed source commit. Until then, the existing campaign cannot expand.
-const INCREMENTAL_GRANT_LABEL = "";
+const INCREMENTAL_GRANT_LABEL = "Owner approval 2026-10-06: add at most USD 1.00 for remaining Preview acceptance, one justified retry, and post-release smoke; daily USD 1.00 unchanged";
 export const aiTestBudgetStore = () => getStore({ name: "travel-planner-ai-test-budget-v1", consistency: "strong" });
 type Store = ReturnType<typeof aiTestBudgetStore>;
 type Stage = "inference" | "landmarks" | "photo" | "relief";
