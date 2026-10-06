@@ -6,6 +6,7 @@ import { getStore } from "@netlify/blobs";
 const KEY = "ux-gemini-20261005-usd1";
 const INITIAL_LIMIT_MICROUSD = 1_000_000;
 export const TEST_BUDGET_MICROUSD = 1_000_000;
+const DAILY_TEST_BUDGET_MICROUSD = 1_000_000;
 // An incremental grant must change both this cap and the audit label in one
 // reviewed source commit. Until then, the existing campaign cannot expand.
 const INCREMENTAL_GRANT_LABEL = "";
@@ -59,7 +60,9 @@ function valid(doc: unknown, authorizedLimit: number): doc is Document {
     value.reservedMicrousd! <= value.limitMicrousd && Array.isArray(value.entries) &&
     value.entries.every((entry) => entry && /^[0-9a-f-]{36}$/i.test(entry.id) &&
       ["inference", "landmarks", "photo", "relief"].includes(entry.stage) &&
-      Number.isSafeInteger(entry.upperBoundMicrousd) && entry.upperBoundMicrousd > 0) &&
+      Number.isSafeInteger(entry.upperBoundMicrousd) && entry.upperBoundMicrousd > 0 &&
+      typeof entry.atUtc === "string" && /^\d{4}-\d\d-\d\dT.*Z$/.test(entry.atUtc) &&
+      !Number.isNaN(Date.parse(entry.atUtc))) &&
     value.entries.reduce((sum, entry) => sum + entry.upperBoundMicrousd, 0) === value.reservedMicrousd;
 }
 
@@ -72,8 +75,15 @@ export function nextBudgetDocument(before: unknown, entry: Entry,
   const current = before as Document;
   if (current.entries.some((old) => old.id === entry.id && old.stage === entry.stage))
     throw new Error("test-budget-duplicate");
+  if (!/^\d{4}-\d\d-\d\dT.*Z$/.test(entry.atUtc) || Number.isNaN(Date.parse(entry.atUtc)))
+    throw new Error("test-budget-date");
   if (current.reservedMicrousd + entry.upperBoundMicrousd > authorizedLimit)
     throw new Error("test-budget-exhausted");
+  const day = entry.atUtc.slice(0, 10);
+  const dailyReserved = current.entries.reduce((sum, old) =>
+    sum + (old.atUtc.slice(0, 10) === day ? old.upperBoundMicrousd : 0), 0);
+  if (dailyReserved + entry.upperBoundMicrousd > DAILY_TEST_BUDGET_MICROUSD)
+    throw new Error("test-budget-daily-exhausted");
   if (current.limitMicrousd < authorizedLimit && !grantAuthorization.trim())
     throw new Error("test-budget-grant-unapproved");
   const grantHistory = current.limitMicrousd < authorizedLimit
