@@ -5,7 +5,9 @@ import { callUpperBoundMicrousd, nextBudgetDocument, reserveAiTestBudget, TEST_B
 type Store = ReturnType<typeof aiTestBudgetStore>;
 function memoryStore() {
   let value: unknown = { schemaVersion: 1, campaign: "ux-gemini-20261005-usd1",
-    limitMicrousd: 1_000_000, reservedMicrousd: 0, entries: [] }, etag = 1;
+    limitMicrousd: 2_000_000, reservedMicrousd: 0, entries: [],
+    grantHistory: [{ fromMicrousd: 1_000_000, toMicrousd: 2_000_000,
+      atUtc: "2026-10-06T12:00:00.000Z", authorization: "synthetic first grant" }] }, etag = 1;
   const store = {
     getWithMetadata: async () => value === null ? null : { data: value, etag: String(etag) },
     setJSON: async (_key: string, data: unknown, options: { onlyIfNew?: boolean; onlyIfMatch?: string }) => {
@@ -41,24 +43,34 @@ describe("one-time cross-deploy AI test grant", () => {
     expect(last.reservedAfterMicrousd).toBe(480_000);
     expect((read() as { entries: unknown[] }).entries).toHaveLength(4);
   });
-  it("records the approved increment atomically against the existing seven-entry campaign", async () => {
+  it("records the second approved increment atomically against an existing campaign", async () => {
     const { store, read, corrupt } = memoryStore();
-    const entries = [60_000, 180_000, 60_000, 60_000, 60_000, 180_000, 60_000]
-      .map((upperBoundMicrousd, index) => ({ id: id(index + 1), stage: "inference" as const,
-        mode: "assist" as const, upperBoundMicrousd,
+    const entries = [180_000, 180_000, 180_000, 180_000, 60_000, 60_000,
+      60_000, 60_000, 60_000, 60_000, 60_000, 60_000]
+      .map((upperBoundMicrousd, index) => ({ id: id(index + 1),
+        stage: index < 4 ? "photo" as const : "inference" as const,
+        mode: index < 4 ? "background" as const : "assist" as const, upperBoundMicrousd,
         atUtc: index < 4 ? "2026-10-05T12:00:00.000Z" : "2026-10-06T12:00:00.000Z" }));
+    const firstGrant = { fromMicrousd: 1_000_000, toMicrousd: 2_000_000,
+      atUtc: "2026-10-06T12:00:00.000Z", authorization: "synthetic first grant" };
     corrupt({ schemaVersion: 1, campaign: "ux-gemini-20261005-usd1",
-      limitMicrousd: 1_000_000, reservedMicrousd: 660_000, entries });
-    const result = await reserveAiTestBudget(id(8), "inference", "assist", "netlify-gateway", false, store);
+      limitMicrousd: 2_000_000, reservedMicrousd: 1_200_000, entries,
+      grantHistory: [firstGrant] });
+    const result = await reserveAiTestBudget(id(13), "inference", "assist", "netlify-gateway", false, store);
     const after = read() as { limitMicrousd: number; reservedMicrousd: number;
       entries: typeof entries; grantHistory: Array<{ fromMicrousd: number; toMicrousd: number;
         authorization: string }> };
-    expect(result.reservedAfterMicrousd).toBe(720_000);
-    expect(after.limitMicrousd).toBe(2_000_000);
-    expect(after.entries.slice(0, 7)).toEqual(entries);
-    expect(after.grantHistory).toHaveLength(1);
-    expect(after.grantHistory[0]).toMatchObject({ fromMicrousd: 1_000_000,
-      toMicrousd: 2_000_000, authorization: expect.stringContaining("Owner approval 2026-10-06") });
+    expect(result.reservedAfterMicrousd).toBe(1_260_000);
+    expect(after.limitMicrousd).toBe(2_600_000);
+    expect(after.entries.slice(0, 12)).toEqual(entries);
+    expect(after.grantHistory).toHaveLength(2);
+    expect(after.grantHistory[0]).toEqual(firstGrant);
+    expect(after.grantHistory[1]).toMatchObject({ fromMicrousd: 2_000_000,
+      toMicrousd: 2_600_000, authorization: expect.stringContaining("USD 0.60") });
+    corrupt({ schemaVersion: 1, campaign: "ux-gemini-20261005-usd1",
+      limitMicrousd: 1_000_000, reservedMicrousd: 0, entries: [] });
+    await expect(reserveAiTestBudget(id(14), "inference", "assist", "netlify-gateway", false, store))
+      .rejects.toThrow("prior-grant-missing");
   });
   it("serializes parallel calls and refuses a call that cannot fit", async () => {
     const { store, read } = memoryStore();
@@ -108,6 +120,29 @@ describe("one-time cross-deploy AI test grant", () => {
     expect(() => nextBudgetDocument({ ...granted, grantHistory: [] },
       { ...next, id: id(10) }, 2_000_000, "")).toThrow("corrupt");
   });
+  it("keeps the first grant and all entries if a second grant is later authorized", () => {
+    const previous = Array.from({ length: 12 }, (_, index) => ({ id: id(index + 1),
+      stage: index < 4 ? "photo" as const : "inference" as const,
+      mode: index < 4 ? "background" as const : "assist" as const,
+      upperBoundMicrousd: index < 4 ? 180_000 : 60_000,
+      atUtc: index < 4 ? "2026-10-05T12:00:00.000Z" : "2026-10-06T12:00:00.000Z" }));
+    const firstGrant = { fromMicrousd: 1_000_000, toMicrousd: 2_000_000,
+      atUtc: "2026-10-06T12:00:00.000Z", authorization: "synthetic first grant" };
+    const before = { schemaVersion: 1 as const, campaign: "ux-gemini-20261005-usd1",
+      limitMicrousd: 2_000_000, reservedMicrousd: 1_200_000,
+      entries: previous, grantHistory: [firstGrant] };
+    const next = { id: id(13), stage: "photo" as const, mode: "background" as const,
+      upperBoundMicrousd: 180_000, atUtc: "2026-10-07T00:00:00.000Z" };
+    expect(() => nextBudgetDocument(before, next, 2_600_000, ""))
+      .toThrow("grant-unapproved");
+    const after = nextBudgetDocument(before, next, 2_600_000, "synthetic second grant");
+    expect(after.entries.slice(0, 12)).toEqual(previous);
+    expect(after.reservedMicrousd).toBe(1_380_000);
+    expect(after.grantHistory).toEqual([firstGrant, { fromMicrousd: 2_000_000,
+      toMicrousd: 2_600_000, atUtc: next.atUtc, authorization: "synthetic second grant" }]);
+    expect(() => nextBudgetDocument(after, { ...next, id: id(14) }, 2_000_000, ""))
+      .toThrow("corrupt"); // rollback cannot erase or ignore the new grant
+  });
   it("applies the published worst-case cap per UTC day even after a campaign grant", () => {
     const dayOne = "2026-10-06T23:59:59.000Z";
     const dayTwo = "2026-10-07T00:00:00.000Z";
@@ -130,4 +165,5 @@ describe("one-time cross-deploy AI test grant", () => {
       next, 2_000_000, "")).toThrow("corrupt");
   });
 });
+
 
