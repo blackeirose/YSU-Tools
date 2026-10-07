@@ -1,6 +1,12 @@
 # Decisions
 
-## Current Full Gate decision — 2026-10-07 UTC
+## Current Full Gate decision — 2026-10-07 06:50 UTC
+
+Keep [runtime `601cb065`](https://github.com/blackeirose/YSU-Tools/commit/601cb065365425b705e86d2292787247a24d4fe3) on isolated canonical complete-host [Preview `6ac5eb36716fa0a41443535b`](https://6ac5eb36716fa0a41443535b--ycsu-tools-router.netlify.app/travel-planner/); [CI 37582701804](https://github.com/blackeirose/YSU-Tools/actions/runs/37582701804), scoped source review and remote complete-host validation pass. Production remains `6ac2c370d1409615f07878bd` and **Full Gate remains NOT PASS**. The earlier live vision request failed HTTP 400/`INVALID_ARGUMENT` with no field-level message; its US$0.06 reservation remains counted. Current campaign ledger is 13 entries/US$1.26 conservative reserved against the Owner-approved US$2.60 cumulative cap, with US$1.00 UTC daily cap unchanged and actual billing unknown. New vision request format has not yet passed a live provider call. Authorize only the new exact Firebase Preview hostname after action-time confirmation, then test live cloud conflicts, AI/private Blob and real zoom. Conditional production release remains authorized only after necessary Preview Gate passes, through the reviewed complete-host publisher and a freshly read baseline; no sibling, private data or budget reset.
+
+---
+
+## Historical Full Gate decision — 2026-10-07 UTC
 
 Keep executable [product `4c62bec6e50a56164c5ab85246869d1171bb358f`](https://github.com/blackeirose/YSU-Tools/commit/4c62bec6e50a56164c5ab85246869d1171bb358f) on canonical isolated complete-host [Preview `6ac5ce500adc8a3a5baff6fd`](https://6ac5ce500adc8a3a5baff6fd--ycsu-tools-router.netlify.app/travel-planner/), with source-matched [CI 37571986648](https://github.com/blackeirose/YSU-Tools/actions/runs/37571986648) and focused source review passed. Production deploy remains `6ac2c370d1409615f07878bd` at latest readback; this is not a fixed release baseline. **Full Gate NOT PASS** until the exact Firebase hostname is approved and read back, final-host Auth and two independent contexts work, real single-tab offline conflict recovery is observed, necessary current AI/private Blob flows pass, and true zoom is checked. Old-host evidence retains only its documented scope.
 
