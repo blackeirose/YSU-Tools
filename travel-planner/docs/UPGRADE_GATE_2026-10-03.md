@@ -1,6 +1,40 @@
 # Travel Planner UX / Gemini upgrade — Full Gate
 
-## Current candidate — 2026-10-06 23:45 UTC
+## Current ledger reconciliation — 2026-10-07 04:19 UTC
+
+**Full Gate remains NOT PASS; production remains Netlify deploy `6ac2c370d1409615f07878bd`. No new paid call or production change was made in this reconciliation.** The immutable current candidate remains product runtime [`3c97b2d`](https://github.com/blackeirose/YSU-Tools/commit/3c97b2df1b425a98732df9fe5d066ef3097b1841), [CI 37545390444](https://github.com/blackeirose/YSU-Tools/actions/runs/37545390444) PASS, complete-host [Preview `6ac584df1801b9eafb089249`](https://6ac584df1801b9eafb089249--ycsu-tools-router.netlify.app/travel-planner/), publisher executable [`9ef2756`](https://github.com/blackeirose/social-capture-tool/commit/9ef2756311c1d5dfff41debb1199f1cec995da9c). The final hostname is not yet authorized for Firebase sign-in. The signed-in older Preview `6ac56a1df33fad04f496bf40` is a distinct runtime (`4ccd802`).
+
+Read-only reconciliation of the **five new permanent campaign reservations** after the original seven, using the site-wide Netlify Blob budget, owner-scoped request receipts and deploy-scoped private background store (times UTC; no prompts, image bytes or owner identifiers are recorded here):
+
+| Reserved at UTC 2026-10-06 | Older Preview mode/stage | Provider outcome / safe usage | Conservative reservation | Durable result |
+| --- | --- | --- | ---: | --- |
+| 22:38:03 | Assistant inference | Provider HTTP 200; 990 input / 115 output tokens. App-level action was not accepted under the older parser. | US$0.06 | No accepted action evidence; current parser changed, so end-to-end retest required. |
+| 22:45:09 | Vision inference | Provider HTTP 400; response body/error code was not retained by that runtime; possible charge remains unknown. | US$0.06 | No imported rows; current error diagnosis is safer, but the vision request shape did not change. Do not assert a fix or blindly repeat the same request. |
+| 22:51:40 | Background landmarks | Provider HTTP 200; 246 input / 177 output tokens reported. | US$0.06 | Verified landmark stage completed. |
+| 22:51:49 | Background photo | Provider HTTP 200; 122 input / 1,120 output tokens reported. | US$0.18 | Private upper panel retained. |
+| 22:51:54 | Background relief | Provider HTTP 200; 1,253 input / 1,120 output tokens reported. | US$0.18 | Private lower panel retained. |
+
+The background job is **ready after one attempt**; the older Preview's deploy-scoped private Blob has upper/lower objects of about 200.3/186.9 KB. Authenticated refresh on that same older Preview displayed `地區背景 · Tokyo · 攝影／紙雕` again with no new generation request. This verifies real generation and same-origin persistence for `4ccd802`, **not** independent-context retrieval or the current `3c97b2d` polling behavior. The provider image request body and server-side ownership/read handler are unchanged between these commits, while the frontend accepted-job polling and assistant parsing changed. The new immutable Preview uses a separate deploy Blob store; its cross-context read cannot be claimed from the older store.
+
+Campaign readback remains **12 entries / US$1.20 conservative reserved / US$2.00 authorized cumulative limit / US$0.80 headroom**. The five entries add US$0.54; none was released. The receipts include partial token-price estimates (about US$0.0683 combined for successful reported token components), but explicitly mark `completeCostUpperBound=false`; **confirmed actual Netlify charge is unavailable**, and the HTTP 400 plus older historical charges remain unknown. Official [Google model prices](https://ai.google.dev/gemini-api/docs/pricing) and [Netlify AI Gateway pricing/180 credits per USD](https://docs.netlify.com/manage/accounts-and-billing/billing/billing-for-credit-based-plans/pricing-for-ai-features/) were checked on 2026-10-07 UTC; the code's $0.25/$0.50 input, $1.50 text output and $30 image output per million-token worst-case admission rates remain consistent. The site-wide campaign, all grants/entries and US$1 UTC-day cap remain unchanged. Refreshing the old synthetic background added no new entry.
+
+| Remaining bounded paid acceptance | Why still needed | New reservations at most |
+| --- | --- | ---: |
+| Current Preview text action + Undo | Older provider 200 did not produce an accepted action; assistant parser changed. | US$0.06 |
+| Current Preview recorded audio action | No prior live audio inference; human microphone remains a separate Remote check. | US$0.11 |
+| Current Preview image import | Older provider 400 and no imported rows; use safe error diagnostics before any justified retry. | US$0.06 |
+| Current Preview two-panel background | Provider generation is proven on older source, but current polling and separate deploy-scoped private Blob need authenticated cross-context read. | US$0.42 |
+| Post-release text and independent production private background smoke | Production `v1` namespace/store is distinct; these checks occur only after Preview Full Gate and release. | US$0.06 + US$0.42 |
+| One **conditional** image-stage retry | Only after a diagnosed, reviewed change; no same-version blind 400 retry. | US$0.18 |
+| **Whole-batch upper bound** | Existing sourced Explore acceptance carries forward; no new Explore paid call is scheduled solely for a hostname change. | **US$1.31** |
+
+The US$1.31 upper bound is a **reservation ceiling, not an expected bill**. The legitimate older background success avoids an extra exploratory re-generation but does not eliminate the current/production private-store checks. Against US$0.80 campaign headroom the full batch is short **US$0.51**. A single additional maximum **US$0.60**, raising this same campaign's cap to US$2.60, is a proposal **not authorized by this task instruction**; do not alter the code limit or send a paid call until approved. The daily US$1 cap is independent: Preview US$0.65 and production US$0.48 cannot both be fully reserved on one UTC day. Existing local second-grant transition test is preparation only; no budget source or deployed setting changed.
+
+Remaining free/live gates: final exact-host Firebase action-time confirmation and sign-in; two independent authenticated contexts on the final candidate; real single-Chrome-tab offline edit/move/order/delete conflict recovery with the prepared synthetic trip/backup; actual 200% zoom and human microphone Remote; current text/vision/audio and private background checks; Planner-only production rules/baseline recheck, then canonical complete-host release and post-release smoke. Real iPhone/Safari remain UNVERIFIED. Do not infer production eligibility from this ledger reconciliation.
+
+---
+
+## Candidate provenance and prior Gate — 2026-10-06 23:45 UTC
 
 **Full Gate NOT PASS; production remains `6ac2c370d1409615f07878bd`.** The current executable candidate is product commit [`3c97b2df1b425a98732df9fe5d066ef3097b1841`](https://github.com/blackeirose/YSU-Tools/commit/3c97b2df1b425a98732df9fe5d066ef3097b1841), in the canonical complete-host [isolated Preview `6ac584df1801b9eafb089249`](https://6ac584df1801b9eafb089249--ycsu-tools-router.netlify.app/travel-planner/). Source-matched [CI 37545390444](https://github.com/blackeirose/YSU-Tools/actions/runs/37545390444) passed 143 unit tests, typecheck/build, Planner Function archives, Firestore rules and independent Chromium emulator contexts; downloaded release and emulator artifacts matched their published SHA-256 digests. Focused independent source reviewer `/root/final_grant_review` found no remaining P1/P2 after the assistant null-field and background polling fixes. This does **not** certify live AI, Blob or offline reconnect.
 
