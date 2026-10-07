@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { Modal } from "./Forms";
 import type { AssistantAction } from "./server/gemini";
+import { assistantAudioFromFile } from "./audio-file";
 
 type Result = { action?: AssistantAction; transcript?: string; quota?: { used: number; limit: number }; error?: string };
 export type AssistantRequestContext = { tripId: string; selectedItemId?: string };
@@ -14,6 +15,7 @@ export function TravelerAssistant({ tripId, selectedDay, city, selectedItem, tok
   const [query, setQuery] = useState("");
   const [busy, setBusy] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [audioFile, setAudioFile] = useState<File | null>(null);
   const [error, setError] = useState("");
   const [result, setResult] = useState("");
   const [transcript, setTranscript] = useState("");
@@ -92,6 +94,12 @@ export function TravelerAssistant({ tripId, selectedDay, city, selectedItem, tok
       window.setTimeout(() => { if (media.state === "recording") media.stop(); }, 15000);
     } catch (e) { stopMedia(); setError(e instanceof Error ? e.message : "無法取得麥克風；仍可打字"); }
   };
+  const sendAudioFile = async () => {
+    if (!audioFile || busy || recording) return;
+    setError("");
+    try { await submit(await assistantAudioFromFile(audioFile)); }
+    catch (e) { setError(e instanceof Error ? e.message : "音訊檔無法讀取"); }
+  };
   return <Modal title="旅伴助手" onClose={() => {
     cancelled.current = true; controller.current?.abort();
     if (recorder.current?.state === "recording") recorder.current.stop();
@@ -102,6 +110,11 @@ export function TravelerAssistant({ tripId, selectedDay, city, selectedItem, tok
     <label>你想做什麼？<textarea value={query} onChange={(event) => setQuery(event.target.value)} placeholder="例如：在畫面這一天上午九點加入東京迪士尼樂園" /></label>
     <div className="actions"><button className="primary" disabled={busy || recording || !query.trim()} onClick={() => void submit()}>{busy ? "理解中…" : "送出指令"}</button>
       <button type="button" disabled={busy} aria-label={recording ? "停止錄音並送出" : "開始錄音"} onClick={() => void startRecording()}>{recording ? "停止並送出" : "🎙 點擊錄音"}</button></div>
+    <div className="actions"><label>或選擇短音訊檔（WAV／WebM／MP4，最多 200 KB）
+      <input type="file" accept=".wav,.webm,.mp4,.m4a,audio/wav,audio/webm,audio/mp4" disabled={busy || recording}
+        onChange={(event) => setAudioFile(event.target.files?.[0] ?? null)} /></label>
+      <button type="button" disabled={busy || recording || !audioFile} onClick={() => void sendAudioFile()}>辨識所選音檔</button></div>
+    <p className="hint">選取檔案不會送出；點擊辨識後才傳送給既有助手服務。音訊不會保存在旅程中；若服務結果不明，請先檢查用量再重試。</p>
     <p className="hint">畫面日期：{selectedDay} · 地區：{city || "未指定"}。離線時請使用手動操作；助手不會在恢復連線後自動送出。</p>
     {transcript && <p>辨識內容：{transcript}</p>}
     {draft?.action.draftItems && <section aria-label="旅伴草案預覽" className="import-preview">
