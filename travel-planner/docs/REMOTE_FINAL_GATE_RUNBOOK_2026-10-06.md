@@ -1,5 +1,11 @@
 # 最終候選的單次 Remote 驗收手冊（2026-10-06 準備稿）
 
+> **目前準備狀態（2026-10-07 06:50 UTC；仍非驗收 PASS）：** 最終候選現為 runtime [`601cb065`](https://github.com/blackeirose/YSU-Tools/commit/601cb065365425b705e86d2292787247a24d4fe3)、[CI 37582701804](https://github.com/blackeirose/YSU-Tools/actions/runs/37582701804) 及完整站 [Preview `6ac5eb36716fa0a41443535b`](https://6ac5eb36716fa0a41443535b--ycsu-tools-router.netlify.app/travel-planner/)。精確 hostname `6ac5eb36716fa0a41443535b--ycsu-tools-router.netlify.app` 已查重，仍待 Firebase 操作當下確認、加入及讀回。Chrome 擴充功能現可讀取舊版登入分頁，最終候選的獨立 context 尚未登入。以下 Remote 只在新候選兩個 context 都已登入、合成旅程與備份讀回後執行；舊 `6ac5ce...` 不可充當新版驗收。Chrome 工具目前未提供單分頁 Offline 或瀏覽器真實 Zoom 控制，所以保留 Owner 最少的 Offline/Online、200% 與真人麥克風操作；資料操作和結果判讀仍由 agent 負責。舊版圖片匯入 HTTP 400／`INVALID_ARGUMENT` 的 US$0.06 預留保留；目前 campaign 13 筆／US$1.26 保守預留，實際帳單未知。
+
+---
+
+> **歷史準備稿：**
+
 > 此手冊是**待執行步驟**，不是通過證據。最終候選產品 runtime [`4c62bec6e50a56164c5ab85246869d1171bb358f`](https://github.com/blackeirose/YSU-Tools/commit/4c62bec6e50a56164c5ab85246869d1171bb358f)、來源一致 [CI 37571986648](https://github.com/blackeirose/YSU-Tools/actions/runs/37571986648) 與完整站 [Preview `6ac5ce500adc8a3a5baff6fd`](https://6ac5ce500adc8a3a5baff6fd--ycsu-tools-router.netlify.app/travel-planner/) 已驗證。精確 hostname `6ac5ce500adc8a3a5baff6fd--ycsu-tools-router.netlify.app` 已查重、尚待 Firebase Authorized Domains 的**此網域專屬**操作當下確認、加入及讀回。四筆合成衝突項目已在同一 `preview-v1` namespace 的舊授權 Preview 建立並刷新讀回；最終版仍須登入與真離線測試。Owner 已批准同一 campaign 再增最多 US$0.60、累計 US$2.60、每日 US$1.00 不變；線上帳本仍有 12 筆／US$1.20 保守預留，第二 grant 將隨首次新呼叫原子記錄。Chrome 原生控制目前回報 Access is denied；若仍無法使用，Owner 只需依下表操作單頁 Offline／Online、200% zoom 與真人麥克風，agent 負責資料與判讀。
 
 ## Agent 在 Remote 前完成
