@@ -133,7 +133,7 @@ test("synthetic audio bytes require an explicit selected-card confirmation befor
     await page.getByRole("article", { name: "Audio target stop" }).getByRole("button", { name: /Audio target stop/ }).click();
     await page.getByRole("dialog").getByRole("button", { name: "以此項詢問旅伴助手" }).click();
     mockUndo = true;
-    await page.locator('input[type="file"]').setInputFiles({ name: "synthetic.wav", mimeType: "audio/wav", buffer: wav });
+    await page.locator('input[type="file"][accept*="audio/"]').setInputFiles({ name: "synthetic.wav", mimeType: "audio/wav", buffer: wav });
     await page.getByRole("button", { name: "辨識所選音檔" }).click();
     await expect(page.getByRole("dialog")).toContainText("語音復原不會自動執行");
     await expect(page.getByRole("article", { name: "Audio target stop" })).toContainText("09:00");
