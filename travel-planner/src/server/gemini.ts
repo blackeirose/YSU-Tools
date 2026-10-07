@@ -97,14 +97,6 @@ const exploreResponseSchema = { type: "object", properties: { suggestions: { typ
     pending: { type: "array", items: { type: "string" } },
   }, required: ["name", "originalName", "location", "reason", "sourceUrls", "pending"] } } },
 required: ["suggestions"] } as const;
-const visionResponseSchema = { type: "object", properties: {
-  rows: { type: "array", maxItems: 100, items: { type: "object", properties: {
-    dateText: { type: "string" }, name: { type: "string" }, city: { type: "string" },
-    time: { type: "string" }, candidate: { type: "boolean" }, notes: { type: "string" },
-    uncertain: { type: "boolean" },
-  }, required: ["dateText", "name", "city", "time", "candidate", "notes", "uncertain"] } },
-  warnings: { type: "array", maxItems: 20, items: { type: "string" } },
-}, required: ["rows", "warnings"] } as const;
 const visionSchema = z.object({ rows: z.array(z.object({ dateText: z.string().max(30), name: z.string().min(1).max(200),
   city: z.string().max(200), time: z.string().max(8), candidate: z.boolean(), notes: z.string().max(500),
   uncertain: z.boolean() })).max(100), warnings: z.array(z.string().max(200)).max(20) });
@@ -234,16 +226,13 @@ export async function geminiHandler(req: Request, env: Env, http: typeof fetch =
         itemId: { type: "string", enum: [input.selectedItem.id],
           description: "For an existing item, use this exact selectedItem.id." } } } : assistantResponseSchema;
     const requestBody = { systemInstruction: { parts: [{ text: instruction }] }, contents: [{ role: "user", parts }],
-      generationConfig: { candidateCount: 1,
-        ...(input.mode === "vision" ? {
-          // Current Gemini generateContent REST contract uses responseFormat for
-          // structured multimodal output. Keep the server-side row validation.
-          responseFormat: { text: { mimeType: "application/json", schema: visionResponseSchema } },
-        } : {
-          responseMimeType: "application/json",
-          ...(input.mode === "assist" ? { responseJsonSchema: selectedActionSchema } : {}),
-          ...(input.mode === "explore" ? { responseJsonSchema: exploreResponseSchema } : {}),
-        }),
+      generationConfig: { candidateCount: 1, responseMimeType: "application/json",
+        // The image path has returned provider INVALID_ARGUMENT with both
+        // responseJsonSchema and responseFormat. Use the JSON MIME contract
+        // already proven by text requests, then enforce the full row schema
+        // server-side before displaying or writing anything.
+        ...(input.mode === "assist" ? { responseJsonSchema: selectedActionSchema } : {}),
+        ...(input.mode === "explore" ? { responseJsonSchema: exploreResponseSchema } : {}),
         maxOutputTokens: input.mode === "vision" || input.mode === "explore" ? 2200 : 1200 } };
     let testBudget: Awaited<ReturnType<typeof reserveAiTestBudget>>;
     try { testBudget = await reserveAiTestBudget(input.requestId, "inference", input.mode, provider.name, !!input.audio); }

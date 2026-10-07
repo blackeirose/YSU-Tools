@@ -221,8 +221,7 @@ describe("Gemini paid boundary", () => {
         draftItems: { items: { required: ["day", "name"] } } },
     });
   });
-  it("uses the current structured multimodal REST format and validates complete preview rows", async () => {
-    let schema: Record<string, unknown> | undefined;
+  it("uses proven JSON MIME for image input and validates complete preview rows", async () => {
     let generationConfig: Record<string, unknown> | undefined;
     const http = async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
@@ -232,7 +231,6 @@ describe("Gemini paid boundary", () => {
       if (url.includes("/aiUsage/") && init?.method === "PATCH") return Response.json({});
       if (url.includes("/aiUsage/")) return new Response("", { status: 404 });
       generationConfig = (JSON.parse(String(init?.body)) as { generationConfig: Record<string, unknown> }).generationConfig;
-      schema = (generationConfig.responseFormat as { text: { schema: Record<string, unknown> } }).text.schema;
       return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ rows: [{
         dateText: "2030-01-02", name: "National Museum of Nature and Science", city: "Tokyo",
         time: "10:00", candidate: false, notes: "", uncertain: false,
@@ -246,11 +244,29 @@ describe("Gemini paid boundary", () => {
     }), env, http as typeof fetch);
     expect(response.status).toBe(200);
     expect(generationConfig?.responseJsonSchema).toBeUndefined();
-    expect(generationConfig?.responseMimeType).toBeUndefined();
-    expect(generationConfig?.responseFormat).toMatchObject({ text: { mimeType: "application/json" } });
-    expect(schema).toMatchObject({ type: "object", required: ["rows", "warnings"], properties: {
-      rows: { items: { required: ["dateText", "name", "city", "time", "candidate", "notes", "uncertain"] } },
-    } });
+    expect(generationConfig?.responseFormat).toBeUndefined();
+    expect(generationConfig?.responseMimeType).toBe("application/json");
+  });
+  it("rejects incomplete JSON image rows without offering them for import", async () => {
+    const http = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("accounts:lookup")) return owner();
+      if (url.includes("/records/")) return trip();
+      if (url.includes("/aiRequests/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/")) return new Response("", { status: 404 });
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({
+        rows: [{ dateText: "2030-01-02", name: "合成景點", city: "Tokyo" }], warnings: [],
+      }) }] } }] });
+    };
+    const response = await geminiHandler(new Request("https://preview.test/travel-planner/api/ai", {
+      method: "POST", headers: { Authorization: "Bearer synthetic-token" }, body: JSON.stringify({
+        mode: "vision", tripId: crypto.randomUUID(), requestId: crypto.randomUUID(),
+        query: "Read only visible synthetic itinerary text", image: { mime: "image/png", base64: "AAAA" },
+      }),
+    }), env, http as typeof fetch);
+    expect(response.status).toBe(502);
+    expect(await response.json()).not.toHaveProperty("rows");
   });
   it("rejects invalid identity and trip ownership before reserving cost", async () => {
     let calls = 0;
