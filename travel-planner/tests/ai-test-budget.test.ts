@@ -3,13 +3,21 @@ import { callUpperBoundMicrousd, nextBudgetDocument, reserveAiTestBudget, TEST_B
   type aiTestBudgetStore } from "../src/server/ai-test-budget";
 
 type Store = ReturnType<typeof aiTestBudgetStore>;
+const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const priorEntries = () => Array.from({ length: 21 }, (_, index) => ({ id: id(index + 1),
+  stage: index < 6 ? "photo" as const : "inference" as const,
+  mode: index < 6 ? "background" as const : "assist" as const,
+  upperBoundMicrousd: index < 6 ? 180_000 : index === 6 ? 110_000 : 60_000,
+  atUtc: index < 4 ? "2026-10-05T12:00:00.000Z"
+    : "2026-10-06T12:00:00.000Z" }));
+const priorGrants = () => [{ fromMicrousd: 1_000_000, toMicrousd: 2_000_000,
+  atUtc: "2026-10-06T12:00:00.000Z", authorization: "synthetic first grant" },
+{ fromMicrousd: 2_000_000, toMicrousd: 2_600_000,
+  atUtc: "2026-10-07T12:00:00.000Z", authorization: "synthetic second grant" }];
 function memoryStore() {
   let value: unknown = { schemaVersion: 1, campaign: "ux-gemini-20261005-usd1",
-    limitMicrousd: 2_600_000, reservedMicrousd: 0, entries: [],
-    grantHistory: [{ fromMicrousd: 1_000_000, toMicrousd: 2_000_000,
-      atUtc: "2026-10-06T12:00:00.000Z", authorization: "synthetic first grant" },
-    { fromMicrousd: 2_000_000, toMicrousd: 2_600_000,
-      atUtc: "2026-10-07T12:00:00.000Z", authorization: "synthetic second grant" }] }, etag = 1;
+    limitMicrousd: 2_600_000, reservedMicrousd: 2_030_000, entries: priorEntries(),
+    grantHistory: priorGrants() }, etag = 1;
   const store = {
     getWithMetadata: async () => value === null ? null : { data: value, etag: String(etag) },
     setJSON: async (_key: string, data: unknown, options: { onlyIfNew?: boolean; onlyIfMatch?: string }) => {
@@ -21,7 +29,6 @@ function memoryStore() {
   } as unknown as Store;
   return { store, read: () => value, corrupt: (next: unknown) => { value = next; } };
 }
-const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
 describe("one-time cross-deploy AI test grant", () => {
   it("uses published worst-case token limits, including audio and both image panels", () => {
@@ -35,28 +42,20 @@ describe("one-time cross-deploy AI test grant", () => {
   });
   it("keeps every reservation across dates, namespaces, and repeated IDs", async () => {
     const { store, read } = memoryStore();
-    const first = await reserveAiTestBudget(id(1), "inference", "assist", "netlify-gateway", false, store);
-    expect(first.remainingMicrousd).toBe(TEST_BUDGET_MICROUSD - 60_000);
-    await expect(reserveAiTestBudget(id(1), "inference", "assist", "netlify-gateway", false, store))
+    const first = await reserveAiTestBudget(id(22), "inference", "assist", "netlify-gateway", false, store);
+    expect(first.remainingMicrousd).toBe(TEST_BUDGET_MICROUSD - 2_090_000);
+    await expect(reserveAiTestBudget(id(22), "inference", "assist", "netlify-gateway", false, store))
       .rejects.toThrow("duplicate");
-    await reserveAiTestBudget(id(1), "landmarks", "background", "netlify-gateway", false, store);
-    await reserveAiTestBudget(id(1), "photo", "background", "netlify-gateway", false, store);
-    const last = await reserveAiTestBudget(id(1), "relief", "background", "netlify-gateway", false, store);
-    expect(last.reservedAfterMicrousd).toBe(480_000);
-    expect((read() as { entries: unknown[] }).entries).toHaveLength(4);
+    await reserveAiTestBudget(id(22), "landmarks", "background", "netlify-gateway", false, store);
+    await reserveAiTestBudget(id(22), "photo", "background", "netlify-gateway", false, store);
+    const last = await reserveAiTestBudget(id(22), "relief", "background", "netlify-gateway", false, store);
+    expect(last.reservedAfterMicrousd).toBe(2_510_000);
+    expect((read() as { entries: unknown[] }).entries).toHaveLength(25);
   });
   it("records the new 5.20 grant atomically and retains all 21 prior reservations", async () => {
     const { store, read, corrupt } = memoryStore();
-    const entries = Array.from({ length: 21 }, (_, index) => ({ id: id(index + 1),
-      stage: index < 6 ? "photo" as const : "inference" as const,
-      mode: index < 6 ? "background" as const : "assist" as const,
-      upperBoundMicrousd: index < 6 ? 180_000 : index === 6 ? 110_000 : 60_000,
-      atUtc: index < 4 ? "2026-10-05T12:00:00.000Z"
-        : index < 14 ? "2026-10-06T12:00:00.000Z" : "2026-10-07T12:00:00.000Z" }));
-    const firstGrant = { fromMicrousd: 1_000_000, toMicrousd: 2_000_000,
-      atUtc: "2026-10-06T12:00:00.000Z", authorization: "synthetic first grant" };
-    const secondGrant = { fromMicrousd: 2_000_000, toMicrousd: 2_600_000,
-      atUtc: "2026-10-07T12:00:00.000Z", authorization: "synthetic second grant" };
+    const entries = priorEntries();
+    const [firstGrant, secondGrant] = priorGrants();
     corrupt({ schemaVersion: 1, campaign: "ux-gemini-20261005-usd1",
       limitMicrousd: 2_600_000, reservedMicrousd: 2_030_000, entries,
       grantHistory: [firstGrant, secondGrant] });
@@ -80,21 +79,41 @@ describe("one-time cross-deploy AI test grant", () => {
     await expect(reserveAiTestBudget(id(24), "inference", "assist", "netlify-gateway", false, store))
       .rejects.toThrow("prior-grant-missing");
   });
+  it("rejects missing prior grants or reservations before accepting the third grant", () => {
+    const [first, second] = priorGrants();
+    const entry = { id: id(22), stage: "inference" as const, mode: "assist" as const,
+      upperBoundMicrousd: 60_000, atUtc: "2026-10-07T12:00:00.000Z" };
+    const baseline = { schemaVersion: 1 as const, campaign: "ux-gemini-20261005-usd1",
+      limitMicrousd: 2_600_000, reservedMicrousd: 2_030_000,
+      entries: priorEntries(), grantHistory: [first, second] };
+    expect(() => nextBudgetDocument({ ...baseline,
+      grantHistory: [{ ...first, toMicrousd: 2_600_000 }] }, entry, 5_200_000, "approved"))
+      .toThrow("prior-history-missing");
+    const missingEntry = baseline.entries.slice(1);
+    expect(() => nextBudgetDocument({ ...baseline, entries: missingEntry,
+      reservedMicrousd: missingEntry.reduce((sum, old) => sum + old.upperBoundMicrousd, 0) },
+    entry, 5_200_000, "approved")).toThrow("prior-history-missing");
+    const reducedEntry = baseline.entries.map((old, index) => index === 0
+      ? { ...old, upperBoundMicrousd: old.upperBoundMicrousd - 60_000 } : old);
+    expect(() => nextBudgetDocument({ ...baseline, entries: reducedEntry,
+      reservedMicrousd: 1_970_000 }, entry, 5_200_000, "approved"))
+      .toThrow("prior-history-missing");
+  });
   it("serializes parallel calls and refuses a call that cannot fit", async () => {
     const { store, read } = memoryStore();
     const results = await Promise.all(Array.from({ length: 7 }, (_, n) =>
-      reserveAiTestBudget(id(n + 1), "photo", "background", "netlify-gateway", false, store)
+      reserveAiTestBudget(id(n + 22), "photo", "background", "netlify-gateway", false, store)
         .then(() => "accepted", () => "rejected")));
     expect(results.filter((result) => result === "accepted")).toHaveLength(7);
-    for (let n = 8; n <= 11; n++)
+    for (let n = 29; n <= 32; n++)
       await reserveAiTestBudget(id(n), "photo", "background", "netlify-gateway", false, store);
-    await expect(reserveAiTestBudget(id(12), "photo", "background", "netlify-gateway", false, store))
+    await expect(reserveAiTestBudget(id(33), "photo", "background", "netlify-gateway", false, store))
       .rejects.toThrow("daily-exhausted");
-    expect((read() as { reservedMicrousd: number }).reservedMicrousd).toBe(1_980_000);
+    expect((read() as { reservedMicrousd: number }).reservedMicrousd).toBe(4_010_000);
   });
   it("refuses corrupt or inaccessible storage without refunding any prior call", async () => {
     const { store, corrupt } = memoryStore();
-    await reserveAiTestBudget(id(1), "inference", "assist", "netlify-gateway", false, store);
+    await reserveAiTestBudget(id(22), "inference", "assist", "netlify-gateway", false, store);
     corrupt({ reservedMicrousd: 0, entries: [] });
     await expect(reserveAiTestBudget(id(2), "inference", "assist", "netlify-gateway", false, store))
       .rejects.toThrow("corrupt");

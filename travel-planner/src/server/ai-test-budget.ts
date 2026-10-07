@@ -79,6 +79,15 @@ export function nextBudgetDocument(before: unknown, entry: Entry,
     throw new Error("test-budget-prior-grant-missing");
   if (authorizedLimit > 2_600_000 && current.limitMicrousd < 2_600_000)
     throw new Error("test-budget-prior-grant-missing");
+  // The third Owner grant is valid only against the observed campaign baseline.
+  // A self-consistent but truncated ledger must never regain spent allowance.
+  if (authorizedLimit > 2_600_000 && (
+    current.grantHistory?.[0]?.fromMicrousd !== 1_000_000 ||
+    current.grantHistory?.[0]?.toMicrousd !== 2_000_000 ||
+    current.grantHistory?.[1]?.fromMicrousd !== 2_000_000 ||
+    current.grantHistory?.[1]?.toMicrousd !== 2_600_000 ||
+    current.entries.length < 21 || current.reservedMicrousd < 2_030_000))
+    throw new Error("test-budget-prior-history-missing");
   if (current.entries.some((old) => old.id === entry.id && old.stage === entry.stage))
     throw new Error("test-budget-duplicate");
   if (!/^\d{4}-\d\d-\d\dT.*Z$/.test(entry.atUtc) || Number.isNaN(Date.parse(entry.atUtc)))
