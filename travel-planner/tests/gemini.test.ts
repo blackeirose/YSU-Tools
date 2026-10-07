@@ -223,6 +223,7 @@ describe("Gemini paid boundary", () => {
   });
   it("uses proven JSON MIME for image input and validates complete preview rows", async () => {
     let generationConfig: Record<string, unknown> | undefined;
+    let visionInstruction = "";
     const http = async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
       if (url.includes("accounts:lookup")) return owner();
@@ -230,7 +231,10 @@ describe("Gemini paid boundary", () => {
       if (url.includes("/aiRequests/") && init?.method === "PATCH") return Response.json({});
       if (url.includes("/aiUsage/") && init?.method === "PATCH") return Response.json({});
       if (url.includes("/aiUsage/")) return new Response("", { status: 404 });
-      generationConfig = (JSON.parse(String(init?.body)) as { generationConfig: Record<string, unknown> }).generationConfig;
+      const requestBody = JSON.parse(String(init?.body)) as {
+        generationConfig: Record<string, unknown>; systemInstruction: { parts: { text: string }[] } };
+      generationConfig = requestBody.generationConfig;
+      visionInstruction = requestBody.systemInstruction.parts[0].text;
       return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ rows: [{
         dateText: "2030-01-02", name: "National Museum of Nature and Science", city: "Tokyo",
         time: "10:00", candidate: false, notes: "", uncertain: false,
@@ -246,6 +250,10 @@ describe("Gemini paid boundary", () => {
     expect(generationConfig?.responseJsonSchema).toBeUndefined();
     expect(generationConfig?.responseFormat).toBeUndefined();
     expect(generationConfig?.responseMimeType).toBe("application/json");
+    for (const key of ["dateText", "name", "city", "time", "candidate", "notes", "uncertain", "warnings"])
+      expect(visionInstruction).toContain(key);
+    expect(visionInstruction).toContain("dateText 用空字串");
+    expect(visionInstruction).toContain("uncertain 設 true");
   });
   it("rejects incomplete JSON image rows without offering them for import", async () => {
     const http = async (input: string | URL | Request, init?: RequestInit) => {
