@@ -98,6 +98,7 @@ export function TravelerAssistant({ tripId, selectedDay, city, selectedItem, tok
     stopMedia(); onClose();
   }} wide>
     <p className="hint">一句話新增、移日或詢問。明確單筆指令才會變更行程；草案與建議先預覽。語音只在點擊後錄製，最長 15 秒；原始音訊不保存在裝置。</p>
+    {selectedItem && <p className="hint">已選安排：{selectedItem.name}。移日或改時間僅會作用於這一筆。</p>}
     <label>你想做什麼？<textarea value={query} onChange={(event) => setQuery(event.target.value)} placeholder="例如：在畫面這一天上午九點加入東京迪士尼樂園" /></label>
     <div className="actions"><button className="primary" disabled={busy || recording || !query.trim()} onClick={() => void submit()}>{busy ? "理解中…" : "送出指令"}</button>
       <button type="button" disabled={busy} aria-label={recording ? "停止錄音並送出" : "開始錄音"} onClick={() => void startRecording()}>{recording ? "停止並送出" : "🎙 點擊錄音"}</button></div>

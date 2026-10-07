@@ -129,6 +129,7 @@ export default function App() {
     [reminders, srem] = useState(false),
     [explore, sx] = useState(false),
     [assistantOpen, sas] = useState(false),
+    [assistantTarget, sat] = useState<{ tripId: string; itemId: string } | null>(null),
     [assistantChoice, sacChoice] = useState<{ action: AssistantAction; requestId: string; places: PhotonPlace[] } | null>(null),
     [help, shelp] = useState(false),
     [loginOpen, slo] = useState(false),
@@ -201,6 +202,8 @@ export default function App() {
     ss(null);
     st(null);
     si(null);
+    sat(null);
+    sas(false);
     se(null);
     ack.current.clear();
     sg([]);
@@ -271,8 +274,10 @@ export default function App() {
     (r) => r.kind === "item" && r.tripId === trip?.id,
   ) as Item[];
   const items = trip ? rawItems.map((item) => effectiveItem(trip, item)) : rawItems;
+  const assistantTargetId = assistantOpen && assistantTarget?.tripId === trip?.id
+    ? assistantTarget.itemId : selected;
   assistantContext.current = { tripId: trip?.id ?? null,
-    selectedItemId: items.some((item) => item.id === selected) ? selected : null };
+    selectedItemId: items.some((item) => item.id === assistantTargetId) ? assistantTargetId : null };
   const projectedRecords = trip ? records.map((record) => record.kind === "item" && record.tripId === trip.id
     ? effectiveItem(trip, record) : record) : records;
   const tasks = records.filter(
@@ -321,6 +326,7 @@ export default function App() {
       st(path?.[1] ?? null);
       sy(path?.[2] ?? "");
       si(null);
+      sat(null);
     };
     window.addEventListener("popstate", pop);
     return () => window.removeEventListener("popstate", pop);
@@ -329,6 +335,8 @@ export default function App() {
     st(id);
     sy("");
     si(null);
+    sat(null);
+    sas(false);
     sr(null);
     sq("");
     sc("");
@@ -795,6 +803,7 @@ export default function App() {
   );
   const selectedItem = items.find((i) => i.id === selected),
     selectedPlace = selectedItem ? pFor(selectedItem) : undefined;
+  const assistantItem = items.find((i) => i.id === assistantTargetId);
   const currentCity = trip ? dayCity(trip, activeDay) : null;
   const todayItems = ordered(items, activeDay).filter(
     (i) => i.status === "planned",
@@ -1393,7 +1402,7 @@ export default function App() {
                   <button className="desktop-only-button" aria-expanded={mapVisible} onClick={() => smapVisible((value) => !value)}>{mapVisible ? "收合地圖" : "顯示地圖"}</button>
                   <button className="desktop-only-button" aria-pressed={tab === "candidates"} onClick={() => sb(tab === "candidates" ? "today" : "candidates")}>候選 ({items.filter((item) => item.status === "candidate").length})</button>
                   <button className="desktop-only-button" aria-pressed={tab === "tasks"} onClick={() => sb(tab === "tasks" ? "today" : "tasks")}>待辦</button>
-                  <button className="primary assistant-entry" disabled={demo || !user} onClick={() => sas(true)}>旅伴助手</button>
+                  <button className="primary assistant-entry" disabled={demo || !user} onClick={() => { sat(null); sas(true); }}>旅伴助手</button>
                   <details className="menu toolbar-more"><summary>更多</summary><div className="actions">
                     <button onClick={() => srem(true)}>提醒中心</button>
                     <button onClick={() => sx(true)}>探索地點</button>
@@ -1900,6 +1909,11 @@ export default function App() {
             <a href={mapsPlace(selectedPlace)} target="_blank" rel="noreferrer">地圖 ↗</a>
             <button onClick={() => { se({ type: "item", value: selectedItem }); si(null); }}>編輯安排</button>
             <button onClick={() => { se({ type: "place", value: selectedPlace }); si(null); }}>編輯地點</button>
+            {!demo && user && <button onClick={() => {
+              sat({ tripId: trip.id, itemId: selectedItem.id });
+              si(null);
+              sas(true);
+            }}>以此項詢問旅伴助手</button>}
             {selectedItem.day && <button onClick={() => void attempt(() => delayAfter(selectedItem))}>後續彈性延後 30 分</button>}
             {replace && selectedItem.status === "candidate" && <button className="primary" onClick={() => void attempt(async () => { await replaceItem(selectedItem, replace); si(null); })}>替換「{pFor(replace)?.name}」</button>}
             {selectedItem.status !== "candidate" && <button onClick={() => { sr(selectedItem); si(null); sb("candidates"); }}>用候選替換</button>}
@@ -2182,9 +2196,9 @@ export default function App() {
         </Modal>
       )}
       {assistantOpen && trip && user && !demo && <TravelerAssistant key={trip.id} tripId={trip.id} selectedDay={activeDay}
-        city={currentCity?.name || trip.cities} selectedItem={selectedItem && pFor(selectedItem) ? { id: selectedItem.id, name: pFor(selectedItem)!.name } : undefined}
+        city={currentCity?.name || trip.cities} selectedItem={assistantItem && pFor(assistantItem) ? { id: assistantItem.id, name: pFor(assistantItem)!.name } : undefined}
         token={async () => { if (!auth?.currentUser) throw new Error("登入已失效"); return auth.currentUser.getIdToken(); }}
-        onAction={executeAssistant} onDraft={applyAssistantDraft} onClose={() => sas(false)} />}
+        onAction={executeAssistant} onDraft={applyAssistantDraft} onClose={() => { sas(false); sat(null); }} />}
       {assistantChoice && <Modal title="選擇地點" onClose={() => sacChoice(null)}>
         <p>請確認要加入的實際地點；尚未變更行程。</p>
         {assistantChoice.places.map((place) => <button key={place.source} onClick={() => void attempt(async () => {

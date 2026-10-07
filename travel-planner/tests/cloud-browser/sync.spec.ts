@@ -54,6 +54,38 @@ async function shorten(page: Page) {
   await dialog.getByRole("button", { name: "儲存旅程" }).click();
   await expect(dialog).toHaveCount(0);
 }
+test("selected itinerary card reaches assistant with a bound target and can move then undo", async ({ browser }) => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  const email = `assistant-target-${crypto.randomUUID()}@example.test`;
+  try {
+    await login(page, email);
+    await createRangeTrip(page, "Synthetic assistant target");
+    await quick(page, "Assistant target stop");
+    await page.getByRole("button", { name: "查看", exact: true }).click();
+    await page.getByRole("article", { name: "Assistant target stop" }).getByRole("button", { name: /Assistant target stop/ }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "以此項詢問旅伴助手" }).click();
+    await expect(page.getByRole("dialog").getByRole("heading", { name: "旅伴助手" })).toBeVisible();
+    await expect(page.getByRole("dialog")).toContainText("已選安排：Assistant target stop");
+    let sentTarget = "";
+    await page.route("**/travel-planner/api/ai", async (route) => {
+      const body = route.request().postDataJSON() as { selectedItem?: { id: string; name: string } };
+      expect(body.selectedItem?.name).toBe("Assistant target stop");
+      sentTarget = body.selectedItem?.id ?? "";
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        action: { kind: "move", itemId: sentTarget, day: "2030-01-02", message: "已移至 1 月 2 日" },
+      }) });
+    });
+    await page.getByRole("textbox", { name: "你想做什麼？" }).fill("把這一站移到 1 月 2 日");
+    await page.getByRole("button", { name: "送出指令" }).click();
+    await expect(page.getByRole("dialog").getByText("已移至 1 月 2 日")).toBeVisible();
+    expect(sentTarget).toMatch(/^[0-9a-f-]{36}$/i);
+    await expect(page.locator('[data-day="2030-01-02"]').getByRole("article", { name: "Assistant target stop" })).toBeVisible();
+    await page.getByRole("dialog").getByRole("button", { name: "關閉", exact: true }).click();
+    await page.getByRole("button", { name: "復原", exact: true }).click();
+    await expect(page.locator('[data-day="2030-01-01"]').getByRole("article", { name: "Assistant target stop" })).toBeVisible();
+  } finally { await context.close(); }
+});
 test("configured Preview local mode survives a deep-link reload and clears on sign-out", async ({ browser }) => {
   const context = await browser.newContext();
   const page = await context.newPage();
