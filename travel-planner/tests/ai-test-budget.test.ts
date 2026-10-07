@@ -5,9 +5,11 @@ import { callUpperBoundMicrousd, nextBudgetDocument, reserveAiTestBudget, TEST_B
 type Store = ReturnType<typeof aiTestBudgetStore>;
 function memoryStore() {
   let value: unknown = { schemaVersion: 1, campaign: "ux-gemini-20261005-usd1",
-    limitMicrousd: 2_000_000, reservedMicrousd: 0, entries: [],
+    limitMicrousd: 2_600_000, reservedMicrousd: 0, entries: [],
     grantHistory: [{ fromMicrousd: 1_000_000, toMicrousd: 2_000_000,
-      atUtc: "2026-10-06T12:00:00.000Z", authorization: "synthetic first grant" }] }, etag = 1;
+      atUtc: "2026-10-06T12:00:00.000Z", authorization: "synthetic first grant" },
+    { fromMicrousd: 2_000_000, toMicrousd: 2_600_000,
+      atUtc: "2026-10-07T12:00:00.000Z", authorization: "synthetic second grant" }] }, etag = 1;
   const store = {
     getWithMetadata: async () => value === null ? null : { data: value, etag: String(etag) },
     setJSON: async (_key: string, data: unknown, options: { onlyIfNew?: boolean; onlyIfMatch?: string }) => {
@@ -43,33 +45,39 @@ describe("one-time cross-deploy AI test grant", () => {
     expect(last.reservedAfterMicrousd).toBe(480_000);
     expect((read() as { entries: unknown[] }).entries).toHaveLength(4);
   });
-  it("records the second approved increment atomically against an existing campaign", async () => {
+  it("records the new 5.20 grant atomically and retains all 21 prior reservations", async () => {
     const { store, read, corrupt } = memoryStore();
-    const entries = [180_000, 180_000, 180_000, 180_000, 60_000, 60_000,
-      60_000, 60_000, 60_000, 60_000, 60_000, 60_000]
-      .map((upperBoundMicrousd, index) => ({ id: id(index + 1),
-        stage: index < 4 ? "photo" as const : "inference" as const,
-        mode: index < 4 ? "background" as const : "assist" as const, upperBoundMicrousd,
-        atUtc: index < 4 ? "2026-10-05T12:00:00.000Z" : "2026-10-06T12:00:00.000Z" }));
+    const entries = Array.from({ length: 21 }, (_, index) => ({ id: id(index + 1),
+      stage: index < 6 ? "photo" as const : "inference" as const,
+      mode: index < 6 ? "background" as const : "assist" as const,
+      upperBoundMicrousd: index < 6 ? 180_000 : index === 6 ? 110_000 : 60_000,
+      atUtc: index < 4 ? "2026-10-05T12:00:00.000Z"
+        : index < 14 ? "2026-10-06T12:00:00.000Z" : "2026-10-07T12:00:00.000Z" }));
     const firstGrant = { fromMicrousd: 1_000_000, toMicrousd: 2_000_000,
       atUtc: "2026-10-06T12:00:00.000Z", authorization: "synthetic first grant" };
+    const secondGrant = { fromMicrousd: 2_000_000, toMicrousd: 2_600_000,
+      atUtc: "2026-10-07T12:00:00.000Z", authorization: "synthetic second grant" };
     corrupt({ schemaVersion: 1, campaign: "ux-gemini-20261005-usd1",
-      limitMicrousd: 2_000_000, reservedMicrousd: 1_200_000, entries,
-      grantHistory: [firstGrant] });
-    const result = await reserveAiTestBudget(id(13), "inference", "assist", "netlify-gateway", false, store);
+      limitMicrousd: 2_600_000, reservedMicrousd: 2_030_000, entries,
+      grantHistory: [firstGrant, secondGrant] });
+    const result = await reserveAiTestBudget(id(22), "inference", "assist", "netlify-gateway", true, store);
     const after = read() as { limitMicrousd: number; reservedMicrousd: number;
       entries: typeof entries; grantHistory: Array<{ fromMicrousd: number; toMicrousd: number;
         authorization: string }> };
-    expect(result.reservedAfterMicrousd).toBe(1_260_000);
-    expect(after.limitMicrousd).toBe(2_600_000);
-    expect(after.entries.slice(0, 12)).toEqual(entries);
-    expect(after.grantHistory).toHaveLength(2);
+    expect(result.reservedAfterMicrousd).toBe(2_140_000);
+    expect(after.limitMicrousd).toBe(5_200_000);
+    expect(after.entries.slice(0, 21)).toEqual(entries);
+    expect(after.grantHistory).toHaveLength(3);
     expect(after.grantHistory[0]).toEqual(firstGrant);
-    expect(after.grantHistory[1]).toMatchObject({ fromMicrousd: 2_000_000,
-      toMicrousd: 2_600_000, authorization: expect.stringContaining("USD 0.60") });
+    expect(after.grantHistory[1]).toEqual(secondGrant);
+    expect(after.grantHistory[2]).toMatchObject({ fromMicrousd: 2_600_000,
+      toMicrousd: 5_200_000, authorization: expect.stringContaining("USD 5.20") });
+    expect(() => nextBudgetDocument(after, { id: id(23), stage: "inference", mode: "assist",
+      upperBoundMicrousd: 60_000, atUtc: "2026-10-07T12:00:00.000Z" }, 2_600_000, ""))
+      .toThrow("corrupt");
     corrupt({ schemaVersion: 1, campaign: "ux-gemini-20261005-usd1",
-      limitMicrousd: 1_000_000, reservedMicrousd: 0, entries: [] });
-    await expect(reserveAiTestBudget(id(14), "inference", "assist", "netlify-gateway", false, store))
+      limitMicrousd: 2_000_000, reservedMicrousd: 0, entries: [], grantHistory: [firstGrant] });
+    await expect(reserveAiTestBudget(id(24), "inference", "assist", "netlify-gateway", false, store))
       .rejects.toThrow("prior-grant-missing");
   });
   it("serializes parallel calls and refuses a call that cannot fit", async () => {
@@ -77,8 +85,12 @@ describe("one-time cross-deploy AI test grant", () => {
     const results = await Promise.all(Array.from({ length: 7 }, (_, n) =>
       reserveAiTestBudget(id(n + 1), "photo", "background", "netlify-gateway", false, store)
         .then(() => "accepted", () => "rejected")));
-    expect(results.filter((result) => result === "accepted")).toHaveLength(5);
-    expect((read() as { reservedMicrousd: number }).reservedMicrousd).toBe(900_000);
+    expect(results.filter((result) => result === "accepted")).toHaveLength(7);
+    for (let n = 8; n <= 11; n++)
+      await reserveAiTestBudget(id(n), "photo", "background", "netlify-gateway", false, store);
+    await expect(reserveAiTestBudget(id(12), "photo", "background", "netlify-gateway", false, store))
+      .rejects.toThrow("daily-exhausted");
+    expect((read() as { reservedMicrousd: number }).reservedMicrousd).toBe(1_980_000);
   });
   it("refuses corrupt or inaccessible storage without refunding any prior call", async () => {
     const { store, corrupt } = memoryStore();
@@ -147,22 +159,24 @@ describe("one-time cross-deploy AI test grant", () => {
     const dayOne = "2026-10-06T23:59:59.000Z";
     const dayTwo = "2026-10-07T00:00:00.000Z";
     const old = { schemaVersion: 1 as const, campaign: "ux-gemini-20261005-usd1",
-      limitMicrousd: 2_000_000, reservedMicrousd: 940_000,
+      limitMicrousd: 2_600_000, reservedMicrousd: 1_940_000,
       entries: [{ id: id(1), stage: "photo" as const, mode: "background" as const,
-        upperBoundMicrousd: 940_000, atUtc: dayOne }],
+        upperBoundMicrousd: 1_940_000, atUtc: dayOne }],
       grantHistory: [{ fromMicrousd: 1_000_000, toMicrousd: 2_000_000,
-        atUtc: dayOne, authorization: "synthetic owner grant" }] };
+        atUtc: dayOne, authorization: "synthetic owner grant" },
+      { fromMicrousd: 2_000_000, toMicrousd: 2_600_000,
+        atUtc: dayOne, authorization: "synthetic second grant" }] };
     const next = { id: id(2), stage: "inference" as const, mode: "assist" as const,
       upperBoundMicrousd: 60_000, atUtc: dayOne };
-    const fullDay = nextBudgetDocument(old, next, 2_000_000, "");
-    expect(fullDay.reservedMicrousd).toBe(1_000_000);
-    expect(() => nextBudgetDocument(fullDay, { ...next, id: id(3) }, 2_000_000, ""))
+    const fullDay = nextBudgetDocument(old, next, 2_600_000, "");
+    expect(fullDay.reservedMicrousd).toBe(2_000_000);
+    expect(() => nextBudgetDocument(fullDay, { ...next, id: id(3) }, 2_600_000, ""))
       .toThrow("daily-exhausted");
     const newDay = nextBudgetDocument(fullDay, { ...next, id: id(4), atUtc: dayTwo },
-      2_000_000, "");
-    expect(newDay.reservedMicrousd).toBe(1_060_000);
+      2_600_000, "");
+    expect(newDay.reservedMicrousd).toBe(2_060_000);
     expect(() => nextBudgetDocument({ ...old, entries: [{ ...old.entries[0], atUtc: "bad" }] },
-      next, 2_000_000, "")).toThrow("corrupt");
+      next, 2_600_000, "")).toThrow("corrupt");
   });
 });
 

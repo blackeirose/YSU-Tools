@@ -5,11 +5,11 @@ import { getStore } from "@netlify/blobs";
 // day, namespace, deploy, or request ID. Missing/corrupt storage fails closed.
 const KEY = "ux-gemini-20261005-usd1";
 const INITIAL_LIMIT_MICROUSD = 1_000_000;
-export const TEST_BUDGET_MICROUSD = 2_600_000;
-const DAILY_TEST_BUDGET_MICROUSD = 1_000_000;
+export const TEST_BUDGET_MICROUSD = 5_200_000;
+const DAILY_TEST_BUDGET_MICROUSD = 2_000_000;
 // An incremental grant must change both this cap and the audit label in one
 // reviewed source commit. Until then, the existing campaign cannot expand.
-const INCREMENTAL_GRANT_LABEL = "Owner approval 2026-10-06: add at most USD 0.60 to the existing campaign for remaining bounded Preview acceptance, one justified retry, and post-release smoke; cumulative USD 2.60, daily USD 1.00 unchanged; preserve all prior reservations and unknown costs";
+const INCREMENTAL_GRANT_LABEL = "Owner approval 2026-10-07: raise the existing campaign cumulative ceiling from USD 2.60 to USD 5.20 and its UTC-day ceiling from USD 1.00 to USD 2.00 for bounded acceptance and post-release smoke; replace the pending USD 0.13 proposal, preserve all prior reservations, grants and unknown costs";
 export const aiTestBudgetStore = () => getStore({ name: "travel-planner-ai-test-budget-v1", consistency: "strong" });
 type Store = ReturnType<typeof aiTestBudgetStore>;
 type Stage = "inference" | "landmarks" | "photo" | "relief";
@@ -73,9 +73,11 @@ export function nextBudgetDocument(before: unknown, entry: Entry,
   if (!Number.isSafeInteger(authorizedLimit) || authorizedLimit < INITIAL_LIMIT_MICROUSD ||
     !valid(before, authorizedLimit)) throw new Error("test-budget-corrupt");
   const current = before as Document;
-  // This second grant must build on the already-recorded US$2.00 campaign.
-  // Never collapse two Owner approvals into one migration from an older copy.
+  // Each grant must build on the already-recorded prior ceiling. Never
+  // collapse either earlier Owner approval into this migration.
   if (authorizedLimit > 2_000_000 && current.limitMicrousd < 2_000_000)
+    throw new Error("test-budget-prior-grant-missing");
+  if (authorizedLimit > 2_600_000 && current.limitMicrousd < 2_600_000)
     throw new Error("test-budget-prior-grant-missing");
   if (current.entries.some((old) => old.id === entry.id && old.stage === entry.stage))
     throw new Error("test-budget-duplicate");
