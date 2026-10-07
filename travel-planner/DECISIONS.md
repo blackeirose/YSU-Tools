@@ -7,6 +7,11 @@ Keep executable [product `4c62bec6e50a56164c5ab85246869d1171bb358f`](https://git
 Owner approved the same campaign cumulative ceiling of US$2.60 (an additional US$0.60); the UTC daily ceiling remains US$1.00. Preserve 12 existing reservations/US$1.20 and all unknown costs. Source records the second grant atomically at first new reservation; current live ledger still records US$2.00 and no new paid call was sent for this grant. The remaining whole-batch reservation bound is US$1.31, so schedule Preview and production smoke across UTC days if required. Do not reset the ledger, create a second campaign, spend above either cap, or call the reservation amount a provider bill. Conditional production authorization is valid **after** Preview Full Gate; then fetch the latest complete-host baseline and replace only Planner through `social-capture-tool/scripts/shared_host_release.py`, preserving siblings, private pending/conflicts and budget history. Do not use Supabase in Planner, expand shared security, change DNS, or update MAIN/Tracker.
 
 ---
+## Historical Full Gate decision — 2026-10-06 23:45 UTC
+
+Keep executable commit `3c97b2d` at isolated complete-host Preview `6ac584df1801b9eafb089249`; production remains `6ac2c370d1409615f07878bd`. Source-matched CI and focused source review pass, but exact-host Auth, real two-context offline conflict recovery, paid AI/private Blob and true zoom do not yet pass. Do not treat the old hostname approval or old background success as new-host acceptance. Preserve all existing campaign reservations and unknown costs; with US$1.20 of US$2.00 conservatively reserved and a US$1.31 whole-batch bound, hold further paid calls until the requested incremental grant is decided. Daily US$1 remains unchanged. Conditional production authorization remains subject to the existing Full Gate; use the canonical complete-host publisher and current baseline if the Gate later passes. No Supabase, sibling edit, shared security expansion or MAIN/Tracker update.
+
+---
 
 ## Historical Full Gate decision — 2026-10-06 21:36 UTC
 

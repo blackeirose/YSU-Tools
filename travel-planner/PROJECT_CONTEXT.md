@@ -7,6 +7,11 @@ The executable source for Draft [PR #3](https://github.com/blackeirose/YSU-Tools
 Owner approved an additional US$0.60 for the *same* AI campaign, raising its cumulative cap to US$2.60 while keeping US$1.00 per UTC day. The live ledger still has 12 historical reservations totaling US$1.20 and a recorded US$2.00 cap; the 2→2.6 grant will be atomically recorded with the first new reservation. Prior reservations and unknown charges remain; provider actual billing is unknown. The remaining whole-batch upper bound is US$1.31, scheduled across UTC days as necessary. The current [Gate](docs/UPGRADE_GATE_2026-10-03.md), [handoff](docs/HANDOFF.md) and [single Remote runbook](docs/REMOTE_FINAL_GATE_RUNBOOK_2026-10-06.md) record the source-matched evidence and open conditions. Preserve all private pending/conflicts, sibling tools and the AI ledger. Planner does not use Supabase; this upgrade does not update MAIN/Tracker.
 
 ---
+## Historical upgrade checkpoint — 2026-10-06 23:45 UTC
+
+Product PR #3 commit `3c97b2df1b425a98732df9fe5d066ef3097b1841` is the executable source for complete-host [Preview `6ac584df1801b9eafb089249`](https://6ac584df1801b9eafb089249--ycsu-tools-router.netlify.app/travel-planner/). [CI 37545390444](https://github.com/blackeirose/YSU-Tools/actions/runs/37545390444), focused independent source review and canonical 326-static/nine-Function remote isolation validation passed. Publisher content matches authority PR #23 `9ef2756` tree; production `6ac2c370d1409615f07878bd` is unchanged. The current exact hostname still needs Firebase authorization, and live two-context offline/conflict, AI/Blob and true zoom are outstanding. Synthetic conflict data is prepared in `preview-v1`, but it is not live-offline evidence. The same campaign reserves US$1.20 of its US$2.00 cap; actual charges unknown, and the US$1.31 remaining whole-batch upper bound needs an additional approval (maximum US$0.60 requested). Daily US$1 stays fixed. **Full Gate NOT PASS.**
+
+---
 
 ## Historical upgrade checkpoint — 2026-10-06 21:36 UTC
 
