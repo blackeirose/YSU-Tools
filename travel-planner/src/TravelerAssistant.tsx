@@ -3,8 +3,11 @@ import { Modal } from "./Forms";
 import type { AssistantAction } from "./server/gemini";
 import { sendPreparedAudio } from "./audio-file";
 
-type Result = { action?: AssistantAction; transcript?: string; quota?: { used: number; limit: number }; error?: string };
+type Result = { action?: AssistantAction; transcript?: string; confirmationRequired?: boolean;
+  quota?: { used: number; limit: number }; error?: string };
 export type AssistantRequestContext = { tripId: string; selectedItemId?: string };
+type PendingAudioAction = { action: AssistantAction; requestId: string; context: AssistantRequestContext;
+  selectedDay: string; targetName?: string };
 export function TravelerAssistant({ tripId, selectedDay, city, selectedItem, token, onAction, onDraft, onClose }: {
   tripId: string; selectedDay: string; city: string; selectedItem?: { id: string; name: string };
   token: () => Promise<string>;
@@ -21,6 +24,7 @@ export function TravelerAssistant({ tripId, selectedDay, city, selectedItem, tok
   const [transcript, setTranscript] = useState("");
   const [usage, setUsage] = useState("");
   const [draft, setDraft] = useState<{ action: AssistantAction; tripId: string } | null>(null);
+  const [pendingAudio, setPendingAudio] = useState<PendingAudioAction | null>(null);
   const recorder = useRef<MediaRecorder | null>(null);
   const stream = useRef<MediaStream | null>(null);
   const inFlight = useRef(false);
@@ -36,6 +40,7 @@ export function TravelerAssistant({ tripId, selectedDay, city, selectedItem, tok
     filePreparing.current = false;
     setBusy(false);
     setRecording(false);
+    setPendingAudio(null);
     return () => {
       generation.current += 1;
       cancelled.current = true;
@@ -51,7 +56,7 @@ export function TravelerAssistant({ tripId, selectedDay, city, selectedItem, tok
   const submit = async (audio?: { mime: "audio/webm" | "audio/mp4" | "audio/wav"; base64: string }): Promise<boolean> => {
     if (cancelled.current || inFlight.current || (filePreparing.current && !audio)) return false;
     const requestGeneration = generation.current;
-    inFlight.current = true; setBusy(true); setError(""); setResult(""); setDraft(null);
+    inFlight.current = true; setBusy(true); setError(""); setResult(""); setDraft(null); setPendingAudio(null);
     const requestId = crypto.randomUUID();
     const context = { tripId, selectedItemId: selectedItem?.id };
     try {
@@ -75,6 +80,17 @@ export function TravelerAssistant({ tripId, selectedDay, city, selectedItem, tok
         setResult("請逐項核對日期與名稱，確認後才會一次加入；地點、營業與預約尚未查證。");
         return true;
       }
+      if (audio && data.action.kind === "undo") {
+        setResult("語音復原不會自動執行；請檢查目前可復原的操作，再使用畫面的「復原」按鈕。");
+        return true;
+      }
+      // The response flag is informative, never the sole safety gate: an old
+      // Function response without it must not auto-apply an audio mutation.
+      if ((audio && ["add", "move", "edit_time", "candidate"].includes(data.action.kind)) || data.confirmationRequired) {
+        setPendingAudio({ action: data.action, requestId, context, selectedDay, targetName: selectedItem?.name });
+        setResult("語音已辨識；請核對轉錄、所選卡片、日期和動作，再明確確認。原行程尚未變更。");
+        return true;
+      }
       const message = await onAction(data.action, requestId, context);
       if (!active(requestGeneration)) return true; // The action applied; App shows its own status after a day change.
       setResult(message || data.action.message);
@@ -83,6 +99,23 @@ export function TravelerAssistant({ tripId, selectedDay, city, selectedItem, tok
     } catch (e) { if (active(requestGeneration)) setError(e instanceof Error ? e.message : "助手暫時無法使用；輸入仍保留"); return false; }
     finally { if (generation.current === requestGeneration) {
       controller.current = null; inFlight.current = false; if (!cancelled.current) setBusy(false);
+    } }
+  };
+  const confirmAudio = async () => {
+    if (!pendingAudio || inFlight.current || cancelled.current) return;
+    const requestGeneration = generation.current;
+    if (pendingAudio.context.tripId !== tripId || pendingAudio.context.selectedItemId !== selectedItem?.id ||
+      pendingAudio.selectedDay !== selectedDay) {
+      setPendingAudio(null); setError("旅程、日期或所選卡片已變更；語音操作未套用。請重新選取。"); return;
+    }
+    inFlight.current = true; setBusy(true); setError("");
+    try {
+      const message = await onAction(pendingAudio.action, pendingAudio.requestId, pendingAudio.context);
+      if (!active(requestGeneration)) return;
+      setPendingAudio(null); setResult(message || pendingAudio.action.message); setQuery("");
+    } catch (e) { if (active(requestGeneration)) setError(e instanceof Error ? e.message : "語音操作未套用；請檢查行程狀態"); }
+    finally { if (generation.current === requestGeneration) {
+      inFlight.current = false; if (!cancelled.current) setBusy(false);
     } }
   };
   const confirmDraft = async () => {
@@ -166,6 +199,16 @@ export function TravelerAssistant({ tripId, selectedDay, city, selectedItem, tok
     <p className="hint">選取檔案不會送出；點擊辨識後才傳送給既有助手服務。音訊不會保存在旅程中；若服務結果不明，請先檢查用量再重試。</p>
     <p className="hint">畫面日期：{selectedDay} · 地區：{city || "未指定"}。離線時請使用手動操作；助手不會在恢復連線後自動送出。</p>
     {transcript && <p>辨識內容：{transcript}</p>}
+    {pendingAudio && <section aria-label="語音操作確認" className="import-preview">
+      <p><strong>操作目標：</strong>{pendingAudio.targetName ? `所選卡片「${pendingAudio.targetName}」` : pendingAudio.action.name || "最近一次可復原操作"}</p>
+      <p><strong>動作：</strong>{pendingAudio.action.message} · {pendingAudio.action.kind === "candidate"
+        ? `原日期 ${pendingAudio.action.day || "未指定"}，改為待定`
+        : `目的日期 ${pendingAudio.action.day || "未指定"}`}
+        {pendingAudio.action.time ? ` · ${pendingAudio.action.time}` : ""}</p>
+      <p className="hint">只有按下確認才會修改行程；若辨識文字或目標不符，請取消。</p>
+      <div className="actions"><button className="primary" disabled={busy} onClick={() => void confirmAudio()}>確認套用這筆語音操作</button>
+        <button disabled={busy} onClick={() => { setPendingAudio(null); setResult("已取消語音操作；原行程未變更。"); }}>取消語音操作</button></div>
+    </section>}
     {draft?.action.draftItems && <section aria-label="旅伴草案預覽" className="import-preview">
       {draft.action.draftItems.map((row, index) => <article className="import-row" key={`${row.day}-${index}`}>
         <strong>{row.day} · {row.name}</strong>

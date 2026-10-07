@@ -271,6 +271,23 @@ export async function geminiHandler(req: Request, env: Env, http: typeof fetch =
         return reply(502, { error: `指令格式不正確（${field}）；未執行任何動作`, quota });
       }
       if (input.audio && !action.data.transcript) return reply(502, { error: "語音辨識內容不完整，未執行動作", quota });
+      // Undo is state-dependent: the last operation can change while a voice
+      // preview is open. Direct the user to the existing explicit Undo control.
+      if (input.audio && action.data.kind === "undo") return reply(200, { action: { kind: "clarify",
+        message: "語音復原不會自動執行；請檢查目前可復原的操作，再使用畫面的「復原」按鈕。" },
+        transcript: action.data.transcript, quota, usage });
+      if (input.audio && ["add", "move", "edit_time", "candidate"].includes(action.data.kind) && !action.data.day)
+        return reply(200, { action: { kind: "clarify",
+          message: "語音操作需要明確的旅程日期；請指定日期後再試，原行程未變更。" },
+          transcript: action.data.transcript, quota, usage });
+      if (input.audio && action.data.kind === "add" && !action.data.name?.trim())
+        return reply(200, { action: { kind: "clarify",
+          message: "語音未能辨識要新增的地點名稱；原行程未變更。" },
+          transcript: action.data.transcript, quota, usage });
+      if (input.audio && action.data.kind === "edit_time" && !action.data.time)
+        return reply(200, { action: { kind: "clarify",
+          message: "語音未能辨識明確時刻；原行程未變更。" },
+          transcript: action.data.transcript, quota, usage });
       const target = clock ? relativeTarget(input.audio ? action.data.transcript ?? input.query : input.query, clock) : null;
       if (input.audio && (relativeAmbiguous(action.data.transcript ?? "") || relativeUnsupported(action.data.transcript ?? "")))
         return reply(200, { action: {
@@ -281,14 +298,23 @@ export async function geminiHandler(req: Request, env: Env, http: typeof fetch =
         return reply(502, { error: `日期解讀不一致；${target.term}應是 ${target.day}，未執行任何動作`, quota, usage });
       if (action.data.day && clock && !inTrip(action.data.day, clock))
         return reply(502, { error: "Gemini 回傳旅程範圍外的日期，未執行任何動作", quota, usage });
-      if (["move", "edit_time", "candidate"].includes(action.data.kind) &&
-        (!input.selectedItem || action.data.itemId !== input.selectedItem.id))
+      // Audio may omit optional itemId. Only the explicitly selected card can
+      // supply it, and the client must show that target for a second click
+      // before applying any audio mutation. A different model ID is rejected.
+      const selectedAction = input.audio && ["move", "edit_time", "candidate"].includes(action.data.kind) &&
+        input.selectedItem && !action.data.itemId
+        ? { ...action.data, itemId: input.selectedItem.id } : action.data;
+      if (["move", "edit_time", "candidate"].includes(selectedAction.kind) &&
+        (!input.selectedItem || selectedAction.itemId !== input.selectedItem.id))
         return reply(200, { action: { kind: "clarify",
-          message: "旅伴回傳的安排與所選卡片不符；原行程未變更，請重新選取後重試。" }, quota, usage });
-      const checkedAction = target && action.data.day === target.day
-        ? { ...action.data, message: `${action.data.message}（${target.term}：${target.day}，${target.timezone}）` }
-        : action.data;
-      return reply(200, { action: checkedAction, transcript: action.data.transcript, quota, usage, provider: provider.name, model });
+          message: "旅伴回傳的安排與所選卡片不符；原行程未變更，請重新選取後重試。" },
+          transcript: action.data.transcript, quota, usage });
+      const checkedAction = target && selectedAction.day === target.day
+        ? { ...selectedAction, message: `${selectedAction.message}（${target.term}：${target.day}，${target.timezone}）` }
+        : selectedAction;
+      return reply(200, { action: checkedAction, transcript: action.data.transcript,
+        confirmationRequired: !!input.audio && ["add", "move", "edit_time", "candidate"].includes(checkedAction.kind),
+        quota, usage, provider: provider.name, model });
     }
     if (input.mode === "vision") {
       const rows = visionSchema.safeParse(parsed);

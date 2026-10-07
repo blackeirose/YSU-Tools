@@ -87,6 +87,62 @@ test("selected itinerary card reaches assistant with a bound target and can move
     await expect(page.locator('[data-day="2030-01-01"]').getByRole("article", { name: "Assistant target stop" })).toBeVisible();
   } finally { await context.close(); }
 });
+test("synthetic audio bytes require an explicit selected-card confirmation before edit", async ({ browser }) => {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  try {
+    await login(page, `audio-confirm-${crypto.randomUUID()}@example.test`);
+    await createRangeTrip(page, "Synthetic audio confirmation");
+    await quick(page, "Audio target stop");
+    await page.getByRole("button", { name: "查看", exact: true }).click();
+    await page.getByRole("article", { name: "Audio target stop" }).getByRole("button", { name: /Audio target stop/ }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "以此項詢問旅伴助手" }).click();
+    let matched = false;
+    let mockUndo = false;
+    await page.route("**/travel-planner/api/ai", async (route) => {
+      const body = route.request().postDataJSON() as { selectedItem?: { id: string; name: string };
+        audio?: { mime: string; base64: string } };
+      matched = body.selectedItem?.name === "Audio target stop" && body.audio?.mime === "audio/wav" &&
+        Buffer.from(body.audio.base64, "base64").toString("ascii", 0, 4) === "RIFF";
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        action: mockUndo ? { kind: "undo", message: "復原上一筆" }
+          : { kind: "edit_time", itemId: body.selectedItem?.id, day: "2030-01-01", time: "09:00",
+            message: "改為上午九點" },
+        transcript: mockUndo ? "復原上一筆" : "把所選卡片改成上午九點",
+        // Deliberately omit confirmationRequired to test the client safety gate.
+      }) });
+    });
+    const samples = 1600;
+    const wav = Buffer.alloc(44 + samples * 2);
+    wav.write("RIFF", 0); wav.writeUInt32LE(wav.length - 8, 4); wav.write("WAVE", 8);
+    wav.write("fmt ", 12); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20);
+    wav.writeUInt16LE(1, 22); wav.writeUInt32LE(16000, 24); wav.writeUInt32LE(32000, 28);
+    wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34);
+    wav.write("data", 36); wav.writeUInt32LE(samples * 2, 40);
+    await page.locator('input[type="file"]').setInputFiles({ name: "synthetic.wav", mimeType: "audio/wav", buffer: wav });
+    await page.getByRole("button", { name: "辨識所選音檔" }).click();
+    const confirmation = page.getByRole("region", { name: "語音操作確認" });
+    await expect(confirmation).toContainText("Audio target stop");
+    await expect(page.getByRole("dialog")).toContainText("辨識內容：把所選卡片改成上午九點");
+    expect(matched).toBe(true);
+    await expect(page.getByRole("article", { name: "Audio target stop" })).not.toContainText("09:00");
+    await confirmation.getByRole("button", { name: "確認套用這筆語音操作" }).click();
+    await expect(page.getByRole("article", { name: "Audio target stop" })).toContainText("09:00");
+    await page.reload();
+    await expect(page.getByRole("article", { name: "Audio target stop" })).toContainText("09:00");
+    await page.getByRole("article", { name: "Audio target stop" }).getByRole("button", { name: /Audio target stop/ }).click();
+    await page.getByRole("dialog").getByRole("button", { name: "以此項詢問旅伴助手" }).click();
+    mockUndo = true;
+    await page.locator('input[type="file"]').setInputFiles({ name: "synthetic.wav", mimeType: "audio/wav", buffer: wav });
+    await page.getByRole("button", { name: "辨識所選音檔" }).click();
+    await expect(page.getByRole("dialog")).toContainText("語音復原不會自動執行");
+    await expect(page.getByRole("article", { name: "Audio target stop" })).toContainText("09:00");
+    await page.getByRole("dialog").getByRole("button", { name: "關閉", exact: true }).click();
+    await operations(page);
+    await page.getByRole("button", { name: "復原", exact: true }).click();
+    await expect(page.getByRole("article", { name: "Audio target stop" })).not.toContainText("09:00");
+  } finally { await context.close(); }
+});
 test("configured Preview local mode survives a deep-link reload and clears on sign-out", async ({ browser }) => {
   const context = await browser.newContext();
   const page = await context.newPage();

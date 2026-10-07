@@ -71,6 +71,114 @@ describe("Gemini paid boundary", () => {
     expect((await response.json()).action).toMatchObject({ kind: "move", itemId: selectedId,
       day: "2030-01-02" });
   });
+  it("binds an omitted audio action ID to the selected card but rejects a different ID", async () => {
+    const selectedId = crypto.randomUUID();
+    let proposedItemId: string | null = null;
+    const http = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("accounts:lookup")) return owner();
+      if (url.includes("/records/")) return trip();
+      if (url.includes("/aiRequests/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/")) return new Response("", { status: 404 });
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({
+        kind: "edit_time", message: "改為上午九點", itemId: proposedItemId,
+        day: "2030-01-02", time: "09:00", transcript: "把所選景點改成上午九點",
+      }) }] } }] });
+    };
+    const audioRequest = () => new Request("https://preview.test/travel-planner/api/ai", {
+      method: "POST", headers: { Authorization: "Bearer synthetic-token" }, body: JSON.stringify({
+        mode: "assist", tripId: crypto.randomUUID(), requestId: crypto.randomUUID(),
+        query: "請理解這段語音並只依明確語意提出操作", selectedDay: "2030-01-02",
+        selectedItem: { id: selectedId, name: "合成景點" }, audio: { mime: "audio/wav", base64: "UklGRg==" },
+      }),
+    });
+    const bound = await geminiHandler(audioRequest(), env, http as typeof fetch);
+    expect(bound.status).toBe(200);
+    expect(await bound.json()).toMatchObject({ action: { kind: "edit_time", itemId: selectedId,
+      day: "2030-01-02", time: "09:00" }, transcript: "把所選景點改成上午九點",
+      confirmationRequired: true });
+    proposedItemId = crypto.randomUUID();
+    const rejected = await geminiHandler(audioRequest(), env, http as typeof fetch);
+    expect(rejected.status).toBe(200);
+    expect(await rejected.json()).toMatchObject({ action: { kind: "clarify",
+      message: expect.stringContaining("所選卡片") }, transcript: "把所選景點改成上午九點" });
+  });
+  it("never silently applies an audio action when the transcript names another place", async () => {
+    const selectedId = crypto.randomUUID();
+    const http = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("accounts:lookup")) return owner();
+      if (url.includes("/records/")) return trip();
+      if (url.includes("/aiRequests/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/")) return new Response("", { status: 404 });
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({
+        kind: "edit_time", message: "改為上午九點", itemId: null,
+        day: "2030-01-02", time: "09:00", transcript: "把另一家咖啡店改成上午九點",
+      }) }] } }] });
+    };
+    const result = await geminiHandler(new Request("https://preview.test/travel-planner/api/ai", {
+      method: "POST", headers: { Authorization: "Bearer synthetic-token" }, body: JSON.stringify({
+        mode: "assist", tripId: crypto.randomUUID(), requestId: crypto.randomUUID(),
+        query: "請理解這段語音並只依明確語意提出操作", selectedDay: "2030-01-02",
+        selectedItem: { id: selectedId, name: "合成景點" }, audio: { mime: "audio/wav", base64: "UklGRg==" },
+      }),
+    }), env, http as typeof fetch);
+    expect(result.status).toBe(200);
+    expect(await result.json()).toMatchObject({ action: { kind: "edit_time", itemId: selectedId },
+      transcript: "把另一家咖啡店改成上午九點", confirmationRequired: true });
+  });
+  it("sends an audio undo to the current visible Undo control instead of binding stale state", async () => {
+    const http = async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("accounts:lookup")) return owner();
+      if (url.includes("/records/")) return trip();
+      if (url.includes("/aiRequests/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/") && init?.method === "PATCH") return Response.json({});
+      if (url.includes("/aiUsage/")) return new Response("", { status: 404 });
+      return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({
+        kind: "undo", message: "復原上一筆", transcript: "復原上一筆",
+      }) }] } }] });
+    };
+    const result = await geminiHandler(new Request("https://preview.test/travel-planner/api/ai", {
+      method: "POST", headers: { Authorization: "Bearer synthetic-token" }, body: JSON.stringify({
+        mode: "assist", tripId: crypto.randomUUID(), requestId: crypto.randomUUID(),
+        query: "請理解這段語音並只依明確語意提出操作", selectedDay: "2030-01-02",
+        audio: { mime: "audio/wav", base64: "UklGRg==" },
+      }),
+    }), env, http as typeof fetch);
+    expect(result.status).toBe(200);
+    expect(await result.json()).toMatchObject({ action: { kind: "clarify",
+      message: expect.stringContaining("復原") }, transcript: "復原上一筆" });
+  });
+  it("requires an explicit date before proposing any audio add or selected-card mutation", async () => {
+    const selectedId = crypto.randomUUID();
+    for (const kind of ["add", "move", "edit_time", "candidate"] as const) {
+      const http = async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (url.includes("accounts:lookup")) return owner();
+        if (url.includes("/records/")) return trip();
+        if (url.includes("/aiRequests/") && init?.method === "PATCH") return Response.json({});
+        if (url.includes("/aiUsage/") && init?.method === "PATCH") return Response.json({});
+        if (url.includes("/aiUsage/")) return new Response("", { status: 404 });
+        return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({
+          kind, message: "操作", name: "合成地點", itemId: selectedId, time: "09:00",
+          transcript: "把所選安排改成上午九點",
+        }) }] } }] });
+      };
+      const result = await geminiHandler(new Request("https://preview.test/travel-planner/api/ai", {
+        method: "POST", headers: { Authorization: "Bearer synthetic-token" }, body: JSON.stringify({
+          mode: "assist", tripId: crypto.randomUUID(), requestId: crypto.randomUUID(),
+          query: "請理解這段語音並只依明確語意提出操作", selectedDay: "2030-01-02",
+          selectedItem: { id: selectedId, name: "合成景點" }, audio: { mime: "audio/wav", base64: "UklGRg==" },
+        }),
+      }), env, http as typeof fetch);
+      expect(result.status).toBe(200);
+      expect(await result.json()).toMatchObject({ action: { kind: "clarify",
+        message: expect.stringContaining("明確的旅程日期") }, transcript: "把所選安排改成上午九點" });
+    }
+  });
   it("keeps a vision HTTP 400 charge-unknown and records only allowlisted provider diagnostics", async () => {
     vi.mocked(finishAiUsage).mockClear();
     const http = async (input: string | URL | Request, init?: RequestInit) => {
