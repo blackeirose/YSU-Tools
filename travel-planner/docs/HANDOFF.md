@@ -1,5 +1,13 @@
 # Travel Planner UX/Gemini — current handoff
 
+## Current production handoff — 2026-10-07
+
+新版已在[正式網址](https://tools.ycsu.cc/travel-planner/)發布，Netlify deploy `6ac6d1ec1b7c7996e20be0f8`，可執行產品來源 [`92f63409df27f2c306141f0c51931163bc25876d`](https://github.com/blackeirose/YSU-Tools/commit/92f63409df27f2c306141f0c51931163bc25876d)，[CI `37698621712`](https://github.com/blackeirose/YSU-Tools/actions/runs/37698621712) PASS。固定[隔離測試入口](https://travel-planner-review--ycsu-tools-router.netlify.app/travel-planner/)仍是 `preview-v1`／不可變 deploy `6ac6cd50977377479f81b8ba`。正式站完整站驗證保留六個兄弟 Functions／路由／排程；五個 Planner 專用 Production Functions 變數補齊並讀回後，從當時最新完整站重新部署。兩個獨立登入 context 的合成新增、移日、Undo、刷新及文字 AI 動作實測通過；背景地標／攝影／紙雕生成後，另一 context 讀到兩張私有圖。真實合成 WAV 音訊→確認→保存→跨 context→Undo 在最終 Preview 通過。Owner 精確 waiver 留下真單頁離線、200% 縮放、真人麥克風 UNVERIFIED；實體 iPhone／Safari 亦未測。AI 同一帳本 28 筆／US$2.79 **保守預留**，核准 US$5.20，當日 US$1.59／US$2.00；實際供應商帳單未知。詳見[正式發布紀錄](PRODUCTION_RELEASE_2026-10-07.md)及[最新 Gate](UPGRADE_GATE_2026-10-03.md)。私人 pending/conflicts 與帳本未清除；Planner 無 Supabase，未更新 MAIN／Tracker。
+
+---
+
+## Historical handoffs below
+
 > **目前交接（2026-10-07 20:55 UTC）：Full Gate NOT PASS，正式站未更新。** 固定[測試入口](https://travel-planner-review--ycsu-tools-router.netlify.app/travel-planner/)已對應不可變完整站 draft `6ac6b032f314895534a99288`、[產品執行來源 `cb4c17fa8d6f859632e8a7305881b75a207aa920`](https://github.com/blackeirose/YSU-Tools/commit/cb4c17fa8d6f859632e8a7305881b75a207aa920)，來源一致 [CI `37683065371`](https://github.com/blackeirose/YSU-Tools/actions/runs/37683065371) PASS；獨立 reviewer 對最終音訊確認修正 SOURCE PASS。共用站遠端驗證 326 檔／九個 Functions、兄弟工具與 `/travel-planner/` 範圍 PASS，正式 deploy 仍 `6ac2c370d1409615f07878bd`。先前真實合成音訊經登入 UI 送達 AI，但所選卡片保護拒絕動作，因此 live audio **FAIL**；新版只完成程式與 emulator 複核，尚未重送付費呼叫。既有登入、獨立 contexts 同步、vision 與私有兩片式背景證據僅依未變路徑沿用。帳本 21 筆／US$2.03 保守預留，上限 US$2.60、當日 US$0.83／US$1.00；實際帳單未知。整批音訊重測加發布後 smoke 上界 US$0.59，現餘 US$0.57，精確追加至多 US$0.13 的決定待回覆。真實單頁離線、200% 縮放、真人麥克風為 Owner 限縮 waiver 下 UNVERIFIED；實體 iPhone／Safari 亦未測。v1 正式候選僅在本機預組裝，必要 Gate 與正式站驗證額度未備齊前不發布。保留私人 pending/conflicts、共用站兄弟工具及 AI 帳本；不使用 Supabase、不更新 MAIN／Tracker。[最新 Gate](UPGRADE_GATE_2026-10-03.md)有來源與證據。以下為歷史交接。
 
 
