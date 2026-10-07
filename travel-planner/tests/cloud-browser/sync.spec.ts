@@ -82,6 +82,7 @@ test("selected itinerary card reaches assistant with a bound target and can move
     expect(sentTarget).toMatch(/^[0-9a-f-]{36}$/i);
     await expect(page.locator('[data-day="2030-01-02"]').getByRole("article", { name: "Assistant target stop" })).toBeVisible();
     await page.getByRole("dialog").getByRole("button", { name: "關閉", exact: true }).click();
+    await operations(page);
     await page.getByRole("button", { name: "復原", exact: true }).click();
     await expect(page.locator('[data-day="2030-01-01"]').getByRole("article", { name: "Assistant target stop" })).toBeVisible();
   } finally { await context.close(); }
