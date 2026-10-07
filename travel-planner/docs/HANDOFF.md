@@ -1,5 +1,11 @@
 # Travel Planner UX/Gemini — current handoff
 
+> **目前交接（2026-10-07 13:00 UTC）：Full Gate NOT PASS，正式站未更新。** 固定 [Planner 測試入口](https://travel-planner-review--ycsu-tools-router.netlify.app/travel-planner/) 現指向不可變 draft [`6ac63fadf5def9047a6c4eb0`](https://6ac63fadf5def9047a6c4eb0--ycsu-tools-router.netlify.app/travel-planner/)，產品可執行來源 [`91a05e4`](https://github.com/blackeirose/YSU-Tools/commit/91a05e4364816a29693103746057ab5b442f1958)，[來源一致 CI 37622619838](https://github.com/blackeirose/YSU-Tools/actions/runs/37622619838) PASS。完整站遠端檢查 326 靜態檔／九 Functions、六個兄弟 Function digest、路由、PWA scope、匿名 API 401 通過；正式 deploy 讀回仍為 `6ac2c370d1409615f07878bd`。Firebase 只增加固定入口這一個精確 hostname（清理後 8→9），未回補舊 Preview 網域。IAB 固定入口已正常登入並同步。當前來源的合成圖片匯入真實 HTTP 200，三筆可編輯預覽確認後存入兩個行程及一個候選，刷新保留；東京背景三階段真實 HTTP 200、兩片私有 Blob 顯示並刷新保留，未再次扣費。前一個 runtime `601cb065` 的文字助手移日／Undo 真實操作可沿用，因最後只改 vision；不能寫成此 runtime 新付費測試。舊 HTTP 400 原因仍無欄位訊息，預留未釋放。同一 campaign 20 筆／US$1.92 **保守預留**，累計核准 US$2.60、UTC 每日 US$1.00；實際帳單未知。**仍缺兩個獨立 context 的此版雲端讀回、真離線四類衝突與恢復、真人麥克風、Chrome 真 200% zoom**；IAB 的第二個 tab 不是獨立 context。合成 `FG 054ce24` 及私有 JSON 備份已備妥，[單次 Remote 手冊](REMOTE_FINAL_GATE_RUNBOOK_2026-10-06.md) 有精確步驟。獨立 reviewer 是 vision 來源 PASS，非上述真實操作 PASS。物理 iPhone／Safari 未測。必要 Preview Gate 通過後才可依條件式授權、從當時最新完整站 baseline 發布 Planner-only；本輪不更新 MAIN／Tracker。詳見 [Gate](UPGRADE_GATE_2026-10-03.md)。
+
+---
+
+## Historical checkpoints below
+
 > **目前交接（2026-10-07 06:50 UTC）：Full Gate NOT PASS，正式站未更新。** 產品 runtime [`601cb065`](https://github.com/blackeirose/YSU-Tools/commit/601cb065365425b705e86d2292787247a24d4fe3) 有來源一致 [CI 37582701804](https://github.com/blackeirose/YSU-Tools/actions/runs/37582701804) PASS；canonical 完整站 [Preview `6ac5eb36716fa0a41443535b`](https://6ac5eb36716fa0a41443535b--ycsu-tools-router.netlify.app/travel-planner/) 遠端驗證 326 檔、九 Functions、兄弟路由及 Planner scope 通過，正式 deploy 仍為 `6ac2c370d1409615f07878bd`。舊候選的一次真實合成圖片匯入得 provider HTTP 400／`INVALID_ARGUMENT`，未留原始欄位訊息；保守預留 US$0.06 不釋放。同一 campaign 現為 13 筆／**US$1.26 保守預留**，已核准累計 US$2.60、UTC 每日 US$1.00，實際帳單未知。新 runtime 僅調整 vision 的官方 JSON 請求格式，source/CI 通過但尚無真實服務 PASS。精確新 hostname 尚待 Firebase 操作當下確認；新站登入、雙 context 真離線衝突、文字／語音／vision、私有兩片背景與 200% zoom 仍須驗收。獨立 reviewer 僅對最後兩項程式變更做來源審查，不等於真實服務通過。詳見 [Gate](UPGRADE_GATE_2026-10-03.md) 與 [Remote 手冊](REMOTE_FINAL_GATE_RUNBOOK_2026-10-06.md)。
 
 ---

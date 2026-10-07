@@ -1,5 +1,13 @@
 # 最終候選的單次 Remote 驗收手冊（2026-10-06 準備稿）
 
+> **目前準備狀態（2026-10-07 13:00 UTC；仍非真離線 PASS）：** 固定 [Planner 測試入口](https://travel-planner-review--ycsu-tools-router.netlify.app/travel-planner/) 對應 draft `6ac63fadf5def9047a6c4eb0`、產品 runtime [`91a05e4`](https://github.com/blackeirose/YSU-Tools/commit/91a05e4364816a29693103746057ab5b442f1958)、[CI 37622619838](https://github.com/blackeirose/YSU-Tools/actions/runs/37622619838)。Firebase 已查重並只授權此固定 hostname，IAB 已正常登入、讀取 `FG 054ce24` 合成旅程並顯示 `已同步`。四筆衝突測試項目仍在 2030-01-06、備份在 `.private-integration/synthetic-fg-conflict-backup-20261007.json`（本機私有，不提交）。另一個 IAB 分頁不等於獨立 context；目前 Computer Use 庫存沒有可控制的 Chrome extension。因此 Owner Remote 只需先在 Windows Chrome 開啟下述固定深層網址並正常登入，待兩邊 `已同步` 後做單頁 Offline→Online、200% 縮放及真人麥克風，agent 完成所有資料操作、判讀及恢復。當前 vision 及背景在 IAB 真實成功、刷新保留；跨 context 私有 Blob 讀回仍待 Chrome。Campaign 20 筆／US$1.92 保守預留、US$2.60 累計上限、UTC 每日 US$1.00，實際帳單未知；真人語音的預估上界可容納在目前剩餘授權內，尚未預留或發送。
+
+**Chrome A 精確網址：** https://travel-planner-review--ycsu-tools-router.netlify.app/travel-planner/trips/634adbf2-25f5-4c79-b15b-61ac5053270b/day/2030-01-06 。**IAB B** 已在同一網址。Owner 先正常登入 Chrome A 並保持分頁；不要清除任一瀏覽器儲存、不要關閉整台 TOWER 網路。Agent 看到兩個 contexts 同帳號、同四筆合成項目、`已同步` 並完成初始讀回後，才會請 Owner 把 **Chrome A 的 DevTools → Network 單頁**切成 Offline。完成 A 離線編輯／刷新及 B 在線衝突後，agent 才通知切回 Online。資料恢復與雙向刷新完成後，Owner 將 Chrome 設真正 200% Zoom、由 agent 檢視操作，再還原 100%；最後依頁面提示授權麥克風說合成短句。這些是一次 Remote 的順序，不能先把單一 IAB 的測試記成雙 context PASS。
+
+---
+
+## 歷史準備稿（舊不可變候選，勿再要求其 Firebase 網域）
+
 > **目前準備狀態（2026-10-07 06:50 UTC；仍非驗收 PASS）：** 最終候選現為 runtime [`601cb065`](https://github.com/blackeirose/YSU-Tools/commit/601cb065365425b705e86d2292787247a24d4fe3)、[CI 37582701804](https://github.com/blackeirose/YSU-Tools/actions/runs/37582701804) 及完整站 [Preview `6ac5eb36716fa0a41443535b`](https://6ac5eb36716fa0a41443535b--ycsu-tools-router.netlify.app/travel-planner/)。精確 hostname `6ac5eb36716fa0a41443535b--ycsu-tools-router.netlify.app` 已查重，仍待 Firebase 操作當下確認、加入及讀回。Chrome 擴充功能現可讀取舊版登入分頁，最終候選的獨立 context 尚未登入。以下 Remote 只在新候選兩個 context 都已登入、合成旅程與備份讀回後執行；舊 `6ac5ce...` 不可充當新版驗收。Chrome 工具目前未提供單分頁 Offline 或瀏覽器真實 Zoom 控制，所以保留 Owner 最少的 Offline/Online、200% 與真人麥克風操作；資料操作和結果判讀仍由 agent 負責。舊版圖片匯入 HTTP 400／`INVALID_ARGUMENT` 的 US$0.06 預留保留；目前 campaign 13 筆／US$1.26 保守預留，實際帳單未知。
 
 ---
