@@ -1,6 +1,12 @@
 # YSU Travel Planner
 
-## Current upgrade checkpoint — 2026-10-07 UTC
+## Current upgrade checkpoint — 2026-10-07 06:50 UTC
+
+The source-matched runtime is [product `601cb065`](https://github.com/blackeirose/YSU-Tools/commit/601cb065365425b705e86d2292787247a24d4fe3), with [CI 37582701804](https://github.com/blackeirose/YSU-Tools/actions/runs/37582701804) PASS and canonical complete-host [Preview `6ac5eb36716fa0a41443535b`](https://6ac5eb36716fa0a41443535b--ycsu-tools-router.netlify.app/travel-planner/) validated remotely. It preserves the latest verified production baseline `6ac2c370d1409615f07878bd`, sibling assets, six sibling Functions, routes and schedule; nine Functions and 326 static files were validated. The Preview is still held from production by necessary live Auth, offline/conflict, AI/private Blob and zoom acceptance. Its exact hostname is pending Firebase action-time confirmation. The same campaign has 13 permanent reservations totaling US$1.26 conservative upper bound under the approved US$2.60 cumulative and US$1.00 UTC-day limits; actual provider billing is unknown. The newest vision request shape is source-reviewed and CI-tested, but live success has not been observed. See the [current Gate](docs/UPGRADE_GATE_2026-10-03.md) and [handoff](docs/HANDOFF.md). Planner remains private, scoped to `/travel-planner/`, and does not use Supabase.
+
+---
+
+## Historical upgrade checkpoint — 2026-10-07 UTC
 
 The executable source for Draft [PR #3](https://github.com/blackeirose/YSU-Tools/pull/3) is [`4c62bec6e50a56164c5ab85246869d1171bb358f`](https://github.com/blackeirose/YSU-Tools/commit/4c62bec6e50a56164c5ab85246869d1171bb358f). [CI 37571986648](https://github.com/blackeirose/YSU-Tools/actions/runs/37571986648) passed. Canonical complete-host [Preview `6ac5ce500adc8a3a5baff6fd`](https://6ac5ce500adc8a3a5baff6fd--ycsu-tools-router.netlify.app/travel-planner/) passed remote isolation validation with 326 static files and nine Functions; publisher executable tree equals reviewed authority `9ef2756`. Production deploy `6ac2c370d1409615f07878bd` was unchanged at latest readback. The exact Preview hostname still awaits Firebase Authorized Domains action-time confirmation and readback; final-host sign-in, live two-context offline recovery, current AI/private Blob and 200% zoom are **not yet PASS**, so the upgrade is **not published**.
 
