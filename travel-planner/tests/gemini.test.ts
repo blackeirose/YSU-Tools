@@ -81,7 +81,7 @@ describe("Gemini paid boundary", () => {
       if (url.includes("/aiUsage/") && init?.method === "PATCH") return Response.json({});
       if (url.includes("/aiUsage/")) return new Response("", { status: 404 });
       return Response.json({ error: { status: "INVALID_ARGUMENT",
-        message: "Unknown name 'responseJsonSchema' at 'generation_config': private fixture text" },
+        message: "Unknown name 'responseFormat' at 'generation_config': private fixture text" },
       }, { status: 400 });
     };
     const result = await geminiHandler(new Request("https://preview.test/travel-planner/api/ai", {
@@ -94,7 +94,7 @@ describe("Gemini paid boundary", () => {
     const event = vi.mocked(finishAiUsage).mock.lastCall?.[1];
     expect(event).toMatchObject({ result: "http-error-charge-unknown", httpStatus: 400,
       providerErrorStatus: "INVALID_ARGUMENT", providerErrorCategory: "unknown-field",
-      providerErrorField: "responseJsonSchema" });
+      providerErrorField: "responseFormat" });
     expect(JSON.stringify(event)).not.toContain("private fixture text");
   });
   it("does not call the provider when the one-time budget cannot reserve", async () => {
@@ -221,8 +221,9 @@ describe("Gemini paid boundary", () => {
         draftItems: { items: { required: ["day", "name"] } } },
     });
   });
-  it("constrains image recognition to complete preview rows before a paid provider call", async () => {
+  it("uses the current structured multimodal REST format and validates complete preview rows", async () => {
     let schema: Record<string, unknown> | undefined;
+    let generationConfig: Record<string, unknown> | undefined;
     const http = async (input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
       if (url.includes("accounts:lookup")) return owner();
@@ -230,8 +231,8 @@ describe("Gemini paid boundary", () => {
       if (url.includes("/aiRequests/") && init?.method === "PATCH") return Response.json({});
       if (url.includes("/aiUsage/") && init?.method === "PATCH") return Response.json({});
       if (url.includes("/aiUsage/")) return new Response("", { status: 404 });
-      schema = (JSON.parse(String(init?.body)) as { generationConfig: { responseJsonSchema?: Record<string, unknown> } })
-        .generationConfig.responseJsonSchema;
+      generationConfig = (JSON.parse(String(init?.body)) as { generationConfig: Record<string, unknown> }).generationConfig;
+      schema = (generationConfig.responseFormat as { text: { schema: Record<string, unknown> } }).text.schema;
       return Response.json({ candidates: [{ content: { parts: [{ text: JSON.stringify({ rows: [{
         dateText: "2030-01-02", name: "National Museum of Nature and Science", city: "Tokyo",
         time: "10:00", candidate: false, notes: "", uncertain: false,
@@ -244,6 +245,9 @@ describe("Gemini paid boundary", () => {
       }),
     }), env, http as typeof fetch);
     expect(response.status).toBe(200);
+    expect(generationConfig?.responseJsonSchema).toBeUndefined();
+    expect(generationConfig?.responseMimeType).toBeUndefined();
+    expect(generationConfig?.responseFormat).toMatchObject({ text: { mimeType: "application/json" } });
     expect(schema).toMatchObject({ type: "object", required: ["rows", "warnings"], properties: {
       rows: { items: { required: ["dateText", "name", "city", "time", "candidate", "notes", "uncertain"] } },
     } });

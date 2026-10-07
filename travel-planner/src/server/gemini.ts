@@ -234,10 +234,16 @@ export async function geminiHandler(req: Request, env: Env, http: typeof fetch =
         itemId: { type: "string", enum: [input.selectedItem.id],
           description: "For an existing item, use this exact selectedItem.id." } } } : assistantResponseSchema;
     const requestBody = { systemInstruction: { parts: [{ text: instruction }] }, contents: [{ role: "user", parts }],
-      generationConfig: { responseMimeType: "application/json", candidateCount: 1,
-        ...(input.mode === "assist" ? { responseJsonSchema: selectedActionSchema } : {}),
-        ...(input.mode === "explore" ? { responseJsonSchema: exploreResponseSchema } : {}),
-        ...(input.mode === "vision" ? { responseJsonSchema: visionResponseSchema } : {}),
+      generationConfig: { candidateCount: 1,
+        ...(input.mode === "vision" ? {
+          // Current Gemini generateContent REST contract uses responseFormat for
+          // structured multimodal output. Keep the server-side row validation.
+          responseFormat: { text: { mimeType: "application/json", schema: visionResponseSchema } },
+        } : {
+          responseMimeType: "application/json",
+          ...(input.mode === "assist" ? { responseJsonSchema: selectedActionSchema } : {}),
+          ...(input.mode === "explore" ? { responseJsonSchema: exploreResponseSchema } : {}),
+        }),
         maxOutputTokens: input.mode === "vision" || input.mode === "explore" ? 2200 : 1200 } };
     let testBudget: Awaited<ReturnType<typeof reserveAiTestBudget>>;
     try { testBudget = await reserveAiTestBudget(input.requestId, "inference", input.mode, provider.name, !!input.audio); }
