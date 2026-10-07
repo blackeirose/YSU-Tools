@@ -119,7 +119,7 @@ test("synthetic audio bytes require an explicit selected-card confirmation befor
     wav.writeUInt16LE(1, 22); wav.writeUInt32LE(16000, 24); wav.writeUInt32LE(32000, 28);
     wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34);
     wav.write("data", 36); wav.writeUInt32LE(samples * 2, 40);
-    await page.locator('input[type="file"]').setInputFiles({ name: "synthetic.wav", mimeType: "audio/wav", buffer: wav });
+    await page.locator('input[type="file"][accept*="audio/"]').setInputFiles({ name: "synthetic.wav", mimeType: "audio/wav", buffer: wav });
     await page.getByRole("button", { name: "辨識所選音檔" }).click();
     const confirmation = page.getByRole("region", { name: "語音操作確認" });
     await expect(confirmation).toContainText("Audio target stop");
