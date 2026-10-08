@@ -35,6 +35,9 @@ const common = { tripId: id };
 const dayCitySchema = z.object({
   name: z.string().trim().min(1).max(200),
   region: z.string().max(200).optional(),
+  country: z.string().max(200).optional(),
+  countryCode: z.string().max(2).optional(),
+  sourceId: z.string().url().max(3000).optional(),
   timezone: zone,
   lat: z.number().min(-90).max(90).nullable(),
   lng: z.number().min(-180).max(180).nullable(),
@@ -50,6 +53,7 @@ export const tripSchema = z
     cities: z.string().max(1000),
     dayCities: z.record(date, dayCitySchema).optional(),
     backgroundRequested: z.boolean().optional(),
+    backgroundVersion: z.literal(2).optional(),
     detachedItemIds: z.array(id).max(15000).optional(),
     timezone: zone,
     travelers: z.number().int().min(1).max(100),
@@ -247,9 +251,9 @@ export function assignDayCity(
   to: string,
   name: string,
   timezone: string,
-  location?: Pick<DayCity, "lat" | "lng" | "source" | "region">,
+  location?: Partial<Omit<DayCity, "name" | "timezone">>,
 ): Trip {
-  const city = dayCitySchema.parse({ name, timezone, lat: location?.lat ?? null, lng: location?.lng ?? null, region: location?.region, source: location?.source });
+  const city = dayCitySchema.parse({ ...location, name, timezone, lat: location?.lat ?? null, lng: location?.lng ?? null });
   if (from > to || from < trip.start || to > trip.end) throw new Error("城市日期須在旅程範圍內");
   const selected = days({ start: from, end: to });
   return tripSchema.parse({ ...trip, dayCities: Object.fromEntries([

@@ -21,6 +21,7 @@ import {
   blankItem,
   days,
   dayCity,
+  assignDayCity,
   localToday,
   ordered,
   parseMaps,
@@ -510,7 +511,7 @@ export default function App() {
     if (previous?.kind === "trip" && (t.start > previous.start || t.end < previous.end) && !store?.isRemoteReady())
       throw new Error("請等雲端旅程載入完成後再縮短日期；草稿與既有安排仍保留。");
     const planned = previous?.kind === "trip" ? shrinkTripPlan(previous, t, rawItems)
-      : { trip: { ...t, backgroundRequested: true }, items: [], affected: 0 };
+      : { trip: { ...t, backgroundRequested: true, backgroundVersion: 2 as const }, items: [], affected: 0 };
     await edit("儲存旅程與待定安排", [planned.trip, ...planned.items]);
     chooseTrip(t.id);
     sn(planned.affected ? `已更新日期；${planned.affected} 項安排移入待定。原預約與截止提醒未更改，請確認是否改期；可復原。` : "旅程日期與城市已更新。");
@@ -1033,7 +1034,11 @@ export default function App() {
       <main className={viewMode === "view" ? "view-mode" : "edit-mode"}>
         {trip && <TripBackground key={trip.id} trip={trip} enabled={!demo && !!user && !!auth?.currentUser}
           cloudReady={!!store?.isRemoteReady() && !store.snapshot.pending.length}
-          onConfigureCity={() => se({ type: "trip", value: trip })}
+          onConfirmCity={async (city) => {
+            const latest = store?.snapshot.records.find((record) => record.id === trip.id);
+            if (!latest || latest.kind !== 'trip' || latest.deleted) throw new Error('旅程已變更，請重新開啟確認');
+            await edit('確認第一城市', [{ ...assignDayCity(latest, latest.start, latest.start, city.name, city.timezone, city), backgroundRequested: true, backgroundVersion: 2 }]);
+          }}
           token={async () => { if (!auth?.currentUser) throw new Error("登入已失效"); return auth.currentUser.getIdToken(); }} />}
         {recovery.current.size > 0 && (
           <div className="error banner" role="alert">

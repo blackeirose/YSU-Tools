@@ -2,6 +2,8 @@ import type { Place } from "./model";
 
 export type PhotonPlace = {
   name: string;
+  country?: string;
+  countryCode?: string;
   city: string;
   localityCity: string;
   county: string;
@@ -80,6 +82,7 @@ export function parsePhoton(input: unknown, checkedAt = new Date().toISOString()
     const address = [p.street, p.housenumber, p.postcode, city, p.country].filter((x) => typeof x === "string" && x.trim()).join(" · ").slice(0, 2000);
     return [{
       name: p.name.trim().slice(0, 200), city, localityCity, county, state, administrativeArea, address,
+      country: String(p.country ?? '').slice(0, 200), countryCode: String(p.countrycode ?? '').toUpperCase().slice(0, 2),
       category: category(p.osm_value), lat, lng,
       osmUrl, source: `OpenStreetMap / Photon · ${osmUrl} · ${checkedAt}`,
       mapsUrl: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lat},${lng}`)}`,
@@ -98,7 +101,15 @@ export async function searchPhoton(term: string, cityHint: string, broaden = fal
   if (layer === "city") for (const value of ["city", "state", "locality"]) url.searchParams.append("layer", value);
   const response = await http(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(8000) });
   if (!response.ok) throw new Error("外部地點搜尋暫時無法使用；仍可手動儲存地點。");
-  return parsePhoton(await response.json(), new Date().toISOString(), clean, maxResults);
+  const data = await response.json() as { features?: Feature[] };
+  // Some deployed Photon versions ignore layer. Never offer an industrial
+  // business named Osaka as a city; keep explicit settlement/admin results.
+  if (layer === 'city' && Array.isArray(data.features)) data.features = data.features.filter((feature) => {
+    const p = feature.properties ?? {};
+    return ['city', 'town', 'village', 'municipality', 'state'].includes(String(p.osm_value ?? '')) ||
+      p.osm_key === 'boundary' && p.osm_value === 'administrative';
+  });
+  return parsePhoton(data, new Date().toISOString(), clean, maxResults);
 }
 
 export function fillPlaceFromPhoton(place: Place, found: PhotonPlace): Place {

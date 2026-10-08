@@ -17,6 +17,7 @@ import {
 import type { Trip, Place, Item, Task, Reminder, DayCity } from "./model";
 import { PlaceSearch } from "./PlaceSearch";
 import { fillPlaceFromPhoton } from "./place-search";
+import { cityConfirmed, cityFromSearch } from './city';
 export type ReminderDraft = { id: string | null; beforeMinutes: number; enabled: boolean };
 export function Modal({
   title,
@@ -90,6 +91,8 @@ export function TripForm({
   const [cityName, setCityName] = useState("");
   const [cityZone, setCityZone] = useState(trip.timezone);
   const [cityLocation, setCityLocation] = useState<Pick<DayCity, "lat" | "lng" | "source" | "region">>();
+  const [firstCity, setFirstCity] = useState<DayCity | undefined>(trip.dayCities?.[trip.start]);
+  const [firstCityEdited, setFirstCityEdited] = useState(false);
   const formDays = (() => { try { return days(t); } catch { return []; } })();
   const outsideCount = items.filter((item) => !item.deleted && item.day && (item.day < t.start || item.day > t.end)).length;
   return (
@@ -100,6 +103,14 @@ export function TripForm({
           validation(() => tripSchema.parse(t), se);
           try {
             let prepared = tripSchema.parse(t);
+            if (firstCityEdited && firstCity) {
+              prepared = assignDayCity(prepared, prepared.start, trip.revision === 0 ? prepared.end : prepared.start,
+                firstCity.name, t.timezone, { ...firstCity });
+              prepared.backgroundRequested = true;
+              prepared.backgroundVersion = 2;
+            } else if (firstCityEdited && prepared.cities.trim() && !/[、,，;；]/.test(prepared.cities)) {
+              prepared = assignDayCity(prepared, prepared.start, prepared.start, prepared.cities.trim(), prepared.timezone);
+            }
             if (!Object.keys(prepared.dayCities ?? {}).length && prepared.cities.trim() &&
               !/[、,，;；]/.test(prepared.cities) && cityTimezoneHint(prepared.cities)) {
               prepared = assignDayCity(prepared, prepared.start, prepared.end, prepared.cities.trim(), prepared.timezone);
@@ -151,10 +162,18 @@ export function TripForm({
             onChange={(e) => {
               const cities = e.target.value;
               const hint = cityTimezoneHint(cities);
-              set({ ...t, cities, timezone: hint ?? (cities && !trip.cities ? "" : t.timezone) });
+              setFirstCity(undefined); setFirstCityEdited(true);
+              set({ ...t, cities, timezone: hint ?? t.timezone });
             }}
           />
         </label>
+        {!cityConfirmed(firstCity) && !/[、,，;；]/.test(t.cities) && <PlaceSearch query={t.cities} cityHint="" mode="city" onPick={(found) => {
+          const city = cityFromSearch(found);
+          setFirstCity(city); setFirstCityEdited(true);
+          set({ ...t, cities: found.name, timezone: city.timezone });
+        }} />}
+        {firstCity?.sourceId ? <p className="hint">已確認 {firstCity.name} · {firstCity.country || firstCity.region} · {firstCity.timezone || '請在下方選擇 IANA 時區'}。儲存並同步後會自動準備桌機背景。</p>
+          : <p className="hint">可先儲存文字並安排旅程；選取城市結果後會確認地區與時區，再自動準備桌機背景。</p>}
         <div className="fields">
           <label>
             目的地時區
@@ -162,7 +181,7 @@ export function TripForm({
               required
               list="zones"
               value={t.timezone}
-              onChange={(e) => set({ ...t, timezone: e.target.value })}
+              onChange={(e) => { set({ ...t, timezone: e.target.value }); if (firstCity) { setFirstCity({ ...firstCity, timezone: e.target.value }); setFirstCityEdited(true); } }}
             />
           </label>
           <label>

@@ -1,3 +1,23 @@
+## Current background-flow repair — 2026-10-08 UTC
+
+Owner rejected the previous background visual acceptance: two cropped city panoramas repeat vertically, and plain-text new-trip cities never resolve for automatic generation. The previous publication remains production `6ac71868831c850e6b4e185c` / runtime `c1f648e770751a94eeb8d73d213cf70be33b3e1e`; it is NOT acceptance of the requested new-trip background flow.
+
+Current repair uses one complete 16:9 city artwork (explicit horizontal photo-left / precision-paper-right adaptation of YSU-SKILL-021 v1.0.0), an integrated Photon city selector with actual identity/region/coordinates/IANA zone, persistent namespace/owner-separated `poster-v2` jobs and explicit v2 intent. Old private top/lower images are retained without automatic replacement; compatibility displays the old photograph with a legacy label, not a claim that its paper style was repaired. User-triggered upgrade changes display only after the new poster saves successfully. New Preview backgrounds persist across alias deploys; old deploy-scoped Preview images are not silently migrated or regenerated. Production legacy site-scoped images remain readable.
+
+Preflight: canonical Core main `57a69136b7473718dfcf26311ae801f033696f05` read remotely; product parent `4cff8279328f0e8762084f94854f0b4ae9b38796`, authority remote `4912b011ad6dbb17d3e004557a1eadc936cf8e0f`. Clean isolated feature branch preserves siblings. Git auto deployment remains disabled. No shared rules, DNS, providers, services or budget caps changed.
+
+Source review found and repairs cover same-name city/country confusion, city save/navigation races, rejected-start recovery and stale-job accounting. A saved poster after worker crash is reconciled without provider calls; unknown timed-out jobs retain reservations and fail closed pending receipt review. Same-revision HTTP400 is not retried.
+
+Local: typecheck/build PASS; 37 focused unit tests and 2 new-trip browser tests PASS (mocked city failure/choices explicitly fixture-only). Live Photon Osaka selection brought Japan / Asia/Tokyo in the actual local form. Real fresh-UI Osaka generation, independent image/UI review and production release are still PENDING; no paid call has been made by this repair yet.
+
+Budget readback: 29 requests / USD2.85 conservative reservations, NOT actual billing; same `ux-gemini-20261005-usd1` caps USD5.20 total / USD2.00 UTC-day. Remaining USD2.35. Plan maximum USD0.66 = Preview landmarks0.06+poster0.18, production same0.24, one evidence-based poster retry0.18. Existing stages/entries/grants are preserved; the photo accounting stage now covers one whole artwork. Actual bill remains unknown. Unchanged audio/vision/explore/sync evidence and exact Owner offline/200%-zoom/human-mic waiver retain their original source boundaries.
+
+Recovery: retain v2 private objects and intent/data fields, ledger and all pending/conflicts. Prefer a forward Planner-only fix. Any older-code recovery must preserve these new optional fields before editing; reassemble from then-current complete-host baseline, never restore an old whole site.
+
+---
+
+## Historical evidence (the previous visual acceptance was rejected by Owner)
+
 # YSU Travel Planner
 
 ## Current desktop visual release — 2026-10-08 UTC

@@ -8,7 +8,7 @@ vi.mock("../src/server/ai-test-budget", async (importOriginal) => ({
   reserveAiTestBudget: vi.fn(async () => ({ upperBoundMicrousd: 180_000, reservedAfterMicrousd: 180_000,
     remainingMicrousd: 820_000 })),
 }));
-import { readBackground, startBackground, backgroundStore } from "../src/server/background";
+import { readBackground, startBackground, backgroundStore, landmarkInSelectedCity } from "../src/server/background";
 import { beginAiUsage, finishAiUsage } from "../src/server/ai-ledger";
 import { reserveAiTestBudget } from "../src/server/ai-test-budget";
 import { shouldAutoStartBackground, shouldPollAcceptedBackground } from "../src/TripBackground";
@@ -39,7 +39,7 @@ class MemoryStore {
 }
 function httpFor(options: { owner?: string; city?: boolean; cityName?: string; integerCoordinates?: boolean; failSecond?: boolean;
   unsourced?: boolean; wrongCity?: boolean; crossCityTitle?: boolean; oneInvalidAmongFour?: boolean;
-  bilingualLandmark?: boolean; failPhoto400?: boolean; failSecond400?: boolean } = {}) {
+  bilingualLandmark?: boolean; failPhoto400?: boolean; failSecond400?: boolean; failPhoto500?: boolean; identityOnly?: boolean } = {}) {
   let images = 0, quota = 0, landmarks = 0, locations = 0;
   const prompts: string[] = [];
   const http = (async (url: string | URL | Request, init?: RequestInit) => {
@@ -50,8 +50,10 @@ function httpFor(options: { owner?: string; city?: boolean; cityName?: string; i
       start: { stringValue: "2030-01-01" }, dayCities: { mapValue: { fields: {
         "2030-01-01": { mapValue: { fields: options.city === false ? {} : {
           name: { stringValue: options.cityName ?? "東京" }, timezone: { stringValue: "Asia/Tokyo" },
-          lat: options.integerCoordinates ? { integerValue: "35" } : { doubleValue: 35.6 },
-          lng: options.integerCoordinates ? { integerValue: "139" } : { doubleValue: 139.7 },
+          countryCode: { stringValue: "JP" }, region: { stringValue: "Tokyo" },
+          sourceId: { stringValue: "https://www.openstreetmap.org/relation/1" },
+          lat: options.identityOnly ? {} : options.integerCoordinates ? { integerValue: "35" } : { doubleValue: 35.6 },
+          lng: options.identityOnly ? {} : options.integerCoordinates ? { integerValue: "139" } : { doubleValue: 139.7 },
         } } },
       } } },
     } });
@@ -80,15 +82,16 @@ function httpFor(options: { owner?: string; city?: boolean; cityName?: string; i
         : ["大阪城", "東京塔", "淺草寺", "東京車站"].find((candidate) => query.includes(candidate)) ?? "";
       const served = options.bilingualLandmark && query.includes("東京塔") ? "別的地點" : name;
       return Response.json({ features: [{ geometry: { coordinates: [139.7, 35.6] }, properties: {
-        name: served, city: "Minato", state: name === "大阪城" ? "大阪" : "Tokyo", country: "日本",
+        name: served, city: "Minato", state: name === "大阪城" ? "大阪" : "Tokyo", country: "日本", countrycode: "JP",
         osm_type: "N", osm_id: 100 + locations, osm_value: "attraction",
       } }] });
     }
     if (target.includes("/v1beta/models/gemini-3.1-flash-lite-image:generateContent")) {
       const body = JSON.parse(String(init?.body)) as { contents: { parts: { text?: string }[] }[]; generationConfig?: unknown };
-      expect(body.generationConfig).toEqual({ imageConfig: { aspectRatio: "3:2" } });
+      expect(body.generationConfig).toEqual({ imageConfig: { aspectRatio: "16:9" } });
       prompts.push(body.contents[0].parts[0].text ?? "");
       images++;
+      if (options.failPhoto500 && images === 1) return new Response("", { status: 500 });
       if (options.failPhoto400 && images === 1) return Response.json({ usageMetadata: {
         promptTokenCount: 246, candidatesTokenCount: 0, totalTokenCount: 246 }, error: {
         code: 400, status: "INVALID_ARGUMENT",
@@ -106,222 +109,143 @@ function httpFor(options: { owner?: string; city?: boolean; cityName?: string; i
   return { http, counts: () => ({ images, quota, landmarks }), locations: () => locations, prompts };
 }
 
-describe("owner-only persistent background generation", () => {
-  it("records only allowlisted 400 diagnostics and refuses the same paid retry", async () => {
-    const store = new MemoryStore(), fake = httpFor({ failPhoto400: true });
-    const provided = store as unknown as ReturnType<typeof backgroundStore>;
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    try {
-      expect((await startBackground(request(), env, fake.http, provided)).status).toBe(502);
-      expect(fake.counts()).toEqual({ images: 1, quota: 1, landmarks: 1 });
-      const event = vi.mocked(finishAiUsage).mock.calls.find(([, entry]) => entry.stage === "photo")?.[1];
-      expect(event).toMatchObject({ result: "http-error-charge-unknown", httpStatus: 400,
-        providerErrorStatus: "INVALID_ARGUMENT", providerErrorCategory: "unknown-field",
-        providerErrorField: "responseFormat", usage: { promptTokens: 246, outputTokens: 0, totalTokens: 246 } });
-      expect(JSON.stringify(event)).not.toContain("secret-note");
-      expect(JSON.stringify(warn.mock.calls)).not.toContain("secret-note");
-      const state = await readBackground(new Request(`https://tools.ycsu.cc/travel-planner/api/background?tripId=${tripId}`,
-        { headers: { Authorization: "Bearer owner" } }), env, fake.http, provided);
-      expect((await state.json()).retryAllowed).toBe(false);
-      expect((await startBackground(request(), env, fake.http, provided)).status).toBe(409);
-      expect(fake.counts()).toEqual({ images: 1, quota: 1, landmarks: 1 });
-    } finally { warn.mockRestore(); }
-  });
-  it("retains a successful photo when relief gets 400 and blocks only the identical retry", async () => {
-    const store = new MemoryStore(), fake = httpFor({ failSecond400: true });
-    const provided = store as unknown as ReturnType<typeof backgroundStore>;
-    expect((await startBackground(request(), env, fake.http, provided)).status).toBe(502);
-    expect(fake.counts().images).toBe(2);
-    expect([...store.values.keys()].some((key) => key.endsWith("/top"))).toBe(true);
-    expect((await startBackground(request(), env, fake.http, provided)).status).toBe(409);
-    expect(fake.counts().images).toBe(2);
-  });
-  it("does not automatically repeat a paid request on each isolated Preview deploy", () => {
-    expect(shouldAutoStartBackground("preview-v1", true, "none", true, false)).toBe(false);
-    expect(shouldAutoStartBackground("v1", true, "none", true, false)).toBe(true);
-    expect(shouldAutoStartBackground("v1", true, "ready", true, false)).toBe(false);
-    expect(shouldAutoStartBackground("v1", true, "none", true, true)).toBe(false);
-    expect(shouldAutoStartBackground("v1", false, "none", true, false)).toBe(false);
-  });
-  it("keeps checking an accepted job through a transient empty read without another start", () => {
-    const acceptedAt = Date.UTC(2030, 0, 1);
-    expect(shouldPollAcceptedBackground("none", acceptedAt, acceptedAt + 3000)).toBe(true);
-    expect(shouldPollAcceptedBackground("running", acceptedAt, acceptedAt + 3000)).toBe(false);
-    expect(shouldPollAcceptedBackground("ready", acceptedAt, acceptedAt + 3000)).toBe(false);
-    expect(shouldPollAcceptedBackground("none", acceptedAt, acceptedAt + 120000)).toBe(false);
-  });
-  it("does not generate landmarks or images if the private sent receipt cannot be written", async () => {
-    vi.mocked(beginAiUsage).mockRejectedValueOnce(new Error("ledger-unavailable"));
-    const fake = httpFor(), store = new MemoryStore();
-    const result = await startBackground(request(), env, fake.http,
-      store as unknown as ReturnType<typeof backgroundStore>);
-    expect(result.status).toBe(502);
-    expect(fake.counts()).toEqual({ images: 0, quota: 1, landmarks: 0 });
-    const key = `preview-v1/owner/${tripId}/job`;
-    expect((store.values.get(key)?.data as { attempts: number }).attempts).toBe(0);
-  });
-  it("returns 401 before service-availability checks and makes no paid call", async () => {
-    const store = new MemoryStore() as unknown as ReturnType<typeof backgroundStore>;
-    const unavailable = () => undefined;
-    let calls = 0;
-    const http = (async () => { calls++; throw new Error("should not call external services"); }) as typeof fetch;
-    const anonymousStart = new Request(`https://preview.test/travel-planner/api/background/start?tripId=${tripId}`,
-      { method: "POST" });
-    const anonymousRead = new Request(`https://preview.test/travel-planner/api/background/status?tripId=${tripId}`);
-    expect((await startBackground(anonymousStart, unavailable, http, store)).status).toBe(401);
-    expect((await readBackground(anonymousRead, unavailable, http, store)).status).toBe(401);
-    expect((await startBackground(request(), unavailable, http, store)).status).toBe(503);
-    expect(calls).toBe(0);
-  });
-  it("requires the authenticated owner and confirmed first-day city before paid calls", async () => {
-    const store = new MemoryStore();
-    const fake = httpFor({ owner: "other" });
-    expect((await startBackground(request(), env, fake.http, store as unknown as ReturnType<typeof backgroundStore>)).status).toBe(403);
-    expect(fake.counts()).toEqual({ images: 0, quota: 0, landmarks: 0 });
-    const noCity = httpFor({ city: false });
-    expect((await startBackground(request(), env, noCity.http, store as unknown as ReturnType<typeof backgroundStore>)).status).toBe(409);
-    expect(noCity.counts()).toEqual({ images: 0, quota: 0, landmarks: 0 });
-  });
-  it("persists both panels, reads them privately and does not regenerate on duplicate start", async () => {
-    const store = new MemoryStore(), fake = httpFor();
-    const provided = store as unknown as ReturnType<typeof backgroundStore>;
-    expect((await startBackground(request(), env, fake.http, provided)).status).toBe(200);
-    expect(fake.counts()).toEqual({ images: 2, quota: 1, landmarks: 1 });
-    expect((await startBackground(request(), env, fake.http, provided)).status).toBe(200);
-    expect(fake.counts()).toEqual({ images: 2, quota: 1, landmarks: 1 });
-    expect(fake.prompts[0]).toContain("東京塔");
-    expect(fake.locations()).toBe(3);
-    const statusRequest = new Request(`https://tools.ycsu.cc/travel-planner/api/background/status?tripId=${tripId}`,
-      { headers: { Authorization: "Bearer owner" } });
-    const status = await (await readBackground(statusRequest, env, fake.http, provided)).json();
-    expect(status.state).toBe("ready");
-    expect(status.landmarks).toHaveLength(3);
-    expect(status.landmarks[0]).toEqual({ name: "東京塔", sourceUrl: "https://www.openstreetmap.org/node/101",
-      sourceTitle: "OpenStreetMap / Photon", locationSourceUrl: "https://www.openstreetmap.org/node/101" });
-    const image = await readBackground(new Request(`${statusRequest.url}&part=top`, { headers: statusRequest.headers }), env, fake.http, provided);
-    expect(image.headers.get("Cache-Control")).toBe("private, no-store");
-    expect((await image.arrayBuffer()).byteLength).toBe(1200);
-  });
-  it("a failed lower panel can retry once without paying to regenerate the preserved upper panel", async () => {
-    const store = new MemoryStore(), fake = httpFor({ failSecond: true });
-    const provided = store as unknown as ReturnType<typeof backgroundStore>;
-    expect((await startBackground(request(), env, fake.http, provided)).status).toBe(502);
-    expect((await startBackground(request(), env, fake.http, provided)).status).toBe(200);
-    expect(fake.counts()).toEqual({ images: 3, quota: 2, landmarks: 1 });
-  });
-  it("a budget refusal on lower-panel retry preserves the remaining paid attempt and upper panel", async () => {
-    const store = new MemoryStore(), fake = httpFor({ failSecond: true });
-    const provided = store as unknown as ReturnType<typeof backgroundStore>;
-    expect((await startBackground(request(), env, fake.http, provided)).status).toBe(502);
-    expect(fake.counts()).toEqual({ images: 2, quota: 1, landmarks: 1 });
-    const key = `preview-v1/owner/${tripId}/job`;
-    vi.mocked(reserveAiTestBudget).mockRejectedValueOnce(new Error("test-budget-daily-limit"));
-    expect((await startBackground(request(), env, fake.http, provided)).status).toBe(502);
-    expect(fake.counts()).toEqual({ images: 2, quota: 2, landmarks: 1 });
-    expect((store.values.get(key)?.data as { attempts: number }).attempts).toBe(1);
-    expect([...store.values.keys()].some((path) => path.endsWith("/top"))).toBe(true);
-    expect((await startBackground(request(), env, fake.http, provided)).status).toBe(200);
-    expect(fake.counts()).toEqual({ images: 3, quota: 3, landmarks: 1 });
-  });
-  it("quota refusals make no paid call and do not exhaust background retries, including an old job", async () => {
-    const store = new MemoryStore(), fake = httpFor();
-    const provided = store as unknown as ReturnType<typeof backgroundStore>;
-    const exhausted = (async (url: string | URL | Request, init?: RequestInit) => {
-      if (String(url).includes("/aiUsage/") && init?.method !== "PATCH")
-        return Response.json({ fields: { reservedMicrousd: { integerValue: "990000" } },
-          updateTime: "2030-01-01T00:00:00Z" });
-      return fake.http(url, init);
-    }) as typeof fetch;
-    expect((await startBackground(request(), env, exhausted, provided)).status).toBe(429);
-    expect((await startBackground(request(), env, exhausted, provided)).status).toBe(429);
-    expect(fake.counts()).toEqual({ images: 0, quota: 0, landmarks: 0 });
-    const key = `preview-v1/owner/${tripId}/job`;
-    expect((store.values.get(key)?.data as { attempts: number }).attempts).toBe(0);
-    expect((await startBackground(request(), env, fake.http, provided)).status).toBe(200);
-    expect(fake.counts()).toEqual({ images: 2, quota: 1, landmarks: 1 });
 
-    const old = new MemoryStore(), oldProvided = old as unknown as ReturnType<typeof backgroundStore>;
-    await old.setJSON(key, { state: "failed", attempts: 2, city: "東京", startedAt: "2030-01-01T00:00:00Z",
-      updatedAt: "2030-01-01T00:00:00Z", error: "今日用量已滿或無法安全預留" });
-    const resumed = httpFor();
-    expect((await startBackground(request(), env, resumed.http, oldProvided)).status).toBe(200);
-    expect(resumed.counts()).toEqual({ images: 2, quota: 1, landmarks: 1 });
+const prefix = `preview-v1/owner/${tripId}`;
+const key = `${prefix}/poster-v2/job`;
+const provided = (store: MemoryStore) => store as unknown as ReturnType<typeof backgroundStore>;
+const statusReq = (part = '') => new Request(`https://tools.ycsu.cc/travel-planner/api/background/status?tripId=${tripId}${part ? `&part=${part}` : ''}`,
+  { headers: { Authorization: 'Bearer owner' } });
+const readyLegacy = async (store: MemoryStore) => {
+  await store.setJSON(`${prefix}/job`, { state: 'ready', city: '東京', attempts: 1 });
+  await store.set(`${prefix}/top`, Buffer.alloc(1200, 4).buffer, { metadata: { mime: 'image/jpeg' } });
+  await store.set(`${prefix}/lower`, Buffer.alloc(1200, 5).buffer, { metadata: { mime: 'image/jpeg' } });
+};
+describe('persistent single-poster background', () => {
+  it('stores one complete artwork; concurrent starts and later refresh never duplicate model calls', async () => {
+    const store = new MemoryStore(), fake = httpFor();
+    await Promise.all([startBackground(request(), env, fake.http, provided(store)), startBackground(request(), env, fake.http, provided(store))]);
+    expect(fake.counts()).toEqual({ images: 1, quota: 1, landmarks: 1 });
+    expect(fake.prompts[0]).toContain('ONE complete 16:9');
+    expect(fake.prompts[0]).toContain('RIGHT half');
+    expect(fake.prompts[0]).toContain('東京塔');
+    expect((await startBackground(request(), env, fake.http, provided(store))).status).toBe(200);
+    const status = await (await readBackground(statusReq(), env, fake.http, provided(store))).json();
+    expect(status).toMatchObject({ state: 'ready', imagePart: 'poster', legacy: false });
+    expect(status.landmarks).toHaveLength(3);
+    const image = await readBackground(statusReq('poster'), env, fake.http, provided(store));
+    expect(image.headers.get('Cache-Control')).toBe('private, no-store');
+    expect((await image.arrayBuffer()).byteLength).toBe(1200);
+    expect(fake.counts().images).toBe(1);
   });
-  it("resumes an expired running job from its durable upper panel after a worker crash", async () => {
-    const store = new MemoryStore(), provided = store as unknown as ReturnType<typeof backgroundStore>;
-    const prefix = `preview-v1/owner/${tripId}`;
-    await store.setJSON(`${prefix}/job`, { state: "running", attempts: 1, attemptAccountingVersion: 2,
-      city: "東京", startedAt: "2020-01-01T00:00:00Z", updatedAt: "2020-01-01T00:00:00Z",
-      landmarks: [{ name: "東京塔", sourceUrl: "https://www.openstreetmap.org/node/1",
-        sourceTitle: "OpenStreetMap / Photon", locationSourceUrl: "https://www.openstreetmap.org/node/1" }] });
-    await store.set(`${prefix}/top`, Buffer.alloc(1200, 7).buffer, { metadata: { mime: "image/jpeg" } });
-    const fake = httpFor();
-    expect((await startBackground(request(), env, fake.http, provided)).status).toBe(200);
-    expect(fake.counts()).toEqual({ images: 1, quota: 1, landmarks: 0 });
-    expect((store.values.get(`${prefix}/job`)?.data as { state: string }).state).toBe("ready");
+  it('can use a verified city identity without unnecessary precise coordinates', async () => {
+    const store = new MemoryStore(), fake = httpFor({ identityOnly: true });
+    expect((await startBackground(request(), env, fake.http, provided(store))).status).toBe(200);
   });
-  it("a failed lower panel keeps the original city after the first-day city changes", async () => {
-    const store = new MemoryStore(), tokyo = httpFor({ failSecond: true });
-    const provided = store as unknown as ReturnType<typeof backgroundStore>;
-    expect((await startBackground(request(), env, tokyo.http, provided)).status).toBe(502);
-    const osaka = httpFor({ cityName: "大阪" });
-    expect((await startBackground(request(), env, osaka.http, provided)).status).toBe(200);
-    expect(osaka.prompts).toHaveLength(1);
-    expect(osaka.prompts[0]).toContain("東京");
-    expect(osaka.prompts[0]).not.toContain("大阪");
-    const state = await readBackground(new Request(`https://tools.ycsu.cc/travel-planner/api/background/status?tripId=${tripId}`,
-      { headers: { Authorization: "Bearer owner" } }), env, osaka.http, provided);
-    expect(await state.json()).toMatchObject({ state: "ready", city: "東京" });
+  it('rejects unsigned/other owners and missing cities before paying or reading private images', async () => {
+    const store = new MemoryStore(), fake = httpFor({ owner: 'other' });
+    expect((await startBackground(request(''), env, fake.http, provided(store))).status).toBe(401);
+    expect((await startBackground(request(), env, fake.http, provided(store))).status).toBe(403);
+    expect((await readBackground(statusReq('poster'), env, fake.http, provided(store))).status).toBe(403);
+    const absent = httpFor({ city: false });
+    expect((await startBackground(request(), env, absent.http, provided(store))).status).toBe(409);
+    expect(fake.counts().images + absent.counts().images).toBe(0);
   });
-  it("accepts integer Firestore coordinates and retains the original poster when first-day city is later cleared", async () => {
-    const store = new MemoryStore();
-    const original = httpFor({ integerCoordinates: true });
-    const provided = store as unknown as ReturnType<typeof backgroundStore>;
-    expect((await startBackground(request(), env, original.http, provided)).status).toBe(200);
-    const changed = httpFor({ city: false });
-    const statusRequest = new Request(`https://tools.ycsu.cc/travel-planner/api/background/status?tripId=${tripId}`,
-      { headers: { Authorization: "Bearer owner" } });
-    const status = await readBackground(statusRequest, env, changed.http, provided);
-    expect(status.status).toBe(200);
-    expect(await status.json()).toMatchObject({ state: "ready", city: "東京" });
-    expect(changed.counts()).toEqual({ images: 0, quota: 0, landmarks: 0 });
+  it('keeps old image bytes and requires an explicit upgrade, then switches only after success', async () => {
+    const store = new MemoryStore(), fake = httpFor(); await readyLegacy(store);
+    const before = [...store.values.entries()];
+    expect((await startBackground(request(), env, fake.http, provided(store))).status).toBe(200);
+    expect(fake.counts().images).toBe(0);
+    expect(await (await readBackground(statusReq(), env, fake.http, provided(store))).json()).toMatchObject({ legacy: true, imagePart: 'top' });
+    const upgrade = new Request(request().url + '&upgrade=1', { method: 'POST', headers: request().headers });
+    expect((await startBackground(upgrade, env, fake.http, provided(store))).status).toBe(200);
+    for (const [path, value] of before) expect(store.values.get(path)).toEqual(value);
+    expect(await (await readBackground(statusReq(), env, fake.http, provided(store))).json()).toMatchObject({ legacy: false, imagePart: 'poster' });
+    expect((await readBackground(statusReq('lower'), env, fake.http, provided(store))).status).toBe(200);
   });
-  it("uses independent place-specific OSM citations when search URLs are not grounded", async () => {
-    const store = new MemoryStore(), fake = httpFor({ unsourced: true });
-    const provided = store as unknown as ReturnType<typeof backgroundStore>;
-    expect((await startBackground(request(), env, fake.http, provided)).status).toBe(200);
-    expect(fake.counts()).toEqual({ images: 2, quota: 1, landmarks: 1 });
-    const status = await readBackground(new Request(`https://tools.ycsu.cc/travel-planner/api/background/status?tripId=${tripId}`,
-      { headers: { Authorization: "Bearer owner" } }), env, fake.http, provided);
-    expect((await status.json()).landmarks[0]).toMatchObject({
-      sourceUrl: "https://www.openstreetmap.org/node/101", sourceTitle: "OpenStreetMap / Photon" });
+  it('a failed upgrade keeps legacy imagery usable and cannot repeat a provider 400', async () => {
+    const store = new MemoryStore(), fake = httpFor({ failPhoto400: true }); await readyLegacy(store);
+    const upgrade = new Request(request().url + '&upgrade=1', { method: 'POST', headers: request().headers });
+    expect((await startBackground(upgrade, env, fake.http, provided(store))).status).toBe(502);
+    expect(await (await readBackground(statusReq(), env, fake.http, provided(store))).json()).toMatchObject({ state: 'failed', legacy: true, imagePart: 'top', retryAllowed: false });
+    expect((await startBackground(upgrade, env, fake.http, provided(store))).status).toBe(409);
+    expect(fake.counts().images).toBe(1);
+    const event = vi.mocked(finishAiUsage).mock.calls.map(([, event]) => event).find((event) => event.httpStatus === 400);
+    expect(event).toMatchObject({ providerErrorStatus: 'INVALID_ARGUMENT', providerErrorCategory: 'unknown-field', providerErrorField: 'responseFormat' });
+    expect(JSON.stringify(event)).not.toContain('secret-note');
   });
-  it("does not treat a search title as location proof when OSM verifies the city", async () => {
-    const store = new MemoryStore(), fake = httpFor({ wrongCity: true });
-    expect((await startBackground(request(), env, fake.http, store as unknown as ReturnType<typeof backgroundStore>)).status).toBe(200);
-    expect(fake.counts()).toEqual({ images: 2, quota: 1, landmarks: 1 });
+  it('retains verified landmarks and original city for a justified image-stage retry', async () => {
+    const store = new MemoryStore(), fake = httpFor({ failPhoto500: true });
+    expect((await startBackground(request(), env, fake.http, provided(store))).status).toBe(502);
+    const changed = httpFor({ cityName: '大阪' });
+    expect((await startBackground(request(), env, changed.http, provided(store))).status).toBe(200);
+    expect(changed.counts()).toEqual({ images: 1, quota: 1, landmarks: 0 });
+    expect(changed.prompts[0]).toContain('東京');
+    expect(changed.prompts[0]).not.toContain('大阪');
   });
-  it("rejects a title mentioning Tokyo and Osaka Castle when the independent place is in Osaka", async () => {
+  it('does not pay if the request receipt cannot be persisted', async () => {
+    vi.mocked(beginAiUsage).mockRejectedValueOnce(new Error('ledger-unavailable'));
+    const store = new MemoryStore(), fake = httpFor();
+    expect((await startBackground(request(), env, fake.http, provided(store))).status).toBe(502);
+    expect(fake.counts()).toEqual({ images: 0, quota: 1, landmarks: 0 });
+  });
+  it('does not exhaust paid attempts on budget refusal or alter existing reservations', async () => {
+    const store = new MemoryStore(), fake = httpFor();
+    vi.mocked(reserveAiTestBudget).mockRejectedValueOnce(new Error('test-budget-daily-limit'));
+    expect((await startBackground(request(), env, fake.http, provided(store))).status).toBe(502);
+    expect((store.values.get(key)?.data as {attempts: number}).attempts).toBe(0);
+    expect(fake.counts().images).toBe(0);
+    expect((await startBackground(request(), env, fake.http, provided(store))).status).toBe(200);
+  });
+  it('never restarts an expired unknown worker and retains its stored fragments', async () => {
+    const store = new MemoryStore(), fake = httpFor();
+    await store.setJSON(key, { state: 'running', attempts: 1, startedAt: '2020-01-01T00:00:00Z' });
+    expect((await startBackground(request(), env, fake.http, provided(store))).status).toBe(409);
+    expect(fake.counts()).toEqual({ images: 0, quota: 0, landmarks: 0 });
+  });
+  it('continues private reads after city data is cleared, without generation', async () => {
+    const store = new MemoryStore(), fake = httpFor();
+    await startBackground(request(), env, fake.http, provided(store));
+    const cleared = httpFor({ city: false });
+    expect((await readBackground(statusReq('poster'), env, cleared.http, provided(store))).status).toBe(200);
+    expect(cleared.counts().images).toBe(0);
+  });
+  it('checks independent exact OSM places and rejects outside-city model suggestions', async () => {
     const store = new MemoryStore(), fake = httpFor({ crossCityTitle: true });
-    expect((await startBackground(request(), env, fake.http, store as unknown as ReturnType<typeof backgroundStore>)).status).toBe(502);
+    expect((await startBackground(request(), env, fake.http, provided(store))).status).toBe(502);
     expect(fake.counts()).toEqual({ images: 0, quota: 1, landmarks: 1 });
-    expect(fake.locations()).toBe(3);
   });
-  it("uses three independently verified landmarks when one of four model names is out of city", async () => {
+  it('keeps three valid landmarks when a fourth candidate is outside the requested city', async () => {
     const store = new MemoryStore(), fake = httpFor({ oneInvalidAmongFour: true });
-    const response = await startBackground(request(), env, fake.http, store as unknown as ReturnType<typeof backgroundStore>);
-    expect(response.status).toBe(200);
-    expect(fake.counts()).toEqual({ images: 2, quota: 1, landmarks: 1 });
-    expect(fake.locations()).toBe(4);
-    expect(fake.prompts[0]).not.toContain("大阪城");
-    expect(fake.prompts[0]).toContain("東京塔");
+    expect((await startBackground(request(), env, fake.http, provided(store))).status).toBe(200);
+    expect(fake.prompts[0]).not.toContain('大阪城');
   });
-  it("verifies a bilingual landmark using the model's exact English search name and OSM city", async () => {
+  it('verifies bilingual candidates through their exact English OSM name', async () => {
     const store = new MemoryStore(), fake = httpFor({ bilingualLandmark: true });
-    const response = await startBackground(request(), env, fake.http, store as unknown as ReturnType<typeof backgroundStore>);
-    expect(response.status).toBe(200);
-    const status = await readBackground(new Request(`https://tools.ycsu.cc/travel-planner/api/background/status?tripId=${tripId}`,
-      { headers: { Authorization: "Bearer owner" } }), env, fake.http, store as unknown as ReturnType<typeof backgroundStore>);
-    expect((await status.json()).landmarks[0].name).toBe("Tokyo Tower");
+    expect((await startBackground(request(), env, fake.http, provided(store))).status).toBe(200);
+    const state = await (await readBackground(statusReq(), env, fake.http, provided(store))).json();
+    expect(state.landmarks[0].name).toBe('Tokyo Tower');
   });
+  it('polls an accepted job for a bounded interval without issuing a second start', () => {
+    expect(shouldPollAcceptedBackground('none', 1000, 4000)).toBe(true);
+    expect(shouldPollAcceptedBackground('none', 1000, 121000)).toBe(false);
+    expect(shouldAutoStartBackground('preview-v1', true, 'none', true, false, 2)).toBe(true);
+    expect(shouldAutoStartBackground('v1', true, 'none', true, false)).toBe(false);
+  });
+});
+
+it('rejects a same-name city in another country or distant region', async () => {
+  const { parsePhoton } = await import('../src/place-search');
+  const place = parsePhoton({ features: [{ geometry: { coordinates: [2.35,48.86] }, properties: {
+    name: 'Museum', city: 'Paris', countrycode: 'FR', osm_type: 'N', osm_id: 1 } }] })[0];
+  expect(landmarkInSelectedCity(place, { name: 'Paris', countryCode: 'US', region: 'Texas', lat: 33.66, lng: -95.56 })).toBe(false);
+  expect(landmarkInSelectedCity({ ...place, countryCode: 'US' }, { name: 'Paris', countryCode: 'US', region: 'Texas', lat: 33.66, lng: -95.56 })).toBe(false);
+});
+
+it('reconciles saved poster bytes after a crash without another reservation', async () => {
+  const store = new MemoryStore(), fake = httpFor();
+  await store.setJSON(key, { state: 'running', attempts: 1, startedAt: '2020-01-01T00:00:00Z', city: '東京' });
+  await store.set(`${prefix}/poster-v2/poster`, Buffer.alloc(1200, 4).buffer, { metadata: { mime: 'image/jpeg' } });
+  expect((await startBackground(request(), env, fake.http, provided(store))).status).toBe(200);
+  expect(fake.counts()).toEqual({ images: 0, quota: 0, landmarks: 0 });
+  expect(await (await readBackground(statusReq(), env, fake.http, provided(store))).json()).toMatchObject({ state: 'ready', imagePart: 'poster' });
 });

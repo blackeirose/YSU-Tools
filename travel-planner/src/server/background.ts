@@ -1,7 +1,7 @@
-import { getDeployStore, getStore } from "@netlify/blobs";
+import { getStore } from "@netlify/blobs";
 import { z } from "zod";
 import { gatewayReady, reserveQuota } from "./gemini";
-import { BACKGROUND_STYLE_VERSION, photoPrompt, reliefPrompt } from "./background-style";
+import { BACKGROUND_STYLE_VERSION, posterPrompt } from "./background-style";
 import { aiProvider, modelUrl } from "./ai-provider";
 import { beginAiUsage, finishAiUsage } from "./ai-ledger";
 import { providerErrorDiagnostic } from "./provider-error";
@@ -13,20 +13,21 @@ type Http = typeof fetch;
 type Accounting = { id: string; ownerId: string; namespace: string; dailyReservationAfterMicrousd: number;
   providerAttempted: boolean };
 type Landmark = { name: string; sourceUrl: string; sourceTitle: string; locationSourceUrl: string };
+type CityIdentity = { name: string; countryCode: string; region: string; lat?: number; lng?: number };
 type Job = { state: "running" | "ready" | "failed"; attempts: number; city: string; startedAt: string;
+  identity?: CityIdentity;
   updatedAt: string; error?: string; model?: string; styleVersion?: string; landmarks?: Landmark[];
   attemptAccountingVersion?: 2; requestId?: string; blockedRequestRevision?: number };
 // A provider 400 must not send the identical paid request again. Bump only
 // after reviewing and changing the image request contract in a later release.
-const IMAGE_REQUEST_REVISION = 1;
+const IMAGE_REQUEST_REVISION = 2;
 const json = (code: number, body: unknown) => new Response(JSON.stringify(body), { status: code,
   headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff" } });
 const input = z.object({ tripId: z.string().uuid() });
 const STORE = "travel-planner-background-v1";
 const QUOTA_ERROR = "今日用量已滿或無法安全預留";
-export const backgroundStore = (env: Env) => env("TRAVEL_PLANNER_FIREBASE_NAMESPACE") === "preview-v1"
-  ? getDeployStore({ name: STORE, consistency: "strong" })
-  : getStore({ name: STORE, consistency: "strong" });
+// Site persistence, with unchanged namespace + authenticated UID isolation.
+export const backgroundStore = (_env: Env) => getStore({ name: STORE, consistency: "strong" });
 const keyFor = (namespace: string, uid: string, tripId: string) => `${namespace}/${uid}/${tripId}`;
 
 export async function ownerTrip(req: Request, env: Env, http: Http = fetch, requireCity = true) {
@@ -57,16 +58,32 @@ export async function ownerTrip(req: Request, env: Env, http: Http = fetch, requ
     value?.doubleValue ?? (value?.integerValue === undefined ? NaN : Number(value.integerValue));
   const latitude = coordinate(dayCity?.lat), longitude = coordinate(dayCity?.lng);
   // Only a city that the owner explicitly assigned to the first day is used.
-  if (requireCity && (!city || city.length > 100 || !dayCity?.timezone?.stringValue ||
-    !Number.isFinite(latitude) || !Number.isFinite(longitude) ||
-    Math.abs(latitude) > 90 || Math.abs(longitude) > 180))
+  const sourced = /^https:\/\/www\.openstreetmap\.org\/(node|way|relation)\/\d+$/.test(dayCity?.sourceId?.stringValue ?? '');
+  const located = Number.isFinite(latitude) && Number.isFinite(longitude) &&
+    Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180 && !(latitude === 0 && longitude === 0);
+  // Rendering needs confirmed city identity, not device or precise location.
+  if (requireCity && (!city || city.length > 100 || !dayCity?.timezone?.stringValue || !(sourced || located)))
     return { error: json(409, { error: "請先確認旅程第一天的城市與位置，才能生成代表背景" }) } as const;
-  return { value: { key: keyFor(namespace!, ownerId, parsed.data.tripId), city, token, base, uid: ownerId } } as const;
+  const cityIdentity: CityIdentity = { name: city, countryCode: dayCity?.countryCode?.stringValue ?? '',
+    region: dayCity?.region?.stringValue ?? '', ...(located ? { lat: latitude, lng: longitude } : {}) };
+  return { value: { key: keyFor(namespace!, ownerId, parsed.data.tripId), city, cityIdentity, token, base, uid: ownerId } } as const;
 }
 
 type Store = ReturnType<typeof backgroundStore>;
 async function readJob(store: Store, key: string) {
   return store.getWithMetadata(`${key}/job`, { type: "json", consistency: "strong" }) as Promise<{ data: Job; etag: string } | null>;
+}
+async function reconcilePoster(store: Store, key: string) {
+  const current = await readJob(store, key);
+  if (current?.data.state !== 'running' || Date.now() - Date.parse(current.data.startedAt) < 20 * 60_000) return current;
+  const poster = await store.getWithMetadata(`${key}/poster`, { type: 'arrayBuffer', consistency: 'strong' });
+  // A worker can stop after saving bytes but before the ready flag. Recover
+  // that completed result without another reservation/provider request.
+  const recovered: Job = poster ? { ...current.data, state: 'ready', updatedAt: new Date().toISOString() }
+    : { ...current.data, state: 'failed', blockedRequestRevision: IMAGE_REQUEST_REVISION,
+      error: '工作逾時且結果未知；保留費用紀錄，需維護者核對後恢復，不會重複生成' };
+  await store.setJSON(`${key}/job`, recovered, { onlyIfMatch: current.etag });
+  return readJob(store, key);
 }
 function safeImage(raw: unknown): { mime: "image/jpeg" | "image/png"; data: Uint8Array } {
   const value = raw as { candidates?: { content?: { parts?: { inlineData?: { data?: string; mimeType?: string } }[] } }[] };
@@ -77,19 +94,16 @@ function safeImage(raw: unknown): { mime: "image/jpeg" | "image/png"; data: Uint
   return { mime: image.mimeType as "image/jpeg" | "image/png", data };
 }
 async function generate(http: Http, env: Env, prompt: string, accounting: Accounting,
-  stage: "photo" | "relief",
-  reference?: { mime: string; data: Uint8Array }) {
+  stage: "photo") {
   const provider = aiProvider(env)!;
   const trace = { id: accounting.id, mode: "background", stage, provider: provider.name,
     model: "gemini-3.1-flash-lite-image", atUtc: new Date().toISOString(),
     dailyReservationAfterMicrousd: accounting.dailyReservationAfterMicrousd };
   const testBudget = await reserveAiTestBudget(accounting.id, stage, "background", provider.name);
-  const parts = [{ text: prompt }, ...(reference ? [{ inlineData: {
-    mimeType: reference.mime, data: Buffer.from(reference.data).toString("base64") } }] : [])];
-  // Keep the two panels at the documented 3:2 ratio. Leave the size and
-  // modalities at model defaults while the gateway's prior 400 is unresolved.
+  const parts = [{ text: prompt }];
+  // Documented 16:9 single landscape output, model-default 1K resolution.
   const body = { contents: [{ role: "user", parts }],
-    generationConfig: { imageConfig: { aspectRatio: "3:2" } } };
+    generationConfig: { imageConfig: { aspectRatio: "16:9" } } };
   const receipt = await beginAiUsage(accounting.namespace, accounting.ownerId,
     { ...trace, testBudgetReservedAfterMicrousd: testBudget.reservedAfterMicrousd, result: "sent-charge-unknown" });
   accounting.providerAttempted = true;
@@ -110,14 +124,28 @@ async function generate(http: Http, env: Env, prompt: string, accounting: Accoun
   return safeImage(output);
 }
 
-async function groundedLandmarks(http: Http, env: Env, city: string, accounting: Accounting): Promise<Landmark[]> {
+export function landmarkInSelectedCity(place: Awaited<ReturnType<typeof searchPhoton>>[number], identity: CityIdentity) {
+  if (!placeInCity(place, identity.name)) return false;
+  if (identity.countryCode && place.countryCode !== identity.countryCode) return false;
+  if (identity.lat != null && identity.lng != null) {
+    // Geographic scope only, never a travel-time estimate. Prevent same-name
+    // cities in different regions from supplying unrelated landmark images.
+    const rad = Math.PI / 180, dlat = (place.lat - identity.lat) * rad, dlng = (place.lng - identity.lng) * rad;
+    const a = Math.sin(dlat / 2) ** 2 + Math.cos(identity.lat * rad) * Math.cos(place.lat * rad) * Math.sin(dlng / 2) ** 2;
+    return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(Math.max(0, 1 - a))) <= 80;
+  }
+  const normalize = (text: string) => text.trim().toLocaleLowerCase();
+  return !!identity.countryCode && !!identity.region && [place.state, place.county].some((value) => normalize(value) === normalize(identity.region));
+}
+async function groundedLandmarks(http: Http, env: Env, identity: CityIdentity, accounting: Accounting): Promise<Landmark[]> {
+  const city = identity.name;
   const provider = aiProvider(env)!;
   const trace = { id: accounting.id, mode: "background", stage: "landmarks", provider: provider.name,
     model: "gemini-3.1-flash-lite", atUtc: new Date().toISOString(),
     dailyReservationAfterMicrousd: accounting.dailyReservationAfterMicrousd };
   const testBudget = await reserveAiTestBudget(accounting.id, "landmarks", "background", provider.name);
   const body = { systemInstruction: { parts: [{ text: "Propose 5–8 possible distinctive landmarks in the specified city from general knowledge. Return JSON only: {landmarks:[{name,searchName}]}. name is the local display name; searchName is the landmark's common English OpenStreetMap name, or the same name if no English form is known. These are unverified candidates: the server independently checks exact names and city against OpenStreetMap/Photon and uses only 3–4 verified landmarks before image generation. Omit uncertain names; never invent sources or coordinates." }] },
-    contents: [{ role: "user", parts: [{ text: JSON.stringify({ city }) }] }],
+    contents: [{ role: "user", parts: [{ text: JSON.stringify({ city, countryCode: identity.countryCode, region: identity.region }) }] }],
     generationConfig: { responseMimeType: "application/json", responseJsonSchema: { type: "object",
       properties: { landmarks: { type: "array", minItems: 3, maxItems: 8,
         items: { type: "object", properties: { name: { type: "string" }, searchName: { type: "string" } },
@@ -164,7 +192,7 @@ async function groundedLandmarks(http: Http, env: Env, city: string, accounting:
       let places;
       try { places = await searchPhoton(name, city, true, http, undefined, 20); }
       catch { continue; }
-      const exact = places.filter((found) => normalize(found.name) === normalize(name) && placeInCity(found, city));
+      const exact = places.filter((found) => normalize(found.name) === normalize(name) && landmarkInSelectedCity(found, identity));
       place = exact.length === 1 ? exact[0] : undefined;
       if (place) break;
     }
@@ -187,12 +215,17 @@ export async function startBackground(req: Request, env: Env, http: Http = fetch
   try { owner = await ownerTrip(req, env, http); }
   catch { return json(503, { error: "無法驗證私人旅程，本次未生成圖片" }); }
   if ("error" in owner) return owner.error;
-  const { key, city, token, base, uid } = owner.value;
+  const { key: rootKey, city, cityIdentity, token, base, uid } = owner.value;
+  const legacy = await readJob(store, rootKey);
+  const key = `${rootKey}/poster-v2`;
   const now = new Date();
-  let previous = await readJob(store, key);
+  const previous = await reconcilePoster(store, key);
+  if (!previous && legacy?.data.state === 'ready' && new URL(req.url).searchParams.get('upgrade') !== '1')
+    return json(200, { state: 'ready', legacy: true });
   if (previous?.data.state === "ready") return json(200, { state: "ready", city: previous.data.city,
     originalCityRetained: city !== previous.data.city });
-  if (previous?.data.state === "running" && now.getTime() - Date.parse(previous.data.startedAt) < 20 * 60_000)
+  // Unknown expired workers may have incurred a charge: no automatic restart.
+  if (previous?.data.state === "running")
     return json(202, { state: "running", city: previous.data.city });
   if (previous?.data.state === "failed" && previous.data.blockedRequestRevision === IMAGE_REQUEST_REVISION)
     return json(409, { error: "圖片請求已被服務拒絕；相同版本不會再次送出，行程仍可使用" });
@@ -202,11 +235,11 @@ export async function startBackground(req: Request, env: Env, http: Http = fetch
     (previous?.data.error === QUOTA_ERROR && previous.data.attemptAccountingVersion !== 2 ? 1 : 0));
   if (paidAttempts >= 2)
     return json(409, { error: "背景已重試兩次；原行程仍可使用，請聯絡維護者" });
-  // The first panel may already be stored. A retry must use the same city for
-  // both panels even when the first-day itinerary has changed meanwhile.
+  // A retry retains the original confirmed identity even after a city edit.
   const renderingCity = previous?.data.city ?? city;
   let job: Job = { state: "running", attempts: paidAttempts + 1, attemptAccountingVersion: 2,
     city: renderingCity, startedAt: now.toISOString(), updatedAt: now.toISOString(), styleVersion: BACKGROUND_STYLE_VERSION,
+    identity: previous?.data.identity ?? cityIdentity,
     landmarks: previous?.data.landmarks, requestId: crypto.randomUUID() };
   const write = await store.setJSON(`${key}/job`, job, previous ? { onlyIfMatch: previous.etag } : { onlyIfNew: true });
   if (!write.modified) return json(202, { state: "running" });
@@ -224,26 +257,25 @@ export async function startBackground(req: Request, env: Env, http: Http = fetch
     providerAttempted: false };
   try {
     if (!job.landmarks) {
-      const landmarks = await groundedLandmarks(http, env, renderingCity, accounting);
+      const landmarks = await groundedLandmarks(http, env, job.identity!, accounting);
       job = { ...job, landmarks, updatedAt: new Date().toISOString() };
       const saved = await store.setJSON(`${key}/job`, job, { onlyIfMatch: jobEtag });
       if (!saved.modified) throw new Error("landmark-concurrent");
       jobEtag = saved.etag!;
     }
     const names = job.landmarks!.map((landmark) => landmark.name);
-    // Skill 021 adaptation: two independent 3:2 panels. The first output is
-    // preserved byte-for-byte; the lower relief uses it only as reference.
-    const existingTop = await store.getWithMetadata(`${key}/top`, { type: "arrayBuffer", consistency: "strong" });
-    const top = existingTop ? { data: new Uint8Array(existingTop.data), mime: String(existingTop.metadata?.mime ?? "image/jpeg") }
-      : await generate(http, env, photoPrompt(renderingCity, names), accounting, "photo");
-    if (!existingTop) await store.set(`${key}/top`, Uint8Array.from(top.data).buffer, { metadata: { mime: top.mime }, onlyIfNew: true });
-    const existingLower = await store.getWithMetadata(`${key}/lower`, { type: "arrayBuffer", consistency: "strong" });
-    if (!existingLower) {
-      const lower = await generate(http, env, reliefPrompt(renderingCity, names), accounting, "relief", top);
-      await store.set(`${key}/lower`, Uint8Array.from(lower.data).buffer, { metadata: { mime: lower.mime }, onlyIfNew: true });
+    // Keep the existing photo budget stage so older recovery code can read
+    // the complete historical ledger. It now covers one complete artwork.
+    const existing = await store.getWithMetadata(`${key}/poster`, { type: 'arrayBuffer', consistency: 'strong' });
+    if (!existing) {
+      const poster = await generate(http, env, posterPrompt(renderingCity, names), accounting, 'photo');
+      const saved = await store.set(`${key}/poster`, Uint8Array.from(poster.data).buffer,
+        { metadata: { mime: poster.mime }, onlyIfNew: true });
+      if (!saved.modified) throw new Error('image-concurrent');
     }
     const complete: Job = { ...job, state: "ready", updatedAt: new Date().toISOString(), model: "gemini-3.1-flash-lite-image" };
-    await store.setJSON(`${key}/job`, complete, { onlyIfMatch: jobEtag });
+    const saved = await store.setJSON(`${key}/job`, complete, { onlyIfMatch: jobEtag });
+    if (!saved.modified) throw new Error('image-concurrent');
     return json(200, { state: "ready" });
   } catch (error) {
     const code = error instanceof Error ? error.message : "";
@@ -258,7 +290,8 @@ export async function startBackground(req: Request, env: Env, http: Http = fetch
     if (current?.data.state === "running" && current.data.startedAt === job.startedAt)
       await store.setJSON(`${key}/job`, { ...job, state: "failed",
         attempts: accounting.providerAttempted ? job.attempts : paidAttempts, error: detail,
-        ...(code === "image-service-400" ? { blockedRequestRevision: IMAGE_REQUEST_REVISION } : {}) },
+        ...(code === "image-service-400" || accounting.providerAttempted && !code.startsWith('image-service-') && !code.startsWith('landmark-') && !code.startsWith('test-budget-')
+          ? { blockedRequestRevision: IMAGE_REQUEST_REVISION } : {}) },
       { onlyIfMatch: current.etag });
     return json(502, { error: `${detail}；行程未變更` });
   }
@@ -271,12 +304,18 @@ export async function readBackground(req: Request, env: Env, http: Http = fetch,
   catch { return json(503, { error: "無法驗證私人旅程" }); }
   if ("error" in owner) return owner.error;
   const { key } = owner.value;
-  const job = await readJob(store, key);
+  const legacy = await readJob(store, key);
+  const current = await reconcilePoster(store, `${key}/poster-v2`);
+  const job = current ?? legacy;
+  const currentReady = current?.data.state === 'ready';
+  const legacyReady = legacy?.data.state === 'ready';
   const part = new URL(req.url).searchParams.get("part");
-  if (!part) return json(200, job ? { ...job.data,
-    retryAllowed: job.data.blockedRequestRevision !== IMAGE_REQUEST_REVISION } : { state: "none" });
-  if (!job || job.data.state !== "ready" || !["top", "lower"].includes(part)) return json(404, { error: "圖片尚未備妥" });
-  const blob = await store.getWithMetadata(`${key}/${part}`, { type: "arrayBuffer", consistency: "strong" });
+  if (!part) return json(200, job ? { ...job.data, legacy: !currentReady && legacyReady,
+    imagePart: currentReady ? 'poster' : legacyReady ? 'top' : null,
+    retryAllowed: job.data.blockedRequestRevision !== IMAGE_REQUEST_REVISION } : { state: 'none' });
+  if (!(part === 'poster' && currentReady || ['top', 'lower'].includes(part) && legacyReady))
+    return json(404, { error: '圖片尚未備妥' });
+  const blob = await store.getWithMetadata(`${key}/${part === 'poster' ? 'poster-v2/poster' : part}`, { type: 'arrayBuffer', consistency: 'strong' });
   if (!blob) return json(503, { error: "背景檔案暫時無法讀取" });
   const mime = blob.metadata?.mime;
   return new Response(blob.data, { status: 200, headers: { "Content-Type": mime === "image/png" ? "image/png" : "image/jpeg",

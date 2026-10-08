@@ -12,6 +12,7 @@ export function PlaceSearch({ query, cityHint, onPick, mode = "place" }: {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [broaden, setBroaden] = useState(false);
+  const [retry, setRetry] = useState(0);
   const minimum = mode === "city" ? 2 : 3;
   useEffect(() => {
     const term = query.trim();
@@ -29,14 +30,14 @@ export function PlaceSearch({ query, cityHint, onPick, mode = "place" }: {
         .finally(() => { if (active) setBusy(false); });
     }, 1000);
     return () => { active = false; window.clearTimeout(timer); };
-  }, [query, cityHint, broaden, mode, minimum]);
+  }, [query, cityHint, broaden, mode, minimum, retry]);
   if (query.trim().length < minimum || /^https?:\/\//i.test(query.trim())) return null;
   return <div className="place-results" aria-live="polite">
     <div className="place-results-head"><strong>{mode === "city" ? "城市位置搜尋" : "外部地點搜尋"} · {broaden ? "全區" : cityHint ? `優先 ${cityHint}` : "全區"}</strong>
       {!!cityHint && <button type="button" onClick={() => setBroaden((value) => !value)}>{broaden ? `優先 ${cityHint}` : "搜尋其他城市"}</button>}
     </div>
     {busy && <p>搜尋中…</p>}
-    {error && !busy && <p className="hint">{error}</p>}
+    {error && !busy && <p className="hint">{error} <button type="button" onClick={() => setRetry((v) => v + 1)}>重試搜尋</button></p>}
     {!busy && results.map((found) => <button type="button" className="place-result" key={`${found.source}:${found.name}`} onClick={() => onPick(found)}>
       <strong>{found.name}</strong><span>{found.city || "城市待確認"} · {found.address || "地址未提供"}</span>
     </button>)}
