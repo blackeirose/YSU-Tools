@@ -6,9 +6,14 @@ import {
   makeOperation,
   applyOperation,
   checkBase,
+  deniedWriteConflict,
+  deniedWriteReadFailure,
   readSnapshot,
   persist,
   productionTripViolation,
+  undoUpdates,
+  firestoreRecord,
+  canRetryDetachedUndo,
 } from "../src/storage";
 import type { RecordData } from "../src/model";
 import type { Remote, Operation } from "../src/storage";
@@ -41,7 +46,190 @@ beforeAll(() => {
   });
 });
 describe("recoverable editing", () => {
-  it("production policy rejects Trip shrink and tombstone before queuing Undo", async () => {
+  it("serializes a new city's optional fields for Firestore without losing queued source data", () => {
+    const owner = crypto.randomUUID();
+    const trip = { ...blankTrip(owner), start: "2030-10-03", end: "2030-10-05",
+      dayCities: { "2030-10-03": { name: "東京", timezone: "Asia/Tokyo", lat: null, lng: null,
+        region: undefined, source: undefined } } };
+    const queued = makeOperation("新增旅程", [], [trip], owner);
+    const cloud = firestoreRecord(queued.changes[0].after);
+    expect(cloud).toEqual({ ...queued.changes[0].after,
+      dayCities: { "2030-10-03": { name: "東京", timezone: "Asia/Tokyo", lat: null, lng: null } } });
+    expect(queued.changes[0].after).toHaveProperty("dayCities.2030-10-03.region", undefined);
+    expect(JSON.stringify(cloud)).toBe(JSON.stringify(queued.changes[0].after));
+  });
+  it("classifies a rules denial after a concurrent Trip revision as recoverable", () => {
+    const owner = crypto.randomUUID();
+    const trip = { ...blankTrip(owner), start: "2030-01-01", end: "2030-01-03" };
+    const op = makeOperation("shorten", [trip], [{ ...trip, end: "2030-01-02", detachedItemIds: [] }], owner);
+    expect(deniedWriteConflict(op, [{ ...trip, revision: trip.revision + 1 }]).reason).toBe("concurrent");
+    expect(deniedWriteConflict(op, [trip]).reason).toBe("policy");
+  });
+  it("undoes a date shrink without dropping the cloud detachment field", () => {
+    const owner = crypto.randomUUID();
+    const trip = { ...blankTrip(owner), start: "2030-01-01", end: "2030-01-03" };
+    const item = blankItem(owner, trip, crypto.randomUUID(), "2030-01-03");
+    const shortened = makeOperation("shorten", [trip, item], [
+      { ...trip, end: "2030-01-02", detachedItemIds: [item.id] },
+    ], owner);
+    const current = applyOperation([trip, item], shortened);
+    const inverse = makeOperation("undo", current, undoUpdates(shortened, current), owner);
+    expect(inverse.changes).toHaveLength(1);
+    expect(inverse.changes[0].after).toMatchObject({
+      kind: "trip", end: "2030-01-03", detachedItemIds: [],
+    });
+    expect(current.find((row) => row.id === item.id)).toMatchObject({ day: "2030-01-03" });
+  });
+  it("recovers an old rejected date Undo without losing the remote Trip or local intent", async () => {
+    const owner = crypto.randomUUID();
+    const trip = { ...blankTrip(owner), start: "2030-01-01", end: "2030-01-03" };
+    const item = blankItem(owner, trip, crypto.randomUUID(), "2030-01-03");
+    const shrink = makeOperation("shrink", [trip, item], [
+      { ...trip, end: "2030-01-02", detachedItemIds: [item.id] },
+    ], owner);
+    let server = applyOperation([trip, item], shrink);
+    const shortened = server.find((row) => row.id === trip.id)!;
+    const oldUndo = makeOperation("old undo", server, [
+      { ...trip, revision: shortened.revision },
+    ], owner);
+    const conflict = { operation: oldUndo, remote: [shortened], createdAt: new Date().toISOString(), reason: "policy" as const };
+    expect(canRetryDetachedUndo(conflict)).toBe(true);
+    await persist(owner, { records: applyOperation(server, oldUndo), pending: [], conflicts: [conflict], undo: null, downloaded: [] });
+    const remote: Remote = {
+      watch: () => () => {},
+      read: async (ids) => server.filter((row) => ids.includes(row.id)),
+      readTrip: async (id) => server.filter((row) => row.kind === "item" && row.tripId === id),
+      commit: async (op) => {
+        expect(checkBase(server, op)).toBe(true);
+        const restored = op.changes.find((change) => change.id === trip.id)?.after;
+        expect(restored).toMatchObject({ end: "2030-01-03", detachedItemIds: [] });
+        server = applyOperation(server, op);
+      },
+    };
+    const store = new PlannerStore(owner, remote);
+    await store.init();
+    await store.resolve(oldUndo.id, "local");
+    await store.flush();
+    expect(store.snapshot.conflicts).toHaveLength(0);
+    expect(store.snapshot.pending).toHaveLength(0);
+    expect(server.find((row) => row.id === trip.id)).toMatchObject({ end: "2030-01-03", detachedItemIds: [] });
+    expect(server.find((row) => row.id === item.id)).toMatchObject({ day: "2030-01-03" });
+    await store.clear();
+  });
+  it("keeps an old Undo conflict when the remote Trip changed after rejection", async () => {
+    const owner = crypto.randomUUID();
+    const trip = { ...blankTrip(owner), start: "2030-01-01", end: "2030-01-03" };
+    const shrink = makeOperation("shrink", [trip], [{ ...trip, end: "2030-01-02", detachedItemIds: [] }], owner);
+    const shortened = applyOperation([trip], shrink)[0];
+    const oldUndo = makeOperation("old undo", [shortened], [{ ...trip, revision: shortened.revision }], owner);
+    const conflict = { operation: oldUndo, remote: [shortened], createdAt: new Date().toISOString(), reason: "policy" as const };
+    const newer = makeOperation("other device edit", [shortened], [{ ...shortened, name: "changed elsewhere" }], owner);
+    const server = applyOperation([shortened], newer);
+    await persist(owner, { records: applyOperation([shortened], oldUndo), pending: [], conflicts: [conflict], undo: null, downloaded: [] });
+    const remote: Remote = {
+      watch: () => () => {},
+      read: async () => server,
+      readTrip: async () => [],
+      commit: async () => { throw new Error("must not commit stale recovery"); },
+    };
+    const store = new PlannerStore(owner, remote);
+    await store.init();
+    await expect(store.resolve(oldUndo.id, "local")).rejects.toThrow("遠端旅程已再次變動");
+    expect(store.snapshot.conflicts).toHaveLength(1);
+    expect(store.snapshot.pending).toHaveLength(0);
+    await store.clear();
+  });
+  it("keeps a denied write pending when its verification read only fails transiently", () => {
+    const unavailable = Object.assign(new Error("network unavailable"), { code: "unavailable" });
+    expect(deniedWriteReadFailure(unavailable)).toBe(unavailable);
+    const denied = Object.assign(new Error("read denied"), { code: "permission-denied" });
+    expect((deniedWriteReadFailure(denied) as ConflictError).reason).toBe("policy");
+  });
+  it("retries a transient cloud failure without discarding the local operation", async () => {
+    const owner = crypto.randomUUID();
+    let attempts = 0;
+    const remote: Remote = {
+      watch: () => () => {},
+      read: async () => [],
+      commit: async () => {
+        if (++attempts === 1) throw Object.assign(new Error("temporarily unavailable"), { code: "unavailable" });
+      },
+    };
+    const store = new PlannerStore(owner, remote);
+    await store.init();
+    navigator.onLine = false;
+    try {
+      await store.edit("offline draft", [blankTrip(owner)]);
+      navigator.onLine = true;
+      await store.flush();
+      expect((await readSnapshot(owner)).pending).toHaveLength(1);
+      expect(store.snapshot.conflicts).toHaveLength(0);
+      await store.flush();
+      expect((await readSnapshot(owner)).pending).toHaveLength(0);
+      expect(attempts).toBe(2);
+    } finally {
+      navigator.onLine = true;
+      await store.clear();
+    }
+  });
+  it("keeps an offline queue across unexpected auth loss and reload, but explicit logout clears it", async () => {
+    const owner = crypto.randomUUID(), other = crypto.randomUUID();
+    const remote: Remote = { watch: () => () => {}, read: async () => [], commit: async () => {} };
+    const first = new PlannerStore(owner, remote, "auth-recovery-test");
+    navigator.onLine = false;
+    try {
+      await first.init();
+      await first.edit("offline synthetic trip", [blankTrip(owner)]);
+      expect((await first.closeForAuthChange())?.pending).toHaveLength(1);
+      const differentAccount = new PlannerStore(other, remote, "auth-recovery-test");
+      await differentAccount.init();
+      expect(differentAccount.snapshot.records).toHaveLength(0);
+      await differentAccount.clear();
+      const resumed = new PlannerStore(owner, remote, "auth-recovery-test");
+      await resumed.init();
+      expect(resumed.snapshot.pending).toHaveLength(1);
+      expect(resumed.snapshot.records).toHaveLength(1);
+      await resumed.clear();
+      expect((await readSnapshot(`auth-recovery-test:${owner}`)).pending).toHaveLength(0);
+    } finally { navigator.onLine = true; }
+  });
+  it("undoes a detached candidate move without resurrecting an out-of-range day", async () => {
+    const owner = crypto.randomUUID();
+    const trip = { ...blankTrip(owner), start: "2030-01-01", end: "2030-01-02", detachedItemIds: ["placeholder"] };
+    const place = blankPlace(owner, trip.id, "old stop");
+    const old = { ...blankItem(owner, trip, place.id, "2030-01-03"), status: "done" as const };
+    const oldTrip = { ...trip, detachedItemIds: [old.id] };
+    const rows: RecordData[] = [oldTrip, place, old];
+    const move = makeOperation("move detached", rows, [{ ...old, day: "2030-01-02", status: "planned" }], owner);
+    const moved = applyOperation(rows, move);
+    const inverse = makeOperation("undo", moved, undoUpdates(move, moved), owner);
+    const restored = applyOperation(moved, inverse);
+    expect(restored.find((row) => row.id === old.id)).toMatchObject({ day: null, status: "candidate",
+      candidateOrigin: { day: "2030-01-03", status: "done" } });
+    expect(restored.find((row) => row.id === oldTrip.id)).toMatchObject({ detachedItemIds: [] });
+  });
+  for (const change of ["edit", "delete"] as const) {
+    it(`restores a detached candidate after ${change} without an invalid cloud day`, () => {
+      const owner = crypto.randomUUID();
+      const trip = { ...blankTrip(owner), start: "2030-01-01", end: "2030-01-02" };
+      const place = blankPlace(owner, trip.id, "preserved stop");
+      const old = { ...blankItem(owner, trip, place.id, "2030-01-03"),
+        timeMode: "fixed" as const, time: "23:00", departureZone: "Asia/Tokyo",
+        arrivalDay: "2030-01-04", arrivalTime: "02:00", arrivalZone: "Asia/Tokyo" };
+      const guardedTrip = { ...trip, detachedItemIds: [old.id] };
+      const rows: RecordData[] = [guardedTrip, place, old];
+      const edited = { ...old, day: null, status: "candidate" as const,
+        notes: "changed", deleted: change === "delete" };
+      const op = makeOperation(change, rows, [edited], owner);
+      const current = applyOperation(rows, op);
+      const inverse = makeOperation("undo", current, undoUpdates(op, current), owner);
+      const restored = applyOperation(current, inverse).find((row) => row.id === old.id);
+      expect(restored).toMatchObject({ day: null, status: "candidate", deleted: false,
+        timeMode: "fixed", time: "23:00", arrivalDay: "2030-01-04", arrivalTime: "02:00",
+        candidateOrigin: { day: "2030-01-03" } });
+    });
+  }
+  it("production policy rejects Trip tombstone but permits a safe range Undo", async () => {
     const owner = crypto.randomUUID();
     const original = { ...blankTrip(owner), start: "2030-01-01", end: "2030-01-03" };
     let server: RecordData[] = [];
@@ -67,9 +255,10 @@ describe("recoverable editing", () => {
     const current = store.snapshot.records.find((r) => r.id === original.id) as typeof original;
     await store.edit("extend", [{ ...current, end: "2030-01-04" }]);
     await store.flush();
-    await expect(store.undo()).rejects.toThrow("不能縮短");
+    await store.undo();
+    await store.flush();
     expect(store.snapshot.pending).toHaveLength(0);
-    expect(server.find((r) => r.id === original.id)).toMatchObject({ end: "2030-01-04" });
+    expect(server.find((r) => r.id === original.id)).toMatchObject({ end: "2030-01-03" });
     await store.clear();
   });
   it("isolates a legacy policy-rejected pending Trip edit and continues unrelated sync", async () => {
@@ -86,7 +275,8 @@ describe("recoverable editing", () => {
         if (issue) throw new Error(issue);
       },
       async commit(op) {
-        if (productionTripViolation(op)) throw new ConflictError([], "policy");
+        if (op.changes.some((change) => change.before?.kind === "trip" && change.after.kind === "trip" &&
+          change.after.end < change.before.end && !change.after.detachedItemIds)) throw new ConflictError([], "policy");
         server = applyOperation(server, op);
       },
     };
@@ -464,7 +654,7 @@ describe("recoverable editing", () => {
     expect(store.snapshot.conflicts).toHaveLength(0);
     await store.clear();
   });
-  it("refuses local trip shrink when a delayed watcher omitted a newer remote item move", async () => {
+  it("rebases local trip shrink with a concurrent remote move as a recoverable candidate", async () => {
     const owner = crypto.randomUUID();
     const trip = { ...blankTrip(owner), start: "2030-01-01", end: "2030-01-03" };
     const place = blankPlace(owner, trip.id, "remote stop");
@@ -488,9 +678,10 @@ describe("recoverable editing", () => {
     navigator.onLine = true;
     await store.flush();
     const id = store.snapshot.conflicts[0].operation.id;
-    await expect(store.resolve(id, "local")).rejects.toThrow("其他裝置已有安排");
-    expect(store.snapshot.conflicts).toHaveLength(1);
-    expect(server.find((r) => r.id === trip.id)).toMatchObject({ end: "2030-01-03" });
+    await store.resolve(id, "local");
+    await store.flush();
+    expect(store.snapshot.conflicts).toHaveLength(0);
+    expect(server.find((r) => r.id === trip.id)).toMatchObject({ end: "2030-01-02", detachedItemIds: [item.id] });
     expect(server.find((r) => r.id === item.id)).toMatchObject({ day: "2030-01-03" });
     await store.clear();
   });

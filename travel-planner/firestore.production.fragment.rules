@@ -39,10 +39,18 @@
       }
       function tripUpdateSafe() {
         return resource.data.deleted == false && validTripRange()
-          // Firestore rules cannot query every sibling Item. Until a dedicated
-          // server transaction exists, fail closed on shortening either edge.
-          && request.resource.data.start <= resource.data.start
-          && request.resource.data.end >= resource.data.end;
+          // The client fetches the complete Trip item set from the server and
+          // uses a Trip revision CAS before shortening. Outside items remain as records, projected as
+          // candidates; no sibling batch is required. Legacy item-only writes
+          // remain blocked by validItemDependency().
+          && request.resource.data.get('detachedItemIds', []) is list
+          && request.resource.data.get('detachedItemIds', []).size() <= 15000
+          // A pre-upgrade whole-Trip writer must not erase a detached marker.
+          && (!resource.data.keys().hasAny(['detachedItemIds'])
+              || request.resource.data.keys().hasAll(['detachedItemIds']))
+          && ((request.resource.data.start <= resource.data.start
+                && request.resource.data.end >= resource.data.end)
+              || request.resource.data.keys().hasAll(['detachedItemIds']));
       }
       function safeRecordCreate() {
         return request.resource.data.kind == 'trip'
@@ -67,4 +75,65 @@
         && request.resource.data.revision == resource.data.revision + 1
         && safeRecordUpdate();
       allow delete: if false;
+    }
+    // Planner-only conservative pre-inference reservations.
+    match /travelPlanner/v1/users/{uid}/aiUsage/{day} {
+      function aiOwner() {
+        return request.auth != null && request.auth.uid == uid && trustedGoogle();
+      }
+      function reserveFor(data) { return data.assistCount * 20000 + data.exploreCount * 140000
+        + data.visionCount * 70000 + data.backgroundCount * 220000; }
+      function validCounts() {
+        return request.resource.data.keys().hasOnly(['ownerId','day','assistCount','exploreCount','visionCount','backgroundCount','reservedMicrousd'])
+          && request.resource.data.keys().hasAll(['ownerId','day','assistCount','exploreCount','visionCount','backgroundCount','reservedMicrousd'])
+          && request.resource.data.ownerId == uid && request.resource.data.day == day
+          && request.resource.data.assistCount is int && request.resource.data.assistCount >= 0 && request.resource.data.assistCount <= 40
+          && request.resource.data.exploreCount is int && request.resource.data.exploreCount >= 0 && request.resource.data.exploreCount <= 7
+          && request.resource.data.visionCount is int && request.resource.data.visionCount >= 0 && request.resource.data.visionCount <= 8
+          && request.resource.data.backgroundCount is int && request.resource.data.backgroundCount >= 0 && request.resource.data.backgroundCount <= 2
+          && request.resource.data.reservedMicrousd is int
+          && request.resource.data.reservedMicrousd >= reserveFor(request.resource.data)
+          && request.resource.data.reservedMicrousd <= 1000000;
+      }
+      allow get: if aiOwner();
+      allow list: if false;
+      allow create: if aiOwner() && validCounts()
+        && request.resource.data.assistCount + request.resource.data.exploreCount + request.resource.data.visionCount + request.resource.data.backgroundCount == 1
+        && request.resource.data.reservedMicrousd == reserveFor(request.resource.data);
+      allow update: if aiOwner() && resource.data.ownerId == uid && validCounts()
+        && request.resource.data.day == resource.data.day
+        && request.resource.data.reservedMicrousd == resource.data.get('reservedMicrousd', reserveFor(resource.data))
+          + reserveFor(request.resource.data) - reserveFor(resource.data)
+        && ((request.resource.data.assistCount == resource.data.assistCount + 1
+              && request.resource.data.exploreCount == resource.data.exploreCount
+              && request.resource.data.visionCount == resource.data.visionCount
+              && request.resource.data.backgroundCount == resource.data.backgroundCount)
+          || (request.resource.data.assistCount == resource.data.assistCount
+              && request.resource.data.exploreCount == resource.data.exploreCount + 1
+              && request.resource.data.visionCount == resource.data.visionCount
+              && request.resource.data.backgroundCount == resource.data.backgroundCount)
+          || (request.resource.data.assistCount == resource.data.assistCount
+              && request.resource.data.exploreCount == resource.data.exploreCount
+              && request.resource.data.visionCount == resource.data.visionCount + 1
+              && request.resource.data.backgroundCount == resource.data.backgroundCount)
+          || (request.resource.data.assistCount == resource.data.assistCount
+              && request.resource.data.exploreCount == resource.data.exploreCount
+              && request.resource.data.visionCount == resource.data.visionCount
+              && request.resource.data.backgroundCount == resource.data.backgroundCount + 1));
+      allow delete: if false;
+    }
+    // Immutable Planner-only request IDs prevent replayed paid inference.
+    match /travelPlanner/v1/users/{uid}/aiRequests/{requestId} {
+      function aiOwner() {
+        return request.auth != null && request.auth.uid == uid && trustedGoogle();
+      }
+      allow get: if aiOwner();
+      allow list: if false;
+      allow create: if aiOwner()
+        && request.resource.data.keys().hasOnly(['ownerId','requestId','mode'])
+        && request.resource.data.keys().hasAll(['ownerId','requestId','mode'])
+        && request.resource.data.ownerId == uid
+        && request.resource.data.requestId == requestId
+        && request.resource.data.mode in ['assist','explore','vision'];
+      allow update, delete: if false;
     }

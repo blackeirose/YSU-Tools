@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { ZodError } from "zod";
 import {
+  assignDayCity,
   categories,
+  cityTimezoneHint,
+  dayCity,
   days,
   parseMaps,
   tripSchema,
@@ -10,7 +14,10 @@ import {
   taskSchema,
   instant,
 } from "./model";
-import type { Trip, Place, Item, Task, Reminder } from "./model";
+import type { Trip, Place, Item, Task, Reminder, DayCity } from "./model";
+import { PlaceSearch } from "./PlaceSearch";
+import { fillPlaceFromPhoton } from "./place-search";
+import { cityConfirmed, cityFromSearch } from './city';
 export type ReminderDraft = { id: string | null; beforeMinutes: number; enabled: boolean };
 export function Modal({
   title,
@@ -54,24 +61,40 @@ function ErrorText({ value }: { value: string }) {
     </p>
   ) : null;
 }
+function formMessage(error: unknown) {
+  if (error instanceof ZodError)
+    return error.issues.map((issue) => `${String(issue.path.at(-1) ?? "欄位")}需要修正`).join("、");
+  return error instanceof Error ? error.message : "無法儲存，請重試";
+}
 function validation(fn: () => unknown, set: (e: string) => void) {
   try {
     fn();
   } catch (e) {
-    set(e instanceof Error ? e.message : "無法儲存");
+    set(formMessage(e));
   }
 }
 export function TripForm({
   trip,
+  items = [],
   onSave,
   onClose,
 }: {
   trip: Trip;
+  items?: Item[];
   onSave: (t: Trip) => Promise<void>;
   onClose: () => void;
 }) {
   const [t, set] = useState(trip),
     [error, se] = useState("");
+  const [cityFrom, setCityFrom] = useState(trip.start);
+  const [cityTo, setCityTo] = useState(trip.end);
+  const [cityName, setCityName] = useState("");
+  const [cityZone, setCityZone] = useState(trip.timezone);
+  const [cityLocation, setCityLocation] = useState<Pick<DayCity, "lat" | "lng" | "source" | "region">>();
+  const [firstCity, setFirstCity] = useState<DayCity | undefined>(trip.dayCities?.[trip.start]);
+  const [firstCityEdited, setFirstCityEdited] = useState(false);
+  const formDays = (() => { try { return days(t); } catch { return []; } })();
+  const outsideCount = items.filter((item) => !item.deleted && item.day && (item.day < t.start || item.day > t.end)).length;
   return (
     <Modal title="旅程設定" onClose={onClose}>
       <form
@@ -79,10 +102,23 @@ export function TripForm({
           e.preventDefault();
           validation(() => tripSchema.parse(t), se);
           try {
-            await onSave(tripSchema.parse(t));
+            let prepared = tripSchema.parse(t);
+            if (firstCityEdited && firstCity) {
+              prepared = assignDayCity(prepared, prepared.start, trip.revision === 0 ? prepared.end : prepared.start,
+                firstCity.name, t.timezone, { ...firstCity });
+              prepared.backgroundRequested = true;
+              prepared.backgroundVersion = 2;
+            } else if (firstCityEdited && prepared.cities.trim() && !/[、,，;；]/.test(prepared.cities)) {
+              prepared = assignDayCity(prepared, prepared.start, prepared.start, prepared.cities.trim(), prepared.timezone);
+            }
+            if (!Object.keys(prepared.dayCities ?? {}).length && prepared.cities.trim() &&
+              !/[、,，;；]/.test(prepared.cities) && cityTimezoneHint(prepared.cities)) {
+              prepared = assignDayCity(prepared, prepared.start, prepared.end, prepared.cities.trim(), prepared.timezone);
+            }
+            await onSave(prepared);
             onClose();
           } catch (e) {
-            se(String(e));
+            se(formMessage(e));
           }
         }}
       >
@@ -102,7 +138,7 @@ export function TripForm({
               required
               type="date"
               value={t.start}
-              onChange={(e) => set({ ...t, start: e.target.value })}
+              onChange={(e) => { set({ ...t, start: e.target.value }); setCityFrom(e.target.value); }}
             />
           </label>
           <label>
@@ -111,18 +147,33 @@ export function TripForm({
               required
               type="date"
               value={t.end}
-              onChange={(e) => set({ ...t, end: e.target.value })}
+              onChange={(e) => { set({ ...t, end: e.target.value }); setCityTo(e.target.value); }}
             />
           </label>
         </div>
+        {outsideCount > 0 && <p className="notice" role="status">
+          縮短日期後，{outsideCount} 項範圍外安排會移到「待定」，保留原日期、時間與預約資訊，可復原。
+        </p>}
         <label>
           城市
           <input
             value={t.cities}
             placeholder="東京、京都、大阪"
-            onChange={(e) => set({ ...t, cities: e.target.value })}
+            onChange={(e) => {
+              const cities = e.target.value;
+              const hint = cityTimezoneHint(cities);
+              setFirstCity(undefined); setFirstCityEdited(true);
+              set({ ...t, cities, timezone: hint ?? t.timezone });
+            }}
           />
         </label>
+        {!cityConfirmed(firstCity) && !/[、,，;；]/.test(t.cities) && <PlaceSearch query={t.cities} cityHint="" mode="city" onPick={(found) => {
+          const city = cityFromSearch(found);
+          setFirstCity(city); setFirstCityEdited(true);
+          set({ ...t, cities: found.name, timezone: city.timezone });
+        }} />}
+        {firstCity?.sourceId ? <p className="hint">已確認 {firstCity.name} · {firstCity.country || firstCity.region} · {firstCity.timezone || '請在下方選擇 IANA 時區'}。儲存並同步後會自動準備桌機背景。</p>
+          : <p className="hint">可先儲存文字並安排旅程；選取城市結果後會確認地區與時區，再自動準備桌機背景。</p>}
         <div className="fields">
           <label>
             目的地時區
@@ -130,7 +181,7 @@ export function TripForm({
               required
               list="zones"
               value={t.timezone}
-              onChange={(e) => set({ ...t, timezone: e.target.value })}
+              onChange={(e) => { set({ ...t, timezone: e.target.value }); if (firstCity) { setFirstCity({ ...firstCity, timezone: e.target.value }); setFirstCityEdited(true); } }}
             />
           </label>
           <label>
@@ -144,6 +195,41 @@ export function TripForm({
             />
           </label>
         </div>
+        <fieldset className="city-assignment">
+          <legend>每日城市與時區</legend>
+          <p className="hint">舊旅程的多個城市尚未分配日期。可一次設定連續幾天；不確定位置時不會猜座標。</p>
+          {items.some((item) => !item.deleted && item.timeMode === "fixed") &&
+            <p className="notice">修改旅程或每日城市時區不會換算既有固定預約；卡片會保留並標示原預約時區，請核對真實預約與跨時區交通。</p>}
+          <div className="fields">
+            <label>從哪一天<input type="date" value={cityFrom} min={t.start} max={t.end} onChange={(e) => setCityFrom(e.target.value)} /></label>
+            <label>到哪一天<input type="date" value={cityTo} min={t.start} max={t.end} onChange={(e) => setCityTo(e.target.value)} /></label>
+          </div>
+          <div className="fields">
+            <label>主要城市<input list="planner-cities" value={cityName} onChange={(e) => {
+              const name = e.target.value;
+              setCityName(name);
+              setCityLocation(undefined);
+              const hint = cityTimezoneHint(name);
+              setCityZone(hint ?? "");
+            }} placeholder="例如 東京、Honolulu" /></label>
+            <label>目的地時區<input list="zones" value={cityZone} onChange={(e) => setCityZone(e.target.value)} /></label>
+          </div>
+          <PlaceSearch query={cityName} cityHint="" mode="city" onPick={(found) => {
+            setCityName(found.name);
+            setCityLocation({ lat: found.lat, lng: found.lng, region: found.city, source: found.source });
+            setCityZone(cityTimezoneHint(found.name) ?? "");
+          }} />
+          {cityLocation?.lat != null && <p className="hint">已選擇實際城市位置；請確認 IANA 時區再套用。</p>}
+          <datalist id="planner-cities">{["東京", "大阪", "京都", "名古屋", "台北", "Honolulu", "Los Angeles", "San Francisco"].map((name) => <option key={name} value={name} />)}</datalist>
+          <button type="button" onClick={() => {
+            try { set(assignDayCity(t, cityFrom, cityTo, cityName, cityZone, cityLocation)); se(""); }
+            catch (error) { se(formMessage(error)); }
+          }}>套用到所選日期</button>
+          <div className="city-days">{formDays.map((date) => {
+            const city = dayCity(t, date);
+            return <span key={date}>{date.slice(5)} · {city.assigned ? `${city.name} · ${city.timezone}` : "城市未指定"}</span>;
+          })}</div>
+        </fieldset>
         <ErrorText value={error} />
         <footer>
           <button type="button" onClick={onClose}>
@@ -168,6 +254,7 @@ export function PlaceForm({
 }) {
   const [p, set] = useState(place),
     [error, se] = useState("");
+  const [lookup, setLookup] = useState("");
   return (
     <Modal title="地點資料" onClose={onClose} wide>
       <form
@@ -177,10 +264,18 @@ export function PlaceForm({
             await onSave(placeSchema.parse(p));
             onClose();
           } catch (e) {
-            se(String(e));
+            se(formMessage(e));
           }
         }}
       >
+        <label>搜尋地點位置
+          <input value={lookup} onChange={(e) => setLookup(e.target.value)} placeholder="輸入至少 3 字；例如 Tokyo Disney" />
+        </label>
+        <PlaceSearch query={lookup} cityHint={p.city} onPick={(found) => {
+          if (p.revision > 0 && !window.confirm("選取後會更新名稱、地址、分類與座標；你手動填的備註與原文名稱會保留。要套用嗎？")) return;
+          set(fillPlaceFromPhoton(p, found));
+          setLookup("");
+        }} />
         <label>
           名稱
           <input
@@ -368,7 +463,7 @@ export function ItemForm({
             await onSave(v, remind === "" ? null : Number(remind));
             onClose();
           } catch (e) {
-            se(String(e));
+            se(formMessage(e));
           }
         }}
       >
@@ -620,7 +715,7 @@ export function TaskForm({
             await onSave(v, drafts, baseline);
             onClose();
           } catch (e) {
-            se(String(e));
+            se(formMessage(e));
           }
         }}
       >

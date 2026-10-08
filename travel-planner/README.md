@@ -1,8 +1,8 @@
 # YSU Travel Planner V1
 
-可操作的繁體中文私人旅行規劃工具。預設是「本機示範，不跨裝置同步」；Firebase、AI 和背景推播各自需要獲授權的設定。正式目標為 `/travel-planner/`，目前沒有正式部署。
+可操作的繁體中文私人旅行規劃工具。正式 V1 已在 `https://tools.ycsu.cc/travel-planner/`；此分支的 UX／Gemini 升級尚未通過 Full Gate，不能以本機成果視為正式新版。預設「本機示範」不跨裝置同步；Firebase、AI 和背景推播各有獨立設定與驗證狀態。
 
-[隔離 Preview](https://6ac045607f1d78183c46e201--ycsu-tools-router.netlify.app/travel-planner/) 已啟用專用 Firebase preview 範圍，可用既有 Owner Google 帳號試用合成資料。真實雙 origin 同步通過，實體跨裝置及雲端離線驗證仍待完成；詳見 [交接](docs/HANDOFF.md)。AI／背景推播仍未啟用。
+最新升級 Preview、Firebase 範圍及真實驗收狀態以 [升級 Gate](docs/UPGRADE_GATE_2026-10-03.md) 和 [交接](docs/HANDOFF.md) 最上方紀錄為準。歷史 Preview 的登入或同步結果不能代表新版。正式 V1 尚未啟用 Gemini 或背景 Web Push。
 
 ## 本機執行
 
@@ -39,4 +39,4 @@ pnpm test:e2e
 - [剩餘阻擋及 Owner 最少事項](docs/HANDOFF.md)
 - [範圍、canonical preflight 與 No-Touch](docs/PREFLIGHT.md)
 
-此目錄的 `dist` 只能作完整站點中的 `/travel-planner/` 元件，絕不可單獨部署覆蓋 tools.ycsu.cc。正式部署仍需另行授權。
+此目錄的 `dist` 只能作完整站點中的 `/travel-planner/` 元件，絕不可單獨部署覆蓋 tools.ycsu.cc。本輪新版有條件發布授權，但必須先通過 [Full Gate](docs/UPGRADE_GATE_2026-10-03.md) 並由共用站唯一發布器完整組裝。

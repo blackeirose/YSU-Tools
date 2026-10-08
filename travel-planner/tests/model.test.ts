@@ -141,6 +141,14 @@ describe("time and calendars", () => {
       }),
     ).toThrow("抵達");
   });
+  it("keeps a detached cross-day candidate's times without treating it as a current departure", () => {
+    const trip = blankTrip("owner");
+    const flight = { ...blankItem("owner", trip, crypto.randomUUID(), null),
+      status: "candidate" as const, timeMode: "fixed" as const, time: "23:00",
+      arrivalDay: "2030-01-04", arrivalTime: "02:00", departureZone: "Asia/Tokyo", arrivalZone: "Asia/Tokyo" };
+    expect(() => validateSchedule(flight)).not.toThrow();
+    expect(() => validateSchedule({ ...flight, day: "2030-01-04" })).toThrow("抵達");
+  });
   it("uses IANA DST and rejects missing/ambiguous local times", () => {
     expect(() =>
       instant("2026-03-08", "02:30", "America/Los_Angeles"),
@@ -227,7 +235,7 @@ describe("portable data", () => {
   it("rejects schema versions, duplicate IDs, foreign place references and out-of-range days", () => {
     const data = demos("a");
     expect(() =>
-      validateImport({ schemaVersion: 2, exportedAt: "now", records: data }),
+      validateImport({ schemaVersion: 3, exportedAt: "now", records: data }),
     ).toThrow();
     expect(() =>
       validateImport({

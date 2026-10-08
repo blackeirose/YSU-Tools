@@ -6,8 +6,8 @@ import {
   assertSucceeds,
 } from "@firebase/rules-unit-testing";
 import type { RulesTestEnvironment } from "@firebase/rules-unit-testing";
-import { doc, getDoc, setDoc } from "firebase/firestore";
-import { blankTrip } from "../../src/model";
+import { doc, getDoc, setDoc, writeBatch, deleteDoc } from "firebase/firestore";
+import { blankItem, blankTrip } from "../../src/model";
 let env: RulesTestEnvironment;
 const exact = process.env.PLANNER_MERGED_RULES;
 const ownerEmail = exact
@@ -27,6 +27,19 @@ beforeAll(async () => {
   });
 });
 afterAll(async () => env?.cleanup());
+it("requires an explicit empty detachment list when restoring a shortened Trip", async () => {
+  const claims = { email: ownerEmail, email_verified: true, firebase: { sign_in_provider: "google.com" } };
+  const owner = env.authenticatedContext("owner", claims).firestore();
+  const trip = { ...blankTrip("owner"), start: "2030-01-01", end: "2030-01-03", revision: 1 };
+  const ref = doc(owner, `travelPlanner/preview-v1/users/owner/records/${trip.id}`);
+  await assertSucceeds(setDoc(ref, trip));
+  await assertSucceeds(setDoc(ref, { ...trip, end: "2030-01-02", detachedItemIds: [crypto.randomUUID()], revision: 2 }));
+  await assertFails(setDoc(ref, { ...trip, revision: 3 }));
+  await assertSucceeds(setDoc(ref, { ...trip, detachedItemIds: [], revision: 3 }));
+  const saved = await getDoc(ref);
+  if (saved.data()?.end !== "2030-01-03" || saved.data()?.detachedItemIds?.length !== 0)
+    throw new Error("Restored Trip was not retained");
+});
 it("preview requires the trusted verified Google owner, correct UID, revisions; production and sibling paths stay denied", async () => {
   const claims = {
     email: ownerEmail,
@@ -65,11 +78,81 @@ it("preview requires the trusted verified Google owner, correct UID, revisions; 
   await assertFails(
     setDoc(doc(owner, path), { ...t, ownerId: "other", revision: 2 }),
   );
-  await assertFails(
+  // The standalone fragment has no v1 match. A merged live rule set does;
+  // its existing production behavior is covered by production-rules.test.ts.
+  if (!exact) await assertFails(
     setDoc(doc(owner, `travelPlanner/v1/users/owner/records/${t.id}`), t),
   );
   await assertFails(setDoc(doc(owner, "unowned/test"), t));
-  await assertSucceeds(
+  await assertFails(
     setDoc(doc(owner, path), { ...t, deleted: true, revision: 2 }),
   );
+});
+it("preview guards Trip/Item dependencies and reserves paid calls within its own namespace", async () => {
+  const claims = { email: ownerEmail, email_verified: true, firebase: { sign_in_provider: "google.com" } };
+  const owner = env.authenticatedContext("owner", claims).firestore();
+  const other = env.authenticatedContext("other", { ...claims, email: "other@example.test" }).firestore();
+  const trip = { ...blankTrip("owner"), start: "2030-01-01", end: "2030-01-03", revision: 1 };
+  const item = { ...blankItem("owner", trip, crypto.randomUUID(), "2030-01-03"), revision: 1 };
+  const tripRef = doc(owner, `travelPlanner/preview-v1/users/owner/records/${trip.id}`);
+  const itemRef = doc(owner, `travelPlanner/preview-v1/users/owner/records/${item.id}`);
+  await assertFails(setDoc(itemRef, item));
+  const create = writeBatch(owner); create.set(tripRef, trip); create.set(itemRef, item);
+  await assertSucceeds(create.commit());
+  await assertFails(setDoc(itemRef, { ...item, day: "2030-01-02", revision: 2 }));
+  await assertFails(setDoc(tripRef, { ...trip, end: "2030-01-02", revision: 2 }));
+  await assertSucceeds(setDoc(tripRef, { ...trip, end: "2030-01-02", detachedItemIds: [item.id], revision: 2 }));
+  const illegal = writeBatch(owner);
+  illegal.set(tripRef, { ...trip, end: "2030-01-02", detachedItemIds: [], revision: 3 });
+  illegal.set(itemRef, { ...item, day: "2030-01-03", revision: 2 });
+  await assertFails(illegal.commit());
+  const move = writeBatch(owner);
+  move.set(tripRef, { ...trip, end: "2030-01-02", detachedItemIds: [], revision: 3 });
+  move.set(itemRef, { ...item, day: "2030-01-02", revision: 2 });
+  await assertSucceeds(move.commit());
+  const undo = writeBatch(owner);
+  undo.set(tripRef, { ...trip, end: "2030-01-02", detachedItemIds: [], revision: 4 });
+  undo.set(itemRef, { ...item, day: null, status: "candidate", revision: 3,
+    candidateOrigin: { day: "2030-01-03", order: item.order, status: "planned", reason: "trip-range" } });
+  await assertSucceeds(undo.commit());
+  const invalidUndo = writeBatch(owner);
+  invalidUndo.set(tripRef, { ...trip, end: "2030-01-02", detachedItemIds: [item.id], revision: 5 });
+  invalidUndo.set(itemRef, { ...item, day: "2030-01-03", revision: 4 });
+  await assertFails(invalidUndo.commit());
+  const usagePath = "travelPlanner/preview-v1/users/owner/aiUsage/2030-01-01";
+  const usage = { ownerId: "owner", day: "2030-01-01", assistCount: 1, exploreCount: 0, visionCount: 0, backgroundCount: 0,
+    reservedMicrousd: 20000 };
+  await assertFails(setDoc(doc(other, usagePath), usage));
+  await assertSucceeds(setDoc(doc(owner, usagePath), usage));
+  await assertFails(setDoc(doc(owner, usagePath), { ...usage, assistCount: 0 }));
+  await assertSucceeds(setDoc(doc(owner, usagePath), { ...usage, assistCount: 2, reservedMicrousd: 40000 }));
+  const legacyPath = "travelPlanner/preview-v1/users/owner/aiUsage/2030-01-02";
+  const legacy = { ownerId: "owner", day: "2030-01-02", assistCount: 1, exploreCount: 0, visionCount: 0, backgroundCount: 0 };
+  await env.withSecurityRulesDisabled(async (context) => setDoc(doc(context.firestore(), legacyPath), legacy));
+  await assertFails(setDoc(doc(owner, legacyPath), { ...legacy, assistCount: 2, reservedMicrousd: 20000 }));
+  await assertSucceeds(setDoc(doc(owner, legacyPath), { ...legacy, assistCount: 2, reservedMicrousd: 40000 }));
+  const requestId = crypto.randomUUID();
+  const requestPath = `travelPlanner/preview-v1/users/owner/aiRequests/${requestId}`;
+  const receipt = { ownerId: "owner", requestId, mode: "assist" };
+  await assertFails(setDoc(doc(other, requestPath), receipt));
+  await assertSucceeds(setDoc(doc(owner, requestPath), receipt));
+  await assertFails(setDoc(doc(owner, requestPath), { ...receipt, mode: "vision" }));
+  await assertFails(deleteDoc(doc(owner, requestPath)));
+  await assertFails(setDoc(doc(owner, `travelPlanner/preview-v1/users/owner/aiRequests/${crypto.randomUUID()}`),
+    { ...receipt, mode: "explore" }));
+});
+
+it("rejects an old whole-Trip write that drops detached IDs", async () => {
+  const claims = { email: ownerEmail, email_verified: true, firebase: { sign_in_provider: "google.com" } };
+  const owner = env.authenticatedContext("owner", claims).firestore();
+  const trip = { ...blankTrip("owner"), start: "2030-01-01", end: "2030-01-02", detachedItemIds: [crypto.randomUUID()], revision: 1 };
+  const ref = doc(owner, `travelPlanner/preview-v1/users/owner/records/${trip.id}`);
+  await assertSucceeds(setDoc(ref, trip));
+  const oldClient = { ...trip };
+  delete (oldClient as Partial<typeof trip>).detachedItemIds;
+  await assertFails(setDoc(ref, { ...oldClient, name: "legacy rename", revision: 2 }));
+  await assertFails(setDoc(ref, { ...oldClient, end: "2030-01-03", revision: 2 }));
+  await assertSucceeds(setDoc(ref, { ...trip, end: "2030-01-03", revision: 2 }));
+  if (!(await getDoc(ref)).data()?.detachedItemIds?.includes(trip.detachedItemIds[0]))
+    throw new Error("Date extension lost detached item IDs");
 });

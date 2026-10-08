@@ -140,7 +140,7 @@ input[type="range"] {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20px 28px;
+  padding: 9px 20px;
   border-bottom: 1px solid var(--line);
   background: #fff;
   gap: 16px;
@@ -149,7 +149,7 @@ input[type="range"] {
   font-size: 11px;
   letter-spacing: 2px;
   color: #5c635f;
-  margin: 0 0 5px;
+  margin: 0;
   font-weight: 700;
 }
 .header-actions,
@@ -165,29 +165,54 @@ input[type="range"] {
   max-width: 200px;
 }
 main {
-  padding: 20px 28px 100px;
+  padding: 12px 20px 32px;
   max-width: 1920px;
   margin: auto;
+  position: relative;
+  z-index: 1;
+}
+.trip-background { position: fixed; inset: 0; z-index: -1;
+  pointer-events: none; overflow: hidden; background: #e9e5d9; }
+.trip-background img { display: block; width: 100%; height: 100%; min-height: 0;
+  object-fit: cover; object-position: center; }
+.inline-city-confirm { position: relative; max-width: 540px; margin: 8px 0 12px auto;
+  padding: 16px; border: 1px solid #cad3ca; border-radius: 12px; background: #fffffff5; }
+.background-caption { flex-wrap: wrap; }
+.trip-background::after { content: ""; position: absolute; inset: 0;
+  background: linear-gradient(180deg, #f8f6ef38, transparent 32%, #edf1e414); }
+.background-caption { display: flex; align-items: center; justify-content: flex-end; gap: 9px; min-height: 24px;
+  font-size: 11px; color: #385146; }
+.background-caption button { min-height: 30px; padding: 3px 8px; font-size: 11px; }
+@media (max-width: 700px) { .trip-background, .background-caption { display: none; } }
+.trip-overview {
+  display: grid;
+  grid-template-columns: minmax(720px, 1.35fr) minmax(360px, 1fr);
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 8px;
 }
 .trip-toolbar {
   display: flex;
   align-items: end;
   gap: 12px;
   flex-wrap: wrap;
-  margin-bottom: 24px;
+  margin-bottom: 0;
 }
 .trip-toolbar > label:first-child {
   min-width: 220px;
   max-width: 460px;
   flex: 1;
 }
+.mobile-trip-create { display: none; }
 .trip-summary {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   gap: 20px;
-  margin-bottom: 20px;
+  margin-bottom: 0;
 }
+.trip-summary h2 { font-size: 19px; }
+.trip-summary p { margin: 2px 0; line-height: 1.35; }
 .trip-summary > .actions {
   justify-content: flex-end;
   max-width: 650px;
@@ -204,7 +229,7 @@ main {
   align-items: end;
   gap: 10px;
   flex-wrap: wrap;
-  margin: 0 0 16px;
+  margin: 0 0 9px;
 }
 .desktop-only {
   display: flex;
@@ -228,12 +253,43 @@ main {
   color: #315c4b;
   margin-bottom: 4px;
 }
+@media (min-width: 701px) {
+  .next-stop { display: none; }
+}
 .workspace {
   display: flex;
   align-items: stretch;
   gap: 20px;
-  min-height: 560px;
+  min-height: max(500px, calc(100dvh - 245px));
 }
+.workspace.no-map .plan-panel { width: 100%; }
+.workspace.no-map .day-column { flex: 0 0 290px; }
+.workspace.no-map .day-board { max-height: calc(100dvh - 245px); }
+.desktop-only-button { display: inline-flex; }
+.mode-switch { gap: 2px; }
+.mode-switch button { min-width: 60px; }
+.view-mode .item .item-actions,
+.view-mode .item .drag-handle,
+.view-mode .item .item-notes,
+.view-mode .item .quiet,
+.view-mode .item .transport,
+.view-mode .day-column .item-date,
+.view-mode .day-column .item .small,
+.view-mode .item details,
+.view-mode .item .full { display: none; }
+.view-mode .item { padding: 10px 12px; }
+.view-mode .item-title { min-height: 36px; padding: 3px 0; }
+.item-date { font-size: 12px; color: #3f5147; margin: 4px 0 0; }
+.overlap-note { font-size: 12px; color: #8a5b19; margin: 6px 0 0; }
+.overlap-note.fixed { font-weight: 700; }
+.reservation-warning { border-left: 3px solid #a66e20; background: #fff6e7; padding: 10px 12px; margin: 10px 0; font-size: 13px; }
+.reservation-warning p { margin: 4px 0; }
+.day-city { display: block; min-width: 80px; font-weight: 650; color: #284c3f !important; }
+.city-assignment { border: 1px solid var(--line); border-radius: 8px; margin: 16px 0; padding: 12px; }
+.city-days { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.city-days span { background: #eef3ee; border-radius: 4px; padding: 4px 7px; font-size: 12px; }
+.detail-move { margin: 16px 0; }
+.detail-date { font-weight: 650; }
 .plan-panel {
   min-width: 0;
   flex: 1;
@@ -243,8 +299,8 @@ main {
   gap: 12px;
   overflow: auto;
   align-items: flex-start;
-  max-height: calc(100vh - 360px);
-  min-height: 530px;
+  max-height: calc(100dvh - 245px);
+  min-height: 500px;
   padding: 0 3px 20px;
   scrollbar-width: thin;
 }
@@ -292,6 +348,13 @@ main {
   min-width: 44px;
   padding: 6px;
 }
+.place-results { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 8px; margin: -6px 0 12px; }
+.place-results-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; font-size: 12px; }
+.place-results-head button { min-height: 34px; padding: 4px 7px; font-size: 12px; }
+.place-result { display: flex; flex-direction: column; align-items: flex-start; width: 100%; text-align: left; margin-top: 6px; }
+.place-result span { font-size: 12px; color: #53645a; overflow-wrap: anywhere; }
+.search-attribution { font-size: 11px; color: #526259; margin: 5px 0 0; }
+.active-city { font-size: 13px; color: #315c4b; font-weight: 650; align-self: center; }
 .item {
   background: white;
   border: 1px solid #d3d9d2;
@@ -401,6 +464,12 @@ main {
   font-size: 13px;
   flex: 1;
 }
+.day-move-picker { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; flex: 1; min-width: 0; }
+.day-move-trigger { min-height: 44px; min-width: 128px; justify-content: space-between; font-size: 13px; }
+.day-move-options { display: grid; gap: 4px; width: 100%; max-height: 220px; overflow: auto;
+  padding: 6px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.day-move-options button { justify-content: flex-start; text-align: left; min-height: 44px; }
+.day-move-options button[aria-current="date"] { font-weight: 700; background: #eef4ef; }
 .transport {
   font-size: 12px;
   color: #5c635f;
@@ -454,7 +523,7 @@ main {
 .map-wrap {
   position: relative;
   flex: 1;
-  min-height: 430px;
+  min-height: 410px;
   display: flex;
   flex-direction: column;
 }
@@ -543,7 +612,7 @@ main {
   transform: translateX(-50%);
   padding: 6px;
   background: #fff;
-  display: flex;
+  display: none;
   gap: 4px;
   border: 1px solid #b3bcb3;
   border-radius: 12px;
@@ -630,6 +699,14 @@ main {
   border: 1px solid #9bb19d;
   color: #28603c;
 }
+.status-toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 850;
+  width: min(440px, calc(100vw - 40px));
+  box-shadow: 0 8px 24px #15241b24;
+}
 .banner.error {
   background: #fff0ef;
   border: 1px solid #ba7c7e;
@@ -711,6 +788,7 @@ details .actions {
 .menu {
   position: relative;
 }
+.toolbar-more > summary { display: flex; align-items: center; border: 1px solid #7c847e; border-radius: 6px; padding: 8px 13px; min-height: 44px; background: #fff; }
 .menu[open] > .actions {
   position: absolute;
   right: 0;
@@ -722,6 +800,17 @@ details .actions {
   border-radius: 6px;
   z-index: 800;
   box-shadow: 0 8px 20px #0002;
+}
+@media (min-width: 701px) {
+  /* The toolbar wraps at intermediate desktop widths. Give the open menu its
+     own row so a right-aligned popover cannot extend past the left viewport. */
+  .date-toolbar .toolbar-more[open] { flex-basis: 100%; }
+  .date-toolbar .toolbar-more[open] > summary { width: max-content; }
+  .date-toolbar .toolbar-more[open] > .actions {
+    left: 0;
+    right: auto;
+    width: min(250px, calc(100vw - 32px));
+  }
 }
 .print-only {
   display: none;
@@ -736,7 +825,10 @@ details .actions {
   justify-content: flex-end;
   max-width: 650px;
 }
-@media (max-width: 1000px) {
+@media (max-width: 1140px) {
+  .trip-overview { display: block; }
+  .trip-toolbar { margin-bottom: 10px; }
+  .trip-summary { margin-bottom: 9px; }
   .app-header {
     padding: 16px;
   }
@@ -764,6 +856,43 @@ details .actions {
   }
 }
 @media (max-width: 700px) {
+  /* Keep the current stop in the first viewport; low-frequency trip management
+     remains in the accessible disclosure above the day selector. */
+  .app-header { align-items: center; padding: 9px 14px; min-height: 62px; }
+  .app-header .eyebrow { display: none; }
+  .app-header h1 { font-size: 19px; margin: 0; }
+  .header-actions .sync { max-width: 120px; line-height: 1.2; }
+  .trip-overview { margin-bottom: 0; }
+  .trip-toolbar { margin: 0; }
+  .trip-toolbar > label:first-child { font-size: 0; min-width: 0; }
+  .trip-toolbar > label:first-child select { min-height: 44px; font-size: 16px; }
+  .trip-summary { flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 3px; }
+  .trip-summary h2 { font-size: 18px; margin: 0; line-height: 1.25; }
+  .trip-summary p:not(.demo-label) { display: none; }
+  .trip-summary .demo-label { margin: 0; font-size: 11px; }
+  .trip-operations { flex: 0 0 auto; }
+  .trip-operations > summary { white-space: nowrap; }
+  .date-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: end; gap: 5px; margin: 0 0 5px; }
+  .date-toolbar .date-select { min-width: 0; }
+  .date-toolbar .date-select select { min-height: 44px; }
+  .date-toolbar .active-city, .date-toolbar > button:not(.assistant-entry) { display: none; }
+  .date-toolbar .assistant-entry { white-space: nowrap; padding-inline: 8px; }
+  .date-toolbar .toolbar-more > summary { white-space: nowrap; padding-inline: 8px; }
+  .next-stop { margin-bottom: 6px; }
+  .trip-toolbar.has-trip > button,
+  .trip-toolbar.has-trip > label.check { display: none; }
+  .mobile-trip-create { display: flex; flex-wrap: wrap; gap: 7px; width: 100%; }
+  .mobile-trip-create button { font-size: 13px; }
+  .trip-overview { margin-bottom: 3px; }
+  .trip-toolbar { margin-bottom: 3px; }
+  .trip-summary { gap: 2px; margin-bottom: 3px; }
+  .trip-summary h2 { margin: 0 0 3px; font-size: 19px; }
+  .trip-summary p { font-size: 12px; }
+  .date-toolbar { margin-bottom: 5px; }
+  .next-stop { margin-bottom: 8px; }
+  .status-toast { bottom: calc(68px + env(safe-area-inset-bottom)); right: 12px; width: calc(100vw - 24px); }
+  .desktop-only-button { display: none !important; }
+  .bottom-nav { display: flex; }
   h1 {
     font-size: 24px;
   }
@@ -952,11 +1081,133 @@ details .actions {
   .saved-result span {
     min-width: 100%;
   }
+  .app-header { align-items: center; padding: 9px 14px; min-height: 62px; }
+  .app-header h1 { font-size: 19px; }
+  .trip-toolbar { margin-bottom: 0; }
+  .trip-toolbar > label:first-child { min-width: 0; }
+  .trip-summary { flex-direction: row; gap: 8px; margin-bottom: 3px; }
+  .trip-summary { flex-wrap: wrap; }
+  .trip-summary > div:first-child { min-width: 0; flex: 1 1 160px; }
+  .trip-operations { min-width: 0; max-width: 100%; }
+  .trip-operations[open] { flex-basis: 100%; }
+  .trip-operations > .actions { max-width: 100%; min-width: 0; }
+  .trip-summary h2 { font-size: 18px; }
+  .date-toolbar { gap: 5px; margin-bottom: 5px; }
+  .date-toolbar { position: relative; }
+  .date-toolbar .date-select { min-width: 0; }
+  .date-toolbar .toolbar-more { min-width: 0; }
+  .date-toolbar .toolbar-more[open] > .actions {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    left: auto;
+    width: min(250px, calc(100vw - 32px));
+    z-index: 800;
+  }
+  .status-toast { pointer-events: none; }
+  .status-toast button { pointer-events: auto; }
+  dialog:not(.drawer) { max-width: calc(100vw - 28px); overflow-x: hidden; overflow-y: auto; }
+  dialog .fields { grid-template-columns: minmax(0, 1fr); }
+  dialog input, dialog select, dialog textarea { max-width: 100%; min-width: 0; }
+  dialog .city-assignment { min-width: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   * {
     scroll-behavior: auto !important;
     transition: none !important;
+  }
+}
+.import-sections { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 12px 0; }
+.import-preview { max-height: min(50vh, 520px); overflow: auto; margin: 12px 0; }
+.import-row { display: grid; grid-template-columns: minmax(130px, 1.2fr) 130px minmax(170px, 2fr) minmax(100px, 1fr) 90px 75px; gap: 6px; align-items: center; padding: 6px 0; border-bottom: 1px solid #d8dfd7; }
+.import-row input { min-width: 0; width: 100%; }
+.import-row small { overflow-wrap: anywhere; }
+@media (max-width: 700px) {
+  .import-row { grid-template-columns: 1fr 1fr; }
+  .import-row small, .import-row input[aria-label*="名稱"] { grid-column: 1 / -1; }
+}
+/* Desktop surfaces: only the large panels blur; cards keep crisp text and do
+   not create a compositing layer per itinerary item. Mobile remains opaque. */
+@media screen and (min-width: 701px) {
+  :root {
+    --glass-panel: rgb(248 249 244 / 58%);
+    --glass-card: rgb(255 255 252 / 82%);
+    --glass-control: rgb(251 252 248 / 87%);
+    --glass-line: rgb(255 255 255 / 75%);
+    --glass-shadow: 0 6px 22px rgb(21 40 33 / 10%);
+  }
+  .app-header { padding: 7px 20px; background: var(--glass-control); position: relative; z-index: 20; }
+  .app-header h1 { font-size: 23px; }
+  main { padding: 8px 20px 16px; }
+  .background-caption { min-height: 18px; color: #1f4235; font-size: 11px;
+    width: fit-content; max-width: 100%; margin-left: auto; padding: 2px 8px;
+    border-radius: 8px; background: rgb(250 252 247 / 91%); flex-wrap: wrap; }
+  .background-caption > .error { background: #fff4ef; padding: 2px 6px; border-radius: 4px; }
+  .trip-overview, .date-toolbar, .day-column, .list-panel {
+    background: var(--glass-panel); border: 1px solid var(--glass-line);
+    box-shadow: var(--glass-shadow); backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px);
+  }
+  .trip-overview { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 20px;
+    border-radius: 12px; padding: 7px 12px; margin-bottom: 8px; align-items: center;
+    position: relative; z-index: 12; }
+  .trip-toolbar { gap: 6px; margin: 0; flex-wrap: nowrap; }
+  .trip-toolbar > label:first-child { min-width: 130px; }
+  .trip-toolbar > label:first-child, .date-select { gap: 3px; font-size: 11px; }
+  .trip-toolbar > button { padding: 7px 9px; font-size: 13px; }
+  .trip-toolbar > label.check { font-size: 12px; white-space: nowrap; }
+  .trip-summary { flex-direction: row; gap: 10px; margin: 0; align-items: center; min-width: 0; }
+  .trip-summary > div:first-child { min-width: 0; }
+  .trip-summary h2 { font-size: 18px; overflow-wrap: anywhere; }
+  .trip-summary p { font-size: 12px; color: #374d42; }
+  .trip-operations { flex-shrink: 0; }
+  .trip-operations > summary { white-space: nowrap; }
+  .trip-operations.menu[open] > .actions { width: min(420px, calc(100vw - 48px)); max-height: 65dvh; overflow: auto; }
+  .trip-operations .menu[open] > .actions { position: static; width: 100%; box-shadow: none; margin: 4px 0; }
+  .date-toolbar { padding: 6px 12px; border-radius: 12px; gap: 7px; align-items: center;
+    position: relative; z-index: 10; background: var(--glass-control); }
+  .date-toolbar button { font-size: 13px; padding: 7px 10px; }
+  .date-toolbar .active-city { font-size: 12px; max-width: 225px; }
+  .date-toolbar .desktop-only { gap: 3px; }
+  .date-toolbar .mode-switch { margin-left: auto; }
+  .date-toolbar .toolbar-more[open] { flex-basis: auto; }
+  .date-toolbar .toolbar-more[open] > .actions { left: auto; right: 0; }
+  .workspace { gap: 14px; min-height: calc(100dvh - 260px); }
+  .day-board, .workspace.no-map .day-board { max-height: calc(100dvh - 260px); min-height: 420px; padding: 3px 4px 16px; gap: 12px; }
+  .workspace.no-map .day-column { flex: 1 0 290px; }
+  .day-column { min-height: max(400px, calc(100dvh - 288px)); border-radius: 12px; background: rgb(245 248 240 / 38%);
+    backdrop-filter: blur(1.5px); -webkit-backdrop-filter: blur(1.5px); }
+  .day-column.active-day { border-color: #315c4b; box-shadow: inset 0 0 0 1px #315c4b, var(--glass-shadow); }
+  .day-heading { background: rgb(250 251 246 / 85%); padding: 7px 8px; }
+  .day-heading strong { font-size: 20px; }
+  .day-heading span { color: #3a4d41; }
+  .item { background: var(--glass-card); border: 1px solid var(--glass-line); border-radius: 9px;
+    box-shadow: 0 3px 10px rgb(26 44 34 / 9%); }
+  .item.done { background: rgb(232 244 231 / 88%); }
+  .item.skipped { background: rgb(242 239 232 / 89%); }
+  .item .small, .item .original, .item .item-top, .item .transport { color: #405148; }
+  .item .transport { background: rgb(235 242 233 / 62%); }
+  .empty-day { color: #263e31; background: rgb(250 251 244 / 78%); border-radius: 8px; padding: 12px; }
+  .map-panel { background: var(--glass-control); box-shadow: var(--glass-shadow); border-color: var(--glass-line); }
+  .map-tools { padding: 9px 12px; }
+  .map-wrap { min-height: 350px; }
+  .map { min-height: 320px; }
+  .map-note { background: #fafbf8; }
+  .list-panel { background: rgb(249 251 246 / 86%); padding: 20px; }
+  dialog { background: rgb(253 253 248 / 97%); border-color: #cbd4c7; }
+  .menu[open] > .actions, .day-move-options, .place-results { background: #fcfdf9; }
+  .trip-background + .background-caption { text-shadow: 0 1px 3px #fff; }
+  @supports not (backdrop-filter: blur(7px)) {
+    .trip-overview, .date-toolbar, .day-column, .list-panel { background: #f0f3eefa; }
+  }
+}
+@media screen and (min-width: 701px) and (max-width: 1140px) {
+  .trip-overview { display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; }
+  .date-toolbar .mode-switch { margin-left: 0; }
+}
+@media (prefers-reduced-transparency: reduce), (forced-colors: active) {
+  .trip-background { display: none; }
+  .trip-overview, .date-toolbar, .day-column, .list-panel, .item, .app-header, .map-panel, dialog {
+    background: Canvas; color: CanvasText; backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: none;
   }
 }
 @media print {
@@ -990,3 +1241,4 @@ details .actions {
     font-size: 16px;
   }
 }
+
