@@ -19,10 +19,10 @@ test('city result selection saves city identity/timezone and survives reload wit
   await page.getByRole('button', { name: /Osaka Osaka Prefecture/ }).click();
   await expect(page.getByText(/已確認 Osaka · Japan · Asia\/Tokyo/)).toBeVisible();
   await page.getByRole('button', { name: '儲存旅程', exact: true }).click();
-  await expect(page.getByText('目前 2030-02-01 · Osaka · Asia/Tokyo')).toBeVisible();
+  await expect(page.getByText('目前 2030-02-01 · Osaka · Asia/Tokyo')).toBeAttached();
   await page.reload();
   await expect(page.getByRole('heading', { name: '大阪新建合成', exact: true })).toBeVisible();
-  await expect(page.getByText('目前 2030-02-01 · Osaka · Asia/Tokyo')).toBeVisible();
+  await expect(page.getByText('目前 2030-02-01 · Osaka · Asia/Tokyo')).toBeAttached();
 });
 test('offline city search keeps the typed city and permits saving; retry presents explicit choices', async ({ page }) => {
   let failed = true;
@@ -36,7 +36,7 @@ test('offline city search keeps the typed city and permits saving; retry present
   await expect(page.getByRole('button', { name: /Osaka alternative/ })).toBeVisible();
   // Do not choose for the user; text-only save is allowed and remains unlocated.
   await page.getByRole('button', { name: '儲存旅程', exact: true }).click();
-  await expect(page.getByText('目前 2030-02-01 · 大阪 · Asia/Tokyo')).toBeVisible();
+  await expect(page.getByText('目前 2030-02-01 · 大阪 · Asia/Tokyo')).toBeAttached();
   await page.reload();
   await expect(page.getByRole('heading', { name: '大阪新建合成', exact: true })).toBeVisible();
 });

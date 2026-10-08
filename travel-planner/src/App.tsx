@@ -1239,7 +1239,9 @@ export default function App() {
                       </p>
                     )}
                   </div>
-                   <details className="trip-operations menu">
+                   <details className="trip-operations menu" onClick={(event) => {
+                     if ((event.target as HTMLElement).closest("button")) event.currentTarget.open = false;
+                   }}>
                     <summary>旅程操作</summary>
                     <div className="actions">
                       <div className="mobile-trip-create">
