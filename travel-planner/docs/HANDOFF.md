@@ -1,6 +1,18 @@
 # Travel Planner UX/Gemini — current handoff
 
-## Current production handoff — 2026-10-07
+## Current desktop visual release — 2026-10-08 UTC
+
+**Published and visually accepted for Owner review.** [Production](https://tools.ycsu.cc/travel-planner/) is deploy `6ac71868831c850e6b4e185c`, executable [`c1f648e770751a94eeb8d73d213cf70be33b3e1e`](https://github.com/blackeirose/YSU-Tools/commit/c1f648e770751a94eeb8d73d213cf70be33b3e1e), namespace `v1`. [Fixed review](https://travel-planner-review--ycsu-tools-router.netlify.app/travel-planner/) is isolated `preview-v1`, immutable deploy `6ac715f6143c29a26492bcae`, same executable source. Documentation-only commits do not replace either runtime.
+
+Desktop now uses the main workspace for the photography / precision paper-cut pair, with translucent day columns, cards and compact controls; the map remains opaque and clear. Mobile remains solid and does not load desktop background images. A missing first-city position has a nearby setup action; a saved-image failure has a read-only reload action. Existing synthetic private images were reused, with **zero new paid requests**. Actual production 1440×900, 1366×768 and 390×844 views, map open/closed, details, normal refresh, and independent-context move/Undo/readback passed. Independent `/root/desktop_visual_review` source review and actual screenshot review are recorded separately.
+
+Typecheck, production build, **19 background unit + 9 focused browser tests** passed. Prior [CI 37698621712](https://github.com/blackeirose/YSU-Tools/actions/runs/37698621712) is inherited only for unchanged Auth/sync/rules/server paths; it is not a new CI run on this visual commit. Full Gate remains PASS_WITH_OWNER_WAIVER: true single-tab offline/reconnect, actual 200% zoom and human microphone stay UNVERIFIED; physical iPhone/Safari and measured scroll FPS are also UNVERIFIED. No waiver was expanded.
+
+Canonical full-host release retained 307 protected static files and six sibling Functions (326 files / nine Functions total), routes, traffic, headers and schedules. No DNS, Auth provider/rules, sibling product, MAIN or Tracker changes. The AI ledger remains **28 reservations / US$2.79 conservative reserve**, cumulative ceiling US$5.20 and UTC-day ceiling US$2.00; actual provider billing is unknown. See [release evidence and Planner-only recovery](PRODUCTION_RELEASE_2026-10-07.md).
+
+---
+
+## Historical production checkpoint — 2026-10-07
 
 新版已在[正式網址](https://tools.ycsu.cc/travel-planner/)發布，Netlify deploy `6ac6d1ec1b7c7996e20be0f8`，可執行產品來源 [`92f63409df27f2c306141f0c51931163bc25876d`](https://github.com/blackeirose/YSU-Tools/commit/92f63409df27f2c306141f0c51931163bc25876d)，[CI `37698621712`](https://github.com/blackeirose/YSU-Tools/actions/runs/37698621712) PASS。固定[隔離測試入口](https://travel-planner-review--ycsu-tools-router.netlify.app/travel-planner/)仍是 `preview-v1`／不可變 deploy `6ac6cd50977377479f81b8ba`。正式站完整站驗證保留六個兄弟 Functions／路由／排程；五個 Planner 專用 Production Functions 變數補齊並讀回後，從當時最新完整站重新部署。兩個獨立登入 context 的合成新增、移日、Undo、刷新及文字 AI 動作實測通過；背景地標／攝影／紙雕生成後，另一 context 讀到兩張私有圖。真實合成 WAV 音訊→確認→保存→跨 context→Undo 在最終 Preview 通過。Owner 精確 waiver 留下真單頁離線、200% 縮放、真人麥克風 UNVERIFIED；實體 iPhone／Safari 亦未測。AI 同一帳本 28 筆／US$2.79 **保守預留**，核准 US$5.20，當日 US$1.59／US$2.00；實際供應商帳單未知。詳見[正式發布紀錄](PRODUCTION_RELEASE_2026-10-07.md)及[最新 Gate](UPGRADE_GATE_2026-10-03.md)。私人 pending/conflicts 與帳本未清除；Planner 無 Supabase，未更新 MAIN／Tracker。
 

@@ -1,6 +1,18 @@
 # Decisions
 
-## Current release decision — 2026-10-07
+## Current desktop visual release — 2026-10-08 UTC
+
+**Published and visually accepted for Owner review.** [Production](https://tools.ycsu.cc/travel-planner/) is deploy `6ac71868831c850e6b4e185c`, executable [`c1f648e770751a94eeb8d73d213cf70be33b3e1e`](https://github.com/blackeirose/YSU-Tools/commit/c1f648e770751a94eeb8d73d213cf70be33b3e1e), namespace `v1`. [Fixed review](https://travel-planner-review--ycsu-tools-router.netlify.app/travel-planner/) is isolated `preview-v1`, immutable deploy `6ac715f6143c29a26492bcae`, same executable source. Documentation-only commits do not replace either runtime.
+
+Desktop now uses the main workspace for the photography / precision paper-cut pair, with translucent day columns, cards and compact controls; the map remains opaque and clear. Mobile remains solid and does not load desktop background images. A missing first-city position has a nearby setup action; a saved-image failure has a read-only reload action. Existing synthetic private images were reused, with **zero new paid requests**. Actual production 1440×900, 1366×768 and 390×844 views, map open/closed, details, normal refresh, and independent-context move/Undo/readback passed. Independent `/root/desktop_visual_review` source review and actual screenshot review are recorded separately.
+
+Typecheck, production build, **19 background unit + 9 focused browser tests** passed. Prior [CI 37698621712](https://github.com/blackeirose/YSU-Tools/actions/runs/37698621712) is inherited only for unchanged Auth/sync/rules/server paths; it is not a new CI run on this visual commit. Full Gate remains PASS_WITH_OWNER_WAIVER: true single-tab offline/reconnect, actual 200% zoom and human microphone stay UNVERIFIED; physical iPhone/Safari and measured scroll FPS are also UNVERIFIED. No waiver was expanded.
+
+Canonical full-host release retained 307 protected static files and six sibling Functions (326 files / nine Functions total), routes, traffic, headers and schedules. No DNS, Auth provider/rules, sibling product, MAIN or Tracker changes. The AI ledger remains **28 reservations / US$2.79 conservative reserve**, cumulative ceiling US$5.20 and UTC-day ceiling US$2.00; actual provider billing is unknown. See [release evidence and Planner-only recovery](docs/PRODUCTION_RELEASE_2026-10-07.md).
+
+---
+
+## Historical production checkpoint — 2026-10-07
 
 Owner approved cumulative US$5.20 and daily US$2.00 for the *same* durable AI campaign, plus production release after the necessary Gate. Final source [`92f63409df27f2c306141f0c51931163bc25876d`](https://github.com/blackeirose/YSU-Tools/commit/92f63409df27f2c306141f0c51931163bc25876d), [CI `37698621712`](https://github.com/blackeirose/YSU-Tools/actions/runs/37698621712), final complete-host deploy `6ac6d1ec1b7c7996e20be0f8` and postrelease synthetic browser/AI/private Blob smoke pass. The exact waiver `owner-2026-10-07-skip-remote-offline-zoom-voice` permits only real single-tab offline/reconnect, 200% zoom and human microphone UNVERIFIED; it does not turn emulator or synthetic WAV evidence into those checks. Physical iPhone/Safari also remain UNVERIFIED. Preserve private pending/conflicts, `v1` records, all AI reservations and sibling tools in any recovery. The previous `cb4c17f` runtime has an obsolete US$2.60 source cap and would fail paid AI closed against the US$2.79 live ledger; use a reviewed budget-compatible Planner-only repair from the then-current whole-site baseline, never a historical whole-site rollback. [Gate](docs/UPGRADE_GATE_2026-10-03.md) and [release record](docs/PRODUCTION_RELEASE_2026-10-07.md) are authoritative for this release. No Supabase, DNS, shared permission, MAIN or Tracker change.
 
