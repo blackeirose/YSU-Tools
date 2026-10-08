@@ -1033,6 +1033,7 @@ export default function App() {
       <main className={viewMode === "view" ? "view-mode" : "edit-mode"}>
         {trip && <TripBackground key={trip.id} trip={trip} enabled={!demo && !!user && !!auth?.currentUser}
           cloudReady={!!store?.isRemoteReady() && !store.snapshot.pending.length}
+          onConfigureCity={() => se({ type: "trip", value: trip })}
           token={async () => { if (!auth?.currentUser) throw new Error("登入已失效"); return auth.currentUser.getIdToken(); }} />}
         {recovery.current.size > 0 && (
           <div className="error banner" role="alert">
@@ -1233,7 +1234,7 @@ export default function App() {
                       </p>
                     )}
                   </div>
-                   <details className="trip-operations">
+                   <details className="trip-operations menu">
                     <summary>旅程操作</summary>
                     <div className="actions">
                       <div className="mobile-trip-create">

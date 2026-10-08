@@ -13,8 +13,8 @@ export function shouldAutoStartBackground(namespace: string | undefined, request
 export function shouldPollAcceptedBackground(state: State, acceptedAt: number, now: number) {
   return state === "none" && acceptedAt > 0 && now - acceptedAt < 120000;
 }
-export function TripBackground({ trip, enabled, cloudReady, token }: {
-  trip: Trip; enabled: boolean; cloudReady: boolean; token: () => Promise<string>;
+export function TripBackground({ trip, enabled, cloudReady, token, onConfigureCity }: {
+  trip: Trip; enabled: boolean; cloudReady: boolean; token: () => Promise<string>; onConfigureCity: () => void;
 }) {
   const [desktop, setDesktop] = useState(() => window.matchMedia("(min-width: 701px)").matches);
   const [status, setStatus] = useState<Status>({ state: "none" });
@@ -107,16 +107,19 @@ export function TripBackground({ trip, enabled, cloudReady, token }: {
   };
   return <>
     {images && <div className="trip-background" aria-hidden="true">
-      <img src={images.top} alt="" /><img src={images.lower} alt="" />
+      <img src={images.top} alt="" onError={() => { setImages(null); setError("背景圖片無法顯示；行程仍可正常使用"); }} />
+      <img src={images.lower} alt="" onError={() => { setImages(null); setError("背景圖片無法顯示；行程仍可正常使用"); }} />
     </div>}
     <div className="background-caption" role="status">
-      {status.state === "ready" ? `地區背景 · ${status.city || "建立時城市"} · 攝影／紙雕${status.city && city?.name !== status.city ? "（首日城市已更改，原背景保留）" : ""}` :
+      {status.state === "ready" ? images ? `地區背景 · ${status.city || "建立時城市"} · 攝影／紙雕${status.city && city?.name !== status.city ? "（首日城市已更改，原背景保留）" : ""}` : error ? "背景已保存，圖片讀取失敗" : "背景已保存，正在讀取圖片" :
         !confirmed ? "地區背景：請先設定第一天城市與位置" :
         status.state === "running" ? "地區背景生成中；可以繼續規劃" :
           status.state === "failed" ? `地區背景：${status.error || "暫時失敗"}` : "地區背景尚未生成"}
       {confirmed && cloudReady && (status.state === "none" || status.state === "failed" && status.retryAllowed !== false) &&
         <button type="button" onClick={() => void retry()}>{status.state === "failed" ? "重試" : "生成背景"}</button>}
       {error && <span className="error">{error}</span>}
+      {!confirmed && <button type="button" onClick={onConfigureCity}>設定首日城市</button>}
+      {error && status.state === "ready" && <button type="button" onClick={() => { setError(""); setRefresh((value) => value + 1); }}>重新載入圖片</button>}
     </div>
   </>;
 }

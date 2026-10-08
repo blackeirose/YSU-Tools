@@ -171,10 +171,12 @@ main {
   position: relative;
   z-index: 1;
 }
-.trip-background { position: fixed; right: 0; top: 50%; transform: translateY(-50%);
-  width: min(45vw, 75dvh, 700px); aspect-ratio: 3 / 4; z-index: -1;
-  display: grid; grid-template-rows: 50% 50%; opacity: .24; pointer-events: none; overflow: hidden; }
-.trip-background img { display: block; width: 100%; height: 100%; object-fit: cover; background: #e9e5d9; }
+.trip-background { position: fixed; inset: 0; z-index: -1;
+  display: grid; grid-template-rows: 50% 50%; pointer-events: none; overflow: hidden; background: #e9e5d9; }
+.trip-background img { display: block; width: 100%; height: 100%; min-height: 0;
+  object-fit: cover; object-position: 50% 68%; }
+.trip-background::after { content: ""; position: absolute; inset: 0;
+  background: linear-gradient(180deg, #f8f6ef38, transparent 32%, #edf1e414); }
 .background-caption { display: flex; align-items: center; justify-content: flex-end; gap: 9px; min-height: 24px;
   font-size: 11px; color: #385146; }
 .background-caption button { min-height: 30px; padding: 3px 8px; font-size: 11px; }
@@ -1120,6 +1122,90 @@ details .actions {
 @media (max-width: 700px) {
   .import-row { grid-template-columns: 1fr 1fr; }
   .import-row small, .import-row input[aria-label*="名稱"] { grid-column: 1 / -1; }
+}
+/* Desktop surfaces: only the large panels blur; cards keep crisp text and do
+   not create a compositing layer per itinerary item. Mobile remains opaque. */
+@media screen and (min-width: 701px) {
+  :root {
+    --glass-panel: rgb(248 249 244 / 58%);
+    --glass-card: rgb(255 255 252 / 82%);
+    --glass-control: rgb(251 252 248 / 87%);
+    --glass-line: rgb(255 255 255 / 75%);
+    --glass-shadow: 0 6px 22px rgb(21 40 33 / 10%);
+  }
+  .app-header { padding: 7px 20px; background: var(--glass-control); position: relative; z-index: 20; }
+  .app-header h1 { font-size: 23px; }
+  main { padding: 8px 20px 16px; }
+  .background-caption { min-height: 18px; color: #1f4235; font-size: 11px;
+    width: fit-content; max-width: 100%; margin-left: auto; padding: 2px 8px;
+    border-radius: 8px; background: rgb(250 252 247 / 91%); flex-wrap: wrap; }
+  .background-caption > .error { background: #fff4ef; padding: 2px 6px; border-radius: 4px; }
+  .trip-overview, .date-toolbar, .day-column, .list-panel {
+    background: var(--glass-panel); border: 1px solid var(--glass-line);
+    box-shadow: var(--glass-shadow); backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px);
+  }
+  .trip-overview { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 20px;
+    border-radius: 12px; padding: 7px 12px; margin-bottom: 8px; align-items: center;
+    position: relative; z-index: 12; }
+  .trip-toolbar { gap: 6px; margin: 0; flex-wrap: nowrap; }
+  .trip-toolbar > label:first-child { min-width: 130px; }
+  .trip-toolbar > label:first-child, .date-select { gap: 3px; font-size: 11px; }
+  .trip-toolbar > button { padding: 7px 9px; font-size: 13px; }
+  .trip-toolbar > label.check { font-size: 12px; white-space: nowrap; }
+  .trip-summary { flex-direction: row; gap: 10px; margin: 0; align-items: center; min-width: 0; }
+  .trip-summary > div:first-child { min-width: 0; }
+  .trip-summary h2 { font-size: 18px; overflow-wrap: anywhere; }
+  .trip-summary p { font-size: 12px; color: #374d42; }
+  .trip-operations { flex-shrink: 0; }
+  .trip-operations > summary { white-space: nowrap; }
+  .trip-operations.menu[open] > .actions { width: min(420px, calc(100vw - 48px)); max-height: 65dvh; overflow: auto; }
+  .trip-operations .menu[open] > .actions { position: static; width: 100%; box-shadow: none; margin: 4px 0; }
+  .date-toolbar { padding: 6px 12px; border-radius: 12px; gap: 7px; align-items: center;
+    position: relative; z-index: 10; background: var(--glass-control); }
+  .date-toolbar button { font-size: 13px; padding: 7px 10px; }
+  .date-toolbar .active-city { font-size: 12px; max-width: 225px; }
+  .date-toolbar .desktop-only { gap: 3px; }
+  .date-toolbar .mode-switch { margin-left: auto; }
+  .date-toolbar .toolbar-more[open] { flex-basis: auto; }
+  .date-toolbar .toolbar-more[open] > .actions { left: auto; right: 0; }
+  .workspace { gap: 14px; min-height: calc(100dvh - 260px); }
+  .day-board, .workspace.no-map .day-board { max-height: calc(100dvh - 260px); min-height: 420px; padding: 3px 4px 16px; gap: 12px; }
+  .workspace.no-map .day-column { flex: 1 0 290px; }
+  .day-column { min-height: max(400px, calc(100dvh - 288px)); border-radius: 12px; background: rgb(245 248 240 / 38%);
+    backdrop-filter: blur(1.5px); -webkit-backdrop-filter: blur(1.5px); }
+  .day-column.active-day { border-color: #315c4b; box-shadow: inset 0 0 0 1px #315c4b, var(--glass-shadow); }
+  .day-heading { background: rgb(250 251 246 / 85%); padding: 7px 8px; }
+  .day-heading strong { font-size: 20px; }
+  .day-heading span { color: #3a4d41; }
+  .item { background: var(--glass-card); border: 1px solid var(--glass-line); border-radius: 9px;
+    box-shadow: 0 3px 10px rgb(26 44 34 / 9%); }
+  .item.done { background: rgb(232 244 231 / 88%); }
+  .item.skipped { background: rgb(242 239 232 / 89%); }
+  .item .small, .item .original, .item .item-top, .item .transport { color: #405148; }
+  .item .transport { background: rgb(235 242 233 / 62%); }
+  .empty-day { color: #263e31; background: rgb(250 251 244 / 78%); border-radius: 8px; padding: 12px; }
+  .map-panel { background: var(--glass-control); box-shadow: var(--glass-shadow); border-color: var(--glass-line); }
+  .map-tools { padding: 9px 12px; }
+  .map-wrap { min-height: 350px; }
+  .map { min-height: 320px; }
+  .map-note { background: #fafbf8; }
+  .list-panel { background: rgb(249 251 246 / 86%); padding: 20px; }
+  dialog { background: rgb(253 253 248 / 97%); border-color: #cbd4c7; }
+  .menu[open] > .actions, .day-move-options, .place-results { background: #fcfdf9; }
+  .trip-background + .background-caption { text-shadow: 0 1px 3px #fff; }
+  @supports not (backdrop-filter: blur(7px)) {
+    .trip-overview, .date-toolbar, .day-column, .list-panel { background: #f0f3eefa; }
+  }
+}
+@media screen and (min-width: 701px) and (max-width: 1140px) {
+  .trip-overview { display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; }
+  .date-toolbar .mode-switch { margin-left: 0; }
+}
+@media (prefers-reduced-transparency: reduce), (forced-colors: active) {
+  .trip-background { display: none; }
+  .trip-overview, .date-toolbar, .day-column, .list-panel, .item, .app-header, .map-panel, dialog {
+    background: Canvas; color: CanvasText; backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: none;
+  }
 }
 @media print {
   body {

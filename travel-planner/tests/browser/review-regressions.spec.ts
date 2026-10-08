@@ -37,6 +37,19 @@ test("wrapped More menu keeps Reminder Center reachable at 1280px", async ({ pag
   await expect(page.getByRole("dialog").getByRole("heading", { name: "提醒中心" })).toBeVisible();
 });
 
+test("desktop trip tools stay above the workspace and nested export remains reachable", async ({ page }, info) => {
+  test.skip(info.project.name !== "desktop", "Desktop floating trip tools");
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await demo(page);
+  const top = await page.locator(".workspace").evaluate(el => el.getBoundingClientRect().top);
+  await operations(page);
+  await page.getByText("匯出／匯入", { exact: true }).click();
+  expect(await page.locator(".workspace").evaluate(el => el.getBoundingClientRect().top)).toBe(top);
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "JSON 匯出", exact: true }).click();
+  expect((await download).suggestedFilename()).toMatch(/\.json$/);
+});
+
 test("R2 mouse and keyboard open card date selector, move, undo and refresh", async ({ page }, info) => {
   test.skip(info.project.name !== "desktop", "Mobile move is exercised through the detail drawer in product.spec.ts");
   await demo(page);
