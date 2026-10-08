@@ -126,7 +126,9 @@ describe('persistent single-poster background', () => {
     await Promise.all([startBackground(request(), env, fake.http, provided(store)), startBackground(request(), env, fake.http, provided(store))]);
     expect(fake.counts()).toEqual({ images: 1, quota: 1, landmarks: 1 });
     expect(fake.prompts[0]).toContain('ONE complete 16:9');
-    expect(fake.prompts[0]).toContain('RIGHT half');
+    expect(fake.prompts[0]).toContain('EXACT OBJECT PLACEMENT');
+    expect(fake.prompts[0]).toContain('Never place any landmark on both sides');
+    expect(fake.prompts[0]).toContain('Do NOT make a before/after comparison');
     expect(fake.prompts[0]).toContain('東京塔');
     expect((await startBackground(request(), env, fake.http, provided(store))).status).toBe(200);
     const status = await (await readBackground(statusReq(), env, fake.http, provided(store))).json();
